@@ -123,7 +123,6 @@ const ORDER = [
 const orderIndex = (name: string) => {
   const i = ORDER.findIndex(o => o.toLowerCase() === name.toLowerCase());
   if (i >= 0) return i;
-  // Fallback: try to infer
   const lower = name.toLowerCase();
   if (lower.includes("driver")) return 0;
   if (lower.includes("wood")) {
@@ -193,7 +192,7 @@ const headerMap: Record<string, keyof Shot> = {
   "session id": "SessionId",
   "timestamp": "Timestamp",
   "date": "Timestamp",
-  "datetime": "Timestamp",
+  "datetime": "Timestamp"
 };
 
 /** ===== APP ===== */
@@ -209,26 +208,22 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /** Clubs — sorted in the requested order */
   const clubs = useMemo(
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
   );
 
-  /** Sessions list for dropdown */
   const sessions = useMemo(() => {
     const ids = Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session")));
     return ["ALL", ...ids.sort()];
   }, [shots]);
 
-  /** Global carry bounds for placeholders */
   const carryBounds = useMemo(() => {
     const vals = shots.map(s => s.CarryDistance_yds).filter((v): v is number => v !== undefined);
     if (!vals.length) return { min: 0, max: 0 };
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  /** Sample data */
   const loadSample = () => {
     const id = `Sample ${new Date().toLocaleString()}`;
     const sample: Shot[] = [
@@ -245,7 +240,6 @@ export default function App() {
     setShots(prev => [...prev, ...sample.map(applyDerived)]);
   };
 
-  /** Import file (append as a new session) */
   const onFile = async (file: File) => {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
@@ -288,23 +282,16 @@ export default function App() {
     return s2;
   }
 
-  /** Filters (session + clubs + date + carry range) */
   const filtered = useMemo(() => {
     let pool = shots;
-
-    // session
     if (sessionFilter !== "ALL") {
       pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
     }
-
-    // clubs
     pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
-
-    // date
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(dateFrom) : null;
       const to = dateTo ? new Date(dateTo) : null;
-      if (to) to.setDate(to.getDate() + 1); // inclusive
+      if (to) to.setDate(to.getDate() + 1);
       pool = pool.filter(s => {
         if (!s.Timestamp) return true;
         const d = new Date(s.Timestamp);
@@ -314,8 +301,6 @@ export default function App() {
         return true;
       });
     }
-
-    // carry range
     const minC = carryMin ? Number(carryMin) : undefined;
     const maxC = carryMax ? Number(carryMax) : undefined;
     if (minC !== undefined || maxC !== undefined) {
@@ -326,28 +311,21 @@ export default function App() {
         return true;
       });
     }
-
     return pool;
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
-  /** Outlier filter (2.5σ on Carry & Smash) */
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filtered;
-
     const carryVals = filtered.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
     const smashVals = filtered.map(s => s.SmashFactor!).filter((x): x is number => x != null);
-
     if (carryVals.length < 5 || smashVals.length < 5) return filtered;
-
     const cm = mean(carryVals), cs = stddev(carryVals);
     const sm = mean(smashVals), ss = stddev(smashVals);
     const inCarry = (x?: number) => x === undefined ? false : (x >= cm - 2.5 * cs && x <= cm + 2.5 * cs);
     const inSmash = (x?: number) => x === undefined ? false : (x >= sm - 2.5 * ss && x <= sm + 2.5 * ss);
-
     return filtered.filter(s => inCarry(s.CarryDistance_yds) && inSmash(s.SmashFactor));
   }, [filtered, excludeOutliers]);
 
-  /** KPIs & Shot Shape */
   const kpis = useMemo(() => {
     const grab = (sel: (s: Shot) => number | undefined) =>
       filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
@@ -384,7 +362,6 @@ export default function App() {
     };
   }, [filteredOutliers]);
 
-  /** Aggregates per club */
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     filteredOutliers.forEach(s => {
@@ -409,33 +386,21 @@ export default function App() {
         avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
       });
     }
-    // sort by our club order
     return rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
   }, [filteredOutliers]);
 
   const hasData = filteredOutliers.length > 0;
 
-  /** ==== UI ==== */
   return (
     <div style={{ minHeight: "100vh", background: COLORS.white }}>
-      {/* Header */}
       <header className="px-6 py-4" style={{ background: COLORS.brand, color: COLORS.white }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker • Golf Launch Monitor Dashboard</h1>
           <div className="flex gap-2">
-            <button
-              onClick={loadSample}
-              className="px-3 py-2 rounded-lg font-medium"
-              style={{ background: COLORS.white, color: COLORS.brand }}
-            >
+            <button onClick={loadSample} className="px-3 py-2 rounded-lg font-medium" style={{ background: COLORS.white, color: COLORS.brand }}>
               Load sample
             </button>
-            <button
-              onClick={() => exportCSV(filteredOutliers)}
-              className="px-3 py-2 rounded-lg font-medium border"
-              style={{ background: COLORS.white, color: COLORS.brand, borderColor: COLORS.white }}
-              title="Export filtered as CSV"
-            >
+            <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg font-medium border" style={{ background: COLORS.white, color: COLORS.brand, borderColor: COLORS.white }}>
               Export CSV
             </button>
             <input
@@ -449,18 +414,13 @@ export default function App() {
               }}
               className="hidden"
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-2 rounded-lg font-medium border"
-              style={{ background: COLORS.white, color: COLORS.brand, borderColor: COLORS.white }}
-            >
+            <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg font-medium border" style={{ background: COLORS.white, color: COLORS.brand, borderColor: COLORS.white }}>
               Import file
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
         {/* Filters */}
         <aside className="col-span-12 lg:col-span-3">
@@ -483,27 +443,12 @@ export default function App() {
             {/* Vertical Club selector */}
             <div className="mb-5">
               <label className="text-sm font-medium block mb-2" style={{ color: COLORS.gray700 }}>Clubs</label>
-              <ClubList
-                options={clubs}
-                selected={selectedClubs}
-                onChange={setSelectedClubs}
-                palette={clubPalette}
-              />
+              <ClubList options={clubs} selected={selectedClubs} onChange={setSelectedClubs} palette={clubPalette} />
               <div className="mt-3 flex gap-2">
-                <button
-                  className="px-2 py-1 text-xs rounded-md border"
-                  style={{ borderColor: COLORS.gray300, color: COLORS.brand }}
-                  onClick={() => setSelectedClubs(clubs)}
-                  disabled={!clubs.length}
-                >
+                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300, color: COLORS.brand }} onClick={() => setSelectedClubs(clubs)} disabled={!clubs.length}>
                   Select all
                 </button>
-                <button
-                  className="px-2 py-1 text-xs rounded-md border"
-                  style={{ borderColor: COLORS.gray300 }}
-                  onClick={() => setSelectedClubs([])}
-                  disabled={!selectedClubs.length}
-                >
+                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300 }} onClick={() => setSelectedClubs([])} disabled={!selectedClubs.length}>
                   Clear
                 </button>
               </div>
@@ -513,29 +458,11 @@ export default function App() {
             <div className="mb-5">
               <label className="text-sm font-medium block mb-2" style={{ color: COLORS.gray700 }}>Carry Distance Range (yds)</label>
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  placeholder={carryBounds.min ? String(carryBounds.min) : "min"}
-                  value={carryMin}
-                  onChange={(e) => setCarryMin(e.target.value)}
-                  className="px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: COLORS.gray300 }}
-                />
-                <input
-                  type="number"
-                  placeholder={carryBounds.max ? String(carryBounds.max) : "max"}
-                  value={carryMax}
-                  onChange={(e) => setCarryMax(e.target.value)}
-                  className="px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: COLORS.gray300 }}
-                />
+                <input type="number" placeholder={carryBounds.min ? String(carryBounds.min) : "min"} value={carryMin} onChange={(e) => setCarryMin(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: COLORS.gray300 }} />
+                <input type="number" placeholder={carryBounds.max ? String(carryBounds.max) : "max"} value={carryMax} onChange={(e) => setCarryMax(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: COLORS.gray300 }} />
               </div>
               <div className="mt-2">
-                <button
-                  onClick={() => { setCarryMin(""); setCarryMax(""); }}
-                  className="px-2 py-1 text-xs rounded-md border"
-                  style={{ borderColor: COLORS.gray300 }}
-                >
+                <button onClick={() => { setCarryMin(""); setCarryMax(""); }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300 }}>
                   Reset range
                 </button>
               </div>
@@ -559,26 +486,18 @@ export default function App() {
                   { label: "Last 30d", days: 30 },
                   { label: "Last 90d", days: 90 },
                 ].map(({ label, days }) => (
-                  <button
-                    key={label}
-                    className="px-2 py-1 text-xs rounded-md border"
-                    style={{ borderColor: COLORS.gray300, color: COLORS.brand }}
+                  <button key={label} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300, color: COLORS.brand }}
                     onClick={() => {
                       const to = new Date();
                       const from = new Date();
                       from.setDate(to.getDate() - days + 1);
                       setDateFrom(from.toISOString().slice(0, 10));
                       setDateTo(to.toISOString().slice(0, 10));
-                    }}
-                  >
+                    }}>
                     {label}
                   </button>
                 ))}
-                <button
-                  className="px-2 py-1 text-xs rounded-md border"
-                  style={{ borderColor: COLORS.gray300 }}
-                  onClick={() => { setDateFrom(""); setDateTo(""); }}
-                >
+                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300 }} onClick={() => { setDateFrom(""); setDateTo(""); }}>
                   Reset
                 </button>
               </div>
@@ -588,7 +507,6 @@ export default function App() {
 
         {/* KPIs + Charts */}
         <section className="col-span-12 lg:col-span-9 space-y-8">
-          {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <KPI label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={COLORS.brand} />
             <KPI label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={COLORS.brandTint} />
@@ -598,11 +516,8 @@ export default function App() {
             <KPI label="Shots" value={String(kpis.shots ?? 0)} color={COLORS.gray700} />
           </div>
 
-          {/* Gap chart */}
           <Card title="Gap Chart — Carry vs Total by Club">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
+            {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
                 <ResponsiveContainer>
                   <BarChart data={tableRows}>
@@ -619,11 +534,8 @@ export default function App() {
             )}
           </Card>
 
-          {/* Efficiency */}
           <Card title="Efficiency — Club Speed vs Ball Speed">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
+            {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
                 <ResponsiveContainer>
                   <ScatterChart>
@@ -644,11 +556,8 @@ export default function App() {
             )}
           </Card>
 
-          {/* Launch vs Spin */}
           <Card title="Launch vs Spin — bubble size is Carry">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
+            {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
                 <ResponsiveContainer>
                   <ScatterChart>
@@ -670,12 +579,9 @@ export default function App() {
             )}
           </Card>
 
-          {/* Dispersion + Shot Shape side-by-side */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             <Card title="Dispersion — Driving Range View (50y to max)">
-              {!hasData ? (
-                <EmptyChart />
-              ) : (
+              {!hasData ? <EmptyChart /> : (
                 <div style={{ width: "100%", height: 420 }}>
                   <RangeDispersion shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
                 </div>
@@ -683,37 +589,20 @@ export default function App() {
             </Card>
 
             <Card title="Shot Shape Distribution">
-              {!hasData ? (
-                <EmptyChart />
-              ) : (
-                <ShotShape
-                  draw={kpis.shape.draw}
-                  straight={kpis.shape.straight}
-                  fade={kpis.shape.fade}
-                />
+              {!hasData ? <EmptyChart /> : (
+                <ShotShape draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
               )}
             </Card>
           </div>
 
-          {/* Club Averages */}
           <Card title="Club Averages">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
+            {!hasData ? <EmptyChart /> : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left">
-                      <Th>Club</Th>
-                      <Th>Shots</Th>
-                      <Th>Avg Carry</Th>
-                      <Th>Avg Total</Th>
-                      <Th>Carry SD</Th>
-                      <Th>Avg Smash</Th>
-                      <Th>Avg Spin</Th>
-                      <Th>Avg Club Spd</Th>
-                      <Th>Avg Ball Spd</Th>
-                      <Th>Avg Launch</Th>
+                      <Th>Club</Th><Th>Shots</Th><Th>Avg Carry</Th><Th>Avg Total</Th><Th>Carry SD</Th>
+                      <Th>Avg Smash</Th><Th>Avg Spin</Th><Th>Avg Club Spd</Th><Th>Avg Ball Spd</Th><Th>Avg Launch</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -752,15 +641,7 @@ export default function App() {
 }
 
 /** ===== Range-style dispersion (SVG) ===== */
-function RangeDispersion({
-  shots,
-  clubs,
-  palette,
-}: {
-  shots: Shot[];
-  clubs: string[];
-  palette: string[];
-}) {
+function RangeDispersion({ shots, clubs, palette }: { shots: Shot[]; clubs: string[]; palette: string[] }) {
   const lateralDev = (s: Shot): number | undefined => {
     if (s.CarryDeviationDistance_yds !== undefined) return s.CarryDeviationDistance_yds;
     if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) {
@@ -770,9 +651,8 @@ function RangeDispersion({
     return undefined;
   };
 
-  const pts = shots
-    .map((s) => ({ club: s.Club, x: lateralDev(s), y: s.CarryDistance_yds }))
-    .filter((p) => p.x !== undefined && p.y !== undefined) as { club: string; x: number; y: number }[];
+  const pts = shots.map((s) => ({ club: s.Club, x: lateralDev(s), y: s.CarryDistance_yds }))
+                   .filter((p) => p.x !== undefined && p.y !== undefined) as { club: string; x: number; y: number }[];
 
   const YMIN = 50;
   const yMaxData = pts.length ? Math.max(...pts.map((p) => p.y)) : 150;
@@ -802,23 +682,12 @@ function RangeDispersion({
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" style={{ background: COLORS.brandSoft, borderRadius: 12, border: `1px solid ${COLORS.gray300}` }}>
-      {/* Fairway stripes */}
       {stripes.map((i) => (
-        <rect
-          key={i}
-          x={0}
-          y={(H / stripes.length) * i}
-          width={W}
-          height={H / stripes.length}
-          fill={i % 2 === 0 ? "#E8F4EE" : "#F4FBF8"}
-          opacity={0.9}
-        />
+        <rect key={i} x={0} y={(H / stripes.length) * i} width={W} height={H / stripes.length} fill={i % 2 === 0 ? "#E8F4EE" : "#F4FBF8"} opacity={0.9} />
       ))}
 
-      {/* Centerline */}
       <line x1={xScale(0)} y1={PAD - 10} x2={xScale(0)} y2={H - PAD + 10} stroke={COLORS.brand} strokeDasharray="6 6" strokeWidth={2} />
 
-      {/* Flags + 50y lines */}
       {distTicks.map((d, idx) => (
         <g key={d}>
           <line x1={PAD} x2={W - PAD} y1={yScale(d)} y2={yScale(d)} stroke="#CFE6DA" strokeDasharray="4 8" />
@@ -826,12 +695,10 @@ function RangeDispersion({
         </g>
       ))}
 
-      {/* Axis labels */}
       <text x={xScale(0) + 8} y={PAD - 16} fontSize={12} fill={COLORS.gray600}>Target line</text>
       <text x={PAD} y={H - 8} fontSize={11} fill={COLORS.gray600}>Left ←  Deviation (yds)  → Right</text>
       <text x={W - PAD - 110} y={PAD - 16} fontSize={11} fill={COLORS.gray600}>Range: {YMIN}–{YMAX} yds</text>
 
-      {/* Shots */}
       {[...byClub.keys()].map((club, idx) => {
         const color = palette[idx % palette.length];
         const ptsC = byClub.get(club)!;
@@ -844,7 +711,6 @@ function RangeDispersion({
         );
       })}
 
-      {/* Legend */}
       <rect x={PAD} y={PAD - 28} width={Math.min(780, 18 * clubs.length + 200)} height={22} rx={6} ry={6} fill={COLORS.white} opacity={0.9} stroke={COLORS.gray300} />
       {clubs.map((c, i) => (
         <g key={c} transform={`translate(${PAD + 10 + i * 80}, ${PAD - 14})`}>
@@ -861,32 +727,17 @@ function Flag({ x, y, color, label }: { x: number; y: number; color: string; lab
   return (
     <g>
       <line x1={x} y1={y} x2={x} y2={y - poleH} stroke="#7A7A7A" strokeWidth={2} />
-      <polygon
-        points={`${x},${y - poleH} ${x + flagW},${y - poleH + flagH / 2} ${x},${y - poleH + flagH}`}
-        fill={color}
-        stroke="#333"
-        strokeWidth={0.5}
-      />
+      <polygon points={`${x},${y - poleH} ${x + flagW},${y - poleH + flagH / 2} ${x},${y - poleH + flagH}`} fill={color} stroke="#333" strokeWidth={0.5} />
       <text x={x + flagW + 6} y={y - poleH + flagH / 1.2} fontSize={11} fill="#333">{label}</text>
     </g>
   );
 }
 
 /** ===== Shot Shape component ===== */
-function ShotShape({
-  draw, straight, fade
-}: {
-  draw: { n: number; pct: number };
-  straight: { n: number; pct: number };
-  fade: { n: number; pct: number };
-}) {
-  const Box = ({
-    title, pct, n, bg, color
-  }: { title: string; pct: number; n: number; bg: string; color: string }) => (
+function ShotShape({ draw, straight, fade }: { draw: { n: number; pct: number }; straight: { n: number; pct: number }; fade: { n: number; pct: number } }) {
+  const Box = ({ title, pct, n, bg, color }: { title: string; pct: number; n: number; bg: string; color: string }) => (
     <div className="rounded-2xl px-6 py-6" style={{ background: bg }}>
-      <div className="text-2xl font-semibold" style={{ color }}>
-        {pct.toFixed(1)}%
-      </div>
+      <div className="text-2xl font-semibold" style={{ color }}>{pct.toFixed(1)}%</div>
       <div className="mt-1 text-sm" style={{ color: COLORS.gray700 }}>{title}</div>
       <div className="text-xs" style={{ color: COLORS.gray600 }}>{n} shots</div>
     </div>
@@ -906,16 +757,13 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   return (
     <div className="rounded-2xl p-5 shadow" style={{ background: COLORS.white, border: `1px solid ${COLORS.gray300}` }}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold tracking-wide" style={{ color: COLORS.brand }}>
-          {title}
-        </h2>
+        <h2 className="text-sm font-semibold tracking-wide" style={{ color: COLORS.brand }}>{title}</h2>
         <div className="h-1 rounded-full w-24" style={{ background: `linear-gradient(90deg, ${COLORS.brand}, ${COLORS.brandTint})` }} />
       </div>
       {children}
     </div>
   );
 }
-
 function KPI({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="rounded-2xl p-3 shadow text-sm" style={{ background: COLORS.white, border: `1px solid ${COLORS.gray300}` }}>
@@ -924,51 +772,33 @@ function KPI({ label, value, color }: { label: string; value: string; color: str
     </div>
   );
 }
-
-function ClubList({
-  options, selected, onChange, palette
-}: { options: string[]; selected: string[]; onChange: (v: string[]) => void; palette: string[] }) {
+function ClubList({ options, selected, onChange, palette }: { options: string[]; selected: string[]; onChange: (v: string[]) => void; palette: string[] }) {
   return (
     <div className="flex flex-col gap-2">
       {options.map((opt, i) => {
         const active = selected.includes(opt);
         const color = palette[i % palette.length];
         return (
-          <label key={opt} className="flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer"
-            style={{ borderColor: active ? color : COLORS.gray300, background: active ? "#FAFAFA" : COLORS.white }}>
+          <label key={opt} className="flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer" style={{ borderColor: active ? color : COLORS.gray300, background: active ? "#FAFAFA" : COLORS.white }}>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 inline-block rounded-full" style={{ background: color }} />
               <span className="text-sm" style={{ color: COLORS.gray700 }}>{opt}</span>
             </div>
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={() => onChange(active ? selected.filter(s => s !== opt) : [...selected, opt])}
-            />
+            <input type="checkbox" checked={active} onChange={() => onChange(active ? selected.filter(s => s !== opt) : [...selected, opt])} />
           </label>
         );
       })}
     </div>
   );
 }
-
-function EmptyChart() {
-  return <div style={{ padding: 16, color: COLORS.gray600 }}>No shots in this range.</div>;
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="py-2 pr-4" style={{ color: COLORS.gray700 }}>{children}</th>;
-}
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="py-2 pr-4">{children}</td>;
-}
+function EmptyChart() { return <div style={{ padding: 16, color: COLORS.gray600 }}>No shots in this range.</div>; }
+function Th({ children }: { children: React.ReactNode }) { return <th className="py-2 pr-4" style={{ color: COLORS.gray700 }}>{children}</th>; }
+function Td({ children }: { children: React.ReactNode }) { return <td className="py-2 pr-4">{children}</td>; }
 
 /** ===== HELPERS ===== */
 function fmtNum(v: number | undefined, fixed: number, suffix: string) {
   return v === undefined ? "-" : `${v.toFixed(fixed)}${suffix}`;
 }
-
-/** CSV export */
 function toCSV(rows: Record<string, any>[]) {
   if (!rows.length) return "";
   const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r))));
@@ -977,10 +807,7 @@ function toCSV(rows: Record<string, any>[]) {
     const s = String(v).replace(/"/g, '""');
     return /[",\n]/.test(s) ? `"${s}"` : s;
   };
-  const lines = [
-    headers.join(","),
-    ...rows.map(r => headers.map(h => escape(r[h])).join(",")),
-  ];
+  const lines = [headers.join(","), ...rows.map(r => headers.map(h => escape(r[h])).join(","))];
   return lines.join("\n");
 }
 function exportCSV(rows: Record<string, any>[]) {
