@@ -17,12 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # ⬇️ The snippet goes right here ⬇️
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          # (no cache here; cache requires a lockfile)
       - run: npm install
       - run: npm run build
+      # ⬆️ The snippet goes right here ⬆️
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
