@@ -248,6 +248,134 @@ function findBestHeader(rowsRaw: any[][]) {
   return best;
 }
 
+/** ===== Fallback parser for "weird CSV" (tabs + quotes + combined Date/Time) ===== */
+function parseWeirdLaunchCSV(text: string) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (!lines.length) return null;
+
+  const split = (line: string) => line.replace(/\t/g, "").replace(/"/g, "").trim().split(",");
+
+  // Header + optional units row
+  const header = split(lines[0]).map((h) => h.trim());
+  const unitsLooksLike = (s: string) => /\[[^\]]*\]/.test(s);
+  const maybeUnits = lines[1] ? split(lines[1]) : [];
+  const hasUnits = maybeUnits.some(unitsLooksLike);
+
+  // Data rows
+  const dataRows = lines.slice(hasUnits ? 2 : 1).map(split);
+
+  // Minimal validation
+  const hasClub = header.includes("ClubType") || header.includes("Club Name") || header.includes("ClubName");
+  if (!hasClub || !header.includes("Carry Distance")) return null;
+
+  return { header, dataRows };
+}
+
+function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId: string): Shot[] {
+  const idx = (name: string) => header.indexOf(name);
+  const id = {
+    Date: idx("Date"),
+    Player: idx("Player"),
+    ClubName: header.includes("Club Name") ? idx("Club Name") : idx("ClubName"),
+    ClubType: idx("ClubType"),
+    ClubSpeed: idx("Club Speed"),
+    AttackAngle: idx("Attack Angle"),
+    ClubPath: idx("Club Path"),
+    ClubFace: idx("Club Face"),
+    FaceToPath: idx("Face to Path"),
+    BallSpeed: idx("Ball Speed"),
+    Smash: idx("Smash Factor"),
+    LaunchAngle: idx("Launch Angle"),
+    LaunchDir: idx("Launch Direction"),
+    Backspin: idx("Backspin"),
+    Sidespin: idx("Sidespin"),
+    SpinRate: idx("Spin Rate"),
+    SpinRateType: idx("Spin Rate Type"),
+    SpinAxis: idx("Spin Axis"),
+    Apex: idx("Apex Height"),
+    Carry: idx("Carry Distance"),
+    CarryDevAng: idx("Carry Deviation Angle"),
+    CarryDevDist: idx("Carry Deviation Distance"),
+    Total: idx("Total Distance"),
+    TotalDevAng: idx("Total Deviation Angle"),
+    TotalDevDist: idx("Total Deviation Distance"),
+  };
+
+  const num = (v: any) => {
+    if (v === null || v === undefined) return undefined;
+    const s = String(v).trim();
+    if (!s || s.toUpperCase() === "#DIV/0!" || s.toUpperCase() === "NAN") return undefined;
+    const x = Number(s.replace(/,/g, ""));
+    return isNaN(x) ? undefined : x;
+  };
+
+  const parseWeirdTimestamp = (v: string | undefined) => {
+    if (!v) return undefined;
+    const s = String(v).trim();
+    // e.g. 8/10/202511:15:12AM  ->  8/10/2025 11:15:12 AM
+    const m = s.match(/^(\d{1,2}\/\d{1,2}\/\d{4})(\d{1,2}:\d{2}:\d{2})(AM|PM)$/i);
+    if (m) {
+      const str = `${m[1]} ${m[2]} ${m[3].toUpperCase()}`;
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+    const d2 = new Date(s);
+    return isNaN(d2.getTime()) ? undefined : d2.toISOString();
+  };
+
+  const shots: Shot[] = [];
+  for (const row of rows) {
+    // club: prefer ClubType; if both present and distinct, combine
+    const rawType = id.ClubType >= 0 ? row[id.ClubType] : "";
+    const rawName = id.ClubName >= 0 ? row[id.ClubName] : "";
+    let club = (rawType || "").trim();
+    const nm = (rawName || "").trim();
+    if (!club && nm) club = nm;
+    else if (club && nm && !club.toLowerCase().includes(nm.toLowerCase())) {
+      club = `${nm} ${club}`.trim();
+    }
+    if (!club) continue; // must have club
+
+    const shot: Shot = {
+      SessionId: fallbackSessionId,
+      Club: club,
+      Timestamp: id.Date >= 0 ? parseWeirdTimestamp(row[id.Date]) : undefined,
+
+      ClubSpeed_mph: id.ClubSpeed >= 0 ? num(row[id.ClubSpeed]) : undefined,
+      AttackAngle_deg: id.AttackAngle >= 0 ? num(row[id.AttackAngle]) : undefined,
+      ClubPath_deg: id.ClubPath >= 0 ? num(row[id.ClubPath]) : undefined,
+      ClubFace_deg: id.ClubFace >= 0 ? num(row[id.ClubFace]) : undefined,
+      FaceToPath_deg: id.FaceToPath >= 0 ? num(row[id.FaceToPath]) : undefined,
+
+      BallSpeed_mph: id.BallSpeed >= 0 ? num(row[id.BallSpeed]) : undefined,
+      SmashFactor: id.Smash >= 0 ? num(row[id.Smash]) : undefined,
+
+      LaunchAngle_deg: id.LaunchAngle >= 0 ? num(row[id.LaunchAngle]) : undefined,
+      LaunchDirection_deg: id.LaunchDir >= 0 ? num(row[id.LaunchDir]) : undefined,
+
+      Backspin_rpm: id.Backspin >= 0 ? num(row[id.Backspin]) : undefined,
+      Sidespin_rpm: id.Sidespin >= 0 ? num(row[id.Sidespin]) : undefined,
+      SpinRate_rpm: id.SpinRate >= 0 ? num(row[id.SpinRate]) : undefined,
+      SpinRateType: id.SpinRateType >= 0 ? String(row[id.SpinRateType] ?? "").trim() : undefined,
+
+      SpinAxis_deg: id.SpinAxis >= 0 ? num(row[id.SpinAxis]) : undefined,
+      ApexHeight_yds: id.Apex >= 0 ? num(row[id.Apex]) : undefined,
+
+      CarryDistance_yds: id.Carry >= 0 ? num(row[id.Carry]) : undefined,
+      CarryDeviationAngle_deg: id.CarryDevAng >= 0 ? num(row[id.CarryDevAng]) : undefined,
+      CarryDeviationDistance_yds: id.CarryDevDist >= 0 ? num(row[id.CarryDevDist]) : undefined,
+
+      TotalDistance_yds: id.Total >= 0 ? num(row[id.Total]) : undefined,
+      TotalDeviationAngle_deg: id.TotalDevAng >= 0 ? num(row[id.TotalDevAng]) : undefined,
+      TotalDeviationDistance_yds: id.TotalDevDist >= 0 ? num(row[id.TotalDevDist]) : undefined,
+    };
+
+    shots.push(shot);
+  }
+
+  return shots;
+}
+
 /** ===== APP ===== */
 export default function App() {
   const [shots, setShots] = useState<Shot[]>([]);
@@ -312,9 +440,10 @@ export default function App() {
     setImportMsg(`Loaded sample session (${sample.length} shots).`);
   };
 
-  /** ===== Importer (CSV/XLSX/XLS) with auto header detection ===== */
+  /** ===== Importer (CSV/XLSX/XLS) with auto header detection + fallback weird CSV ===== */
   const onFile = async (file: File) => {
-    let wb: XLSX.WorkBook;
+    let wb: XLSX.WorkBook | null = null;
+    let textFromCSV: string | null = null;
 
     try {
       const isCSV =
@@ -323,15 +452,14 @@ export default function App() {
         file.type === "application/vnd.ms-excel";
 
       if (isCSV) {
-        let text = await file.text();
-        // Auto-detect delimiter
-        const firstLine = text.split(/\r?\n/)[0] || "";
-        const countChar = (src: string, ch: string) => (src.split(ch).length - 1);
-        const comma = countChar(firstLine, ",");
-        const semi = countChar(firstLine, ";");
-        const tabs = countChar(firstLine, "\t");
-        const FS = (tabs >= semi && tabs >= comma) ? "\t" : (semi > comma ? ";" : ",");
-        wb = XLSX.read(text, { type: "string", FS });
+        // Keep raw text (needed for weird CSV fallback)
+        textFromCSV = await file.text();
+
+        // Try normal CSV read first (with delimiter detection)
+        const firstLine = (textFromCSV.split(/\r?\n/)[0] || "");
+        const count = (ch: string) => (firstLine.match(new RegExp(ch, "g")) || []).length;
+        const FS = count("\t") >= count(";") && count("\t") >= count(",") ? "\t" : (count(";") > count(",") ? ";" : ",");
+        wb = XLSX.read(textFromCSV, { type: "string", FS });
       } else {
         const buf = await file.arrayBuffer();
         wb = XLSX.read(buf, { type: "array" });
@@ -342,14 +470,14 @@ export default function App() {
       return;
     }
 
-    // Choose the first non-empty sheet
-    const firstSheet = wb.SheetNames.find(n => {
-      const ws = wb.Sheets[n];
+    // --- normal sheet → JSON flow ---
+    const firstSheet = wb!.SheetNames.find(n => {
+      const ws = wb!.Sheets[n];
       const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
       return rr && rr.flat().some(v => v !== null && v !== "");
-    }) || wb.SheetNames[0];
+    }) || wb!.SheetNames[0];
 
-    const ws = wb.Sheets[firstSheet];
+    const ws = wb!.Sheets[firstSheet];
     const rowsRaw: any[][] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[][];
 
     if (!rowsRaw.length) {
@@ -366,68 +494,106 @@ export default function App() {
       : headerRow;
 
     // Build mapping
-    const normIndex: (keyof Shot | undefined)[] = effectiveHeader.map((h) => {
-      const key = normalizeHeader(String(h ?? ""));
-      return headerMap[key];
-    });
+    const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
+    const normIndex: (keyof Shot | undefined)[] = hdrNorms.map((key) => headerMap[key]);
 
-    if (!normIndex.some(Boolean) || !normIndex.includes("Club")) {
-      setImportMsg(
-        `I couldn't find a proper header row with a "Club" column.\n` +
-        `Detected sheet: "${firstSheet}". Try cleaning the top rows or share the headers.`
-      );
+    // Fallback: try to detect a 'Club' column if not mapped by headerMap
+    let clubIdx = normIndex.findIndex((k) => k === "Club");
+
+    // header synonyms
+    if (clubIdx === -1) {
+      const clubHeaderSyns = ["club", "club name", "club type", "club model", "club used", "club selection", "club id", "club #", "club number"];
+      clubIdx = hdrNorms.findIndex((h) => clubHeaderSyns.includes(h));
+      if (clubIdx !== -1) normIndex[clubIdx] = "Club";
+    }
+
+    // value-pattern heuristic: scan first rows for values like "driver", "7 iron", "pw", "60 (lw)"
+    const startRow = best.idx + (best.usedTwoRows ? 2 : 1); // skip 2 rows if we used a 2-row header
+    if (clubIdx === -1) {
+      const sampleRows = rowsRaw.slice(startRow, startRow + 30);
+      for (let i = 0; i < hdrNorms.length; i++) {
+        const vals = sampleRows.map((r) => (r ? String(r[i] ?? "").toLowerCase().trim() : ""));
+        const looksClub = vals.some((v) =>
+          /(driver|wood|hybrid|iron|wedge|pitch|pw|gw|sw|lw|\d+\s*iron|\d+\s*wood)/.test(v)
+        );
+        if (looksClub) {
+          normIndex[i] = "Club";
+          clubIdx = i;
+          break;
+        }
+      }
+    }
+
+    // Convert data rows beneath the header(s)
+    const dataRows = rowsRaw.slice(startRow);
+    const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
+
+    let totalRows = 0;
+    let mappedCount = 0;
+    const mapped: Shot[] = [];
+
+    if (clubIdx !== -1) {
+      for (const rowArr of dataRows) {
+        if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
+        totalRows++;
+
+        const obj: any = {};
+        rowArr.forEach((cell: any, i: number) => {
+          const mk = normIndex[i];
+          if (!mk) return;
+          obj[mk] = cell;
+        });
+
+        // require Club to be present
+        if (!obj.Club) continue;
+
+        const shot: any = {};
+        Object.keys(obj).forEach((k) => {
+          const mk = k as keyof Shot;
+          const v = obj[mk];
+          if (mk === "Timestamp") shot[mk] = isoDate(v);
+          else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") {
+            const val = String(v ?? "").trim(); if (val) shot[mk] = val;
+          } else if (mk === "Swings") {
+            const val = n(v); if (val !== undefined) shot[mk] = Math.round(val);
+          } else {
+            const val = n(v); if (val !== undefined) shot[mk] = val;
+          }
+        });
+
+        if (!shot.SessionId) shot.SessionId = fallbackId;
+
+        mapped.push(applyDerived(shot as Shot));
+        mappedCount++;
+      }
+    }
+
+    // If normal path imported rows, use it
+    if (mappedCount > 0) {
+      setShots((prev) => [...prev, ...mapped]);
+      const matchedCols = normIndex.filter(Boolean).length;
+      setImportMsg(`Imported ${mappedCount}/${totalRows} rows from "${file.name}" (sheet "${firstSheet}"). Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}.`);
       return;
     }
 
-    // Convert data rows beneath the header
-    const dataRows = rowsRaw.slice(best.idx + 1);
-    const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
-    let totalRows = 0;
-    let mappedCount = 0;
-
-    const mapped: Shot[] = [];
-    for (const rowArr of dataRows) {
-      // skip fully-empty rows
-      if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
-      totalRows++;
-
-      const obj: any = {};
-      rowArr.forEach((cell: any, i: number) => {
-        const mk = normIndex[i];
-        if (!mk) return;
-        obj[mk] = cell;
-      });
-
-      // require Club to be present
-      if (!obj.Club) continue;
-
-      // Parse types
-      const shot: any = {};
-      Object.keys(obj).forEach((k) => {
-        const mk = k as keyof Shot;
-        const v = obj[mk];
-        if (mk === "Timestamp") shot[mk] = isoDate(v);
-        else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") {
-          const val = String(v ?? "").trim(); if (val) shot[mk] = val;
-        } else if (mk === "Swings") {
-          const val = n(v); if (val !== undefined) shot[mk] = Math.round(val);
-        } else {
-          const val = n(v); if (val !== undefined) shot[mk] = val;
+    // --- Fallback: parse the weird launch CSV format directly ---
+    if (textFromCSV) {
+      const weird = parseWeirdLaunchCSV(textFromCSV);
+      if (weird) {
+        const shotsFromWeird = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
+        if (shotsFromWeird.length) {
+          setShots((prev) => [...prev, ...shotsFromWeird]);
+          setImportMsg(`Imported ${shotsFromWeird.length}/${weird.dataRows.length} rows from "${file.name}" via fallback parser (two-row header + tabs/quotes).`);
+          return;
         }
-      });
-
-      if (!shot.SessionId) shot.SessionId = fallbackId;
-
-      mapped.push(applyDerived(shot as Shot));
-      mappedCount++;
+      }
     }
 
-    setShots(prev => [...prev, ...mapped]);
-
+    // If we get here, we couldn’t find a Club column in either path
     const matchedCols = normIndex.filter(Boolean).length;
     setImportMsg(
-      `Imported ${mappedCount}/${totalRows} rows from "${file.name}" (sheet "${firstSheet}"). ` +
-      `Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}.`
+      `Matched ${matchedCols} columns, but couldn't locate usable rows (no "Club"). ` +
+      `If possible, include "ClubType" or "Club Name" in the export, or share the top 2 header lines.`
     );
   };
 
@@ -562,6 +728,32 @@ export default function App() {
 
   const hasData = filteredOutliers.length > 0;
 
+  /** Delete a session (and helper to delete all) */
+  const deleteSession = () => {
+    if (sessionFilter === "ALL") return;
+    const name = sessionFilter;
+    const count = shots.filter(s => (s.SessionId ?? "Unknown Session") === name).length;
+    if (!count) {
+      setImportMsg(`No shots found for session "${name}".`);
+      return;
+    }
+    const ok = window.confirm(`Delete session "${name}" and its ${count} shots? This cannot be undone.`);
+    if (!ok) return;
+    setShots(prev => prev.filter(s => (s.SessionId ?? "Unknown Session") !== name));
+    setSelectedClubs([]);
+    setSessionFilter("ALL");
+    setImportMsg(`Deleted session "${name}" (${count} shots).`);
+  };
+  const deleteAll = () => {
+    const ok = window.confirm("Delete ALL imported data? This cannot be undone.");
+    if (!ok) return;
+    setShots([]);
+    setSelectedClubs([]);
+    setSessionFilter("ALL");
+    try { localStorage.removeItem("launch-tracker:shots"); } catch {}
+    setImportMsg("All data deleted.");
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: COLORS.white }}>
       {/* Header */}
@@ -610,18 +802,34 @@ export default function App() {
         <aside className="col-span-12 lg:col-span-3">
           <Card title="Filters">
             {/* Session selector */}
-            <div className="mb-5">
+            <div className="mb-3">
               <label className="text-sm font-medium block mb-2" style={{ color: COLORS.gray700 }}>Session</label>
-              <select
-                value={sessionFilter}
-                onChange={(e) => setSessionFilter(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-sm"
-                style={{ borderColor: COLORS.gray300 }}
-              >
-                {sessions.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={sessionFilter}
+                  onChange={(e) => setSessionFilter(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: COLORS.gray300 }}
+                >
+                  {sessions.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <button
+                  className="px-3 py-2 rounded-lg text-sm border"
+                  style={{ borderColor: COLORS.gray300, color: "#B91C1C" }}
+                  onClick={deleteSession}
+                  disabled={sessionFilter === "ALL"}
+                  title="Delete selected session"
+                >
+                  Delete
+                </button>
+              </div>
+              <div className="mt-2">
+                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: COLORS.gray300, color: "#B91C1C" }} onClick={deleteAll}>
+                  Delete all data
+                </button>
+              </div>
             </div>
 
             {/* Vertical Club selector */}
