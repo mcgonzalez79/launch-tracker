@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// IMPORTANT: base must match your repo name for GitHub Pages
 export default defineConfig({
   plugins: [react()],
-  // For GitHub Pages only: set base to "/<your-repo-name>/" and uncomment:
-  base: "/launch-tracker/", // 👈 important for GitHub Pages
+  base: "/launch-tracker/",
 });
