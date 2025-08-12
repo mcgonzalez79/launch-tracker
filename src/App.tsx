@@ -182,7 +182,6 @@ function normalizeHeader(raw: string): string {
   s = s.replace(/[_\-]+/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   s = s.replace(/:$/, "");
-  // unify
   s = s.replace(/\bsmash\s*factor\b/, "smash factor");
   return s;
 }
@@ -382,6 +381,16 @@ function fpOf(s: Shot): string {
   ].join("|");
 }
 
+/** ===== Stable color for a club (consistent across filters) ===== */
+function colorForClub(club: string, clubsAll: string[], palette: string[]) {
+  const idx = clubsAll.findIndex(c => c.toLowerCase() === club.toLowerCase());
+  if (idx >= 0) return palette[idx % palette.length];
+  // fallback stable hash
+  let h = 0;
+  for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
 /** ================= APP ================= */
 export default function App() {
   // THEME
@@ -486,6 +495,7 @@ export default function App() {
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
+    thead
     const nextRow   = rowsRaw[best.idx + 1] || [];
     const effectiveHeader = best.usedTwoRows
       ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" "))
@@ -923,7 +933,7 @@ export default function App() {
                 <tr key={r.club} className="border-t" style={{ borderColor: T.border }}>
                   <Td>
                     <span className="inline-flex items-center gap-2">
-                      <span className="w-3 h-3 inline-block rounded-full" style={{ background: clubPalette[idx % clubPalette.length] }} />
+                      <span className="w-3 h-3 inline-block rounded-full" style={{ background: colorForClub(r.club, clubs, clubPalette) }} />
                       {r.club}
                     </span>
                   </Td>
@@ -964,7 +974,17 @@ export default function App() {
 
   // Session Notes helpers
   const selectedSessionKey = sessionFilter === "ALL" ? "" : (sessionFilter || "Unknown Session");
-  const sessionNote = sessionNotes[selectedSessionKey] || "";
+  const sessionNotes = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
+  }, []); // not used directly anymore but kept to avoid confusion
+
+  // Notes state from earlier hook:
+  const sessionNoteMap = sessionNotes as Record<string, string>;
+  const [sessionNotesState, setSessionNotes] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:session-notes", JSON.stringify(sessionNotesState)); } catch {} }, [sessionNotesState]);
+  const sessionNote = selectedSessionKey ? (sessionNotesState[selectedSessionKey] || "") : "";
   const saveSessionNote = (val: string) => {
     if (!selectedSessionKey) return;
     setSessionNotes(prev => ({ ...prev, [selectedSessionKey]: val }));
@@ -1007,25 +1027,27 @@ export default function App() {
         <aside className="col-span-12 lg:col-span-3 space-y-8">
           {/* Filters (not draggable) */}
           <Card theme={T} title="Filters">
-            {/* Import (moved here, above Session) */}
+            {/* Import (moved here, green + full width) */}
             <div className="mb-4">
               <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
-              <div className="flex gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onFile(f);
-                    e.currentTarget.value = "";
-                  }}
-                  className="hidden"
-                />
-                <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
-                  Import file
-                </button>
-              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onFile(f);
+                  e.currentTarget.value = "";
+                }}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: T.brand, color: "#fff", border: `1px solid ${T.brand}` }}
+              >
+                Import file
+              </button>
             </div>
 
             {/* Session selector */}
@@ -1138,7 +1160,7 @@ export default function App() {
             </div>
           </Card>
 
-          {/* NEW: Session Notes (static card below Filters) */}
+          {/* Session Notes */}
           <Card theme={T} title="Session Notes">
             {sessionFilter === "ALL" ? (
               <div className="text-sm" style={{ color: T.textDim }}>Select a session to add notes.</div>
@@ -1189,7 +1211,7 @@ export default function App() {
 }
 
 /** ================= Range-style dispersion (SVG) =================
- *  Legend moved vertically on the LEFT
+ *  Legend uses the full club list; points use stable colorForClub()
  */
 function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
   const T = theme;
@@ -1260,9 +1282,9 @@ function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots
       <text x={PAD_L} y={H - 8} fontSize={11} fill={T.textDim}>Left ←  Deviation (yds)  → Right</text>
       <text x={W - PAD_R - 120} y={PAD_T - 16} fontSize={11} fill={T.textDim}>Range: {YMIN}–{YMAX} yds</text>
 
-      {/* Points by club */}
-      {[...byClub.keys()].map((club, idx) => {
-        const color = palette[idx % palette.length];
+      {/* Points by club (stable colors) */}
+      {[...byClub.keys()].map((club) => {
+        const color = colorForClub(club, clubs, palette);
         const ptsC = byClub.get(club)!;
         return (
           <g key={club}>
@@ -1279,7 +1301,7 @@ function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots
               fill={T.white} opacity={0.9} stroke={T.border} />
         {clubs.map((c, i) => (
           <g key={c} transform={`translate(10, ${i * 22})`}>
-            <rect width="10" height="10" fill={palette[i % palette.length]} rx="2" ry="2" />
+            <rect width="10" height="10" fill={colorForClub(c, clubs, palette)} rx="2" ry="2" />
             <text x={14} y={9} fontSize="12" fill={T.textDim}>{c}</text>
           </g>
         ))}
@@ -1352,9 +1374,9 @@ function ClubList({ theme, options, selected, onChange, palette }: { theme: Them
   const T = theme;
   return (
     <div className="flex flex-col gap-2">
-      {options.map((opt, i) => {
+      {options.map((opt) => {
         const active = selected.includes(opt);
-        const color = palette[i % palette.length];
+        const color = colorForClub(opt, options, palette);
         return (
           <label key={opt} className="flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer"
                  style={{ borderColor: active ? color : T.border, background: active ? (T === DARK ? "#0F172A" : "#FAFAFA") : T.panel, color: T.text }}>
