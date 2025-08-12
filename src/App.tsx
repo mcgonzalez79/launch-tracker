@@ -145,14 +145,20 @@ const orderIndex = (name: string) => {
   return 99;
 };
 
-/** Robust header normalization */
+/** Robust header normalization (with CamelCase split) */
 function normalizeHeader(raw: string): string {
-  let s = String(raw || "").trim().toLowerCase();
+  let s = String(raw || "").trim();
+
+  // NEW: split CamelCase BEFORE lowercasing (ClubType -> Club Type)
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+  s = s.toLowerCase();
   // remove content in [] or () like "[yards]" or "(mph)"
   s = s.replace(/\[[^\]]*\]/g, "").replace(/\([^\)]*\)/g, "");
   s = s.replace(/[_\-]+/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   s = s.replace(/:$/, ""); // trailing colon
+
   // unify words
   s = s.replace(/\bclub speed\b/, "club speed")
        .replace(/\bball speed\b/, "ball speed")
@@ -169,15 +175,17 @@ function normalizeHeader(raw: string): string {
        .replace(/\bspin axis\b/, "spin axis")
        .replace(/\bapex height\b/, "apex height")
        .replace(/\bcarry distance\b/, "carry distance")
+       .replace(/\bcarry\b/, "carry")
+       .replace(/\btotal distance\b/, "total distance")
+       .replace(/\btotal\b/, "total")
        .replace(/\bcarry deviation angle\b/, "carry deviation angle")
        .replace(/\bcarry deviation distance\b/, "carry deviation distance")
-       .replace(/\btotal distance\b/, "total distance")
        .replace(/\btotal deviation angle\b/, "total deviation angle")
        .replace(/\btotal deviation distance\b/, "total deviation distance");
   return s;
 }
 
-/** Header map after normalization */
+/** Header map after normalization (+ extra synonyms) */
 const headerMap: Record<string, keyof Shot> = {
   "club": "Club",
   "swings": "Swings",
@@ -203,28 +211,35 @@ const headerMap: Record<string, keyof Shot> = {
   "apex height": "ApexHeight_yds",
 
   "carry distance": "CarryDistance_yds",
+  "carry": "CarryDistance_yds",
   "carry deviation angle": "CarryDeviationAngle_deg",
   "carry deviation distance": "CarryDeviationDistance_yds",
 
   "total distance": "TotalDistance_yds",
+  "total": "TotalDistance_yds",
   "total deviation angle": "TotalDeviationAngle_deg",
   "total deviation distance": "TotalDeviationDistance_yds",
 
+  // time + session id
   "sessionid": "SessionId",
   "session id": "SessionId",
   "timestamp": "Timestamp",
   "date": "Timestamp",
   "datetime": "Timestamp",
+
+  // NEW synonyms commonly seen in exports
+  "club type": "Club",
+  "clubname": "Club",
+  "club name": "Club",
 };
 
-/** ===== NEW: Find the best header row (supports two-row header+units) ===== */
+/** ===== Find the best header row (supports two-row header+units) ===== */
 function findBestHeader(rowsRaw: any[][]) {
   const MAX_SCAN = Math.min(20, rowsRaw.length);
   let best = { idx: 0, map: [] as (keyof Shot | undefined)[], score: 0, usedTwoRows: false };
 
   const scoreMap = (hdr: any[]) => {
     const mapped = hdr.map((h) => headerMap[normalizeHeader(String(h ?? ""))]);
-    // reward hits + extra weight if we found a Club column
     const score = mapped.filter(Boolean).length + (mapped.includes("Club" as keyof Shot) ? 2 : 0);
     return { mapped, score };
   };
@@ -266,8 +281,9 @@ function parseWeirdLaunchCSV(text: string) {
 
   // Minimal validation
   const hasClub = header.includes("ClubType") || header.includes("Club Name") || header.includes("ClubName");
-  if (!hasClub || !header.includes("Carry Distance")) return null;
+  if (!hasClub) return null;
 
+  // We accept Carry or Carry Distance / Total or Total Distance in converter below
   return { header, dataRows };
 }
 
@@ -301,11 +317,9 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
     SpinRateType: find(["spin rate type"]),
     SpinAxis: find(["spin axis"]),
     Apex: find(["apex height"]),
-    // Accept both "Carry Distance" and "Carry"
     Carry: find(["carry distance", "carry"]),
     CarryDevAng: find(["carry deviation angle"]),
     CarryDevDist: find(["carry deviation distance"]),
-    // Accept both "Total Distance" and "Total"
     Total: find(["total distance", "total"]),
     TotalDevAng: find(["total deviation angle"]),
     TotalDevDist: find(["total deviation distance"]),
@@ -480,7 +494,7 @@ export default function App() {
       return;
     }
 
-    // --- normal sheet → JSON flow ---
+    // NORMAL path
     const firstSheet = wb!.SheetNames.find(n => {
       const ws = wb!.Sheets[n];
       const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
@@ -495,7 +509,6 @@ export default function App() {
       return;
     }
 
-    // Auto-detect header row (handles single and two-row headers)
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
     const nextRow   = rowsRaw[best.idx + 1] || [];
@@ -503,45 +516,23 @@ export default function App() {
       ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" "))
       : headerRow;
 
-    // Build mapping
     const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
     const normIndex: (keyof Shot | undefined)[] = hdrNorms.map((key) => headerMap[key]);
 
-    // Fallback: try to detect a 'Club' column if not mapped by headerMap
+    // Find/guess Club column
     let clubIdx = normIndex.findIndex((k) => k === "Club");
-
-    // header synonyms
     if (clubIdx === -1) {
       const clubHeaderSyns = ["club", "club name", "club type", "club model", "club used", "club selection", "club id", "club #", "club number"];
       clubIdx = hdrNorms.findIndex((h) => clubHeaderSyns.includes(h));
       if (clubIdx !== -1) normIndex[clubIdx] = "Club";
     }
 
-    // value-pattern heuristic: scan first rows for values like "driver", "7 iron", "pw", "60 (lw)"
-    const startRow = best.idx + (best.usedTwoRows ? 2 : 1); // skip 2 rows if we used a 2-row header
-    if (clubIdx === -1) {
-      const sampleRows = rowsRaw.slice(startRow, startRow + 30);
-      for (let i = 0; i < hdrNorms.length; i++) {
-        const vals = sampleRows.map((r) => (r ? String(r[i] ?? "").toLowerCase().trim() : ""));
-        const looksClub = vals.some((v) =>
-          /(driver|wood|hybrid|iron|wedge|pitch|pw|gw|sw|lw|\d+\s*iron|\d+\s*wood)/.test(v)
-        );
-        if (looksClub) {
-          normIndex[i] = "Club";
-          clubIdx = i;
-          break;
-        }
-      }
-    }
-
-    // Convert data rows beneath the header(s)
+    const startRow = best.idx + (best.usedTwoRows ? 2 : 1);
     const dataRows = rowsRaw.slice(startRow);
     const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
 
     let totalRows = 0;
-    let mappedCount = 0;
     const mapped: Shot[] = [];
-
     if (clubIdx !== -1) {
       for (const rowArr of dataRows) {
         if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
@@ -553,8 +544,6 @@ export default function App() {
           if (!mk) return;
           obj[mk] = cell;
         });
-
-        // require Club to be present
         if (!obj.Club) continue;
 
         const shot: any = {};
@@ -572,39 +561,46 @@ export default function App() {
         });
 
         if (!shot.SessionId) shot.SessionId = fallbackId;
-
         mapped.push(applyDerived(shot as Shot));
-        mappedCount++;
       }
     }
 
-    // If normal path imported rows, use it
-    if (mappedCount > 0) {
-      setShots((prev) => [...prev, ...mapped]);
-      const matchedCols = normIndex.filter(Boolean).length;
-      setImportMsg(`Imported ${mappedCount}/${totalRows} rows from "${file.name}" (sheet "${firstSheet}"). Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}.`);
-      return;
-    }
+    const matchedCols = normIndex.filter(Boolean).length;
+    const carryCountNormal = mapped.filter(s => s.CarryDistance_yds != null).length;
 
-    // --- Fallback: parse the weird launch CSV format directly ---
-    if (textFromCSV) {
+    // Decide if we should try the fallback CSV parser:
+    const weakMapping = matchedCols < 6 || carryCountNormal < Math.max(3, Math.floor(mapped.length * 0.25));
+
+    if (textFromCSV && (weakMapping || mapped.length === 0)) {
       const weird = parseWeirdLaunchCSV(textFromCSV);
       if (weird) {
-        const shotsFromWeird = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
-        if (shotsFromWeird.length) {
-          setShots((prev) => [...prev, ...shotsFromWeird]);
-          setImportMsg(`Imported ${shotsFromWeird.length}/${weird.dataRows.length} rows from "${file.name}" via fallback parser (two-row header + tabs/quotes).`);
+        const weirdShots = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
+        const carryCountWeird = weirdShots.filter(s => s.CarryDistance_yds != null).length;
+
+        // Prefer fallback if it yields more carry or generally more usable shots
+        const preferFallback = carryCountWeird > carryCountNormal || (weirdShots.length && mapped.length === 0);
+
+        if (preferFallback) {
+          setShots(prev => [...prev, ...weirdShots]);
+          setImportMsg(
+            `Imported ${weirdShots.length}/${weird.dataRows.length} rows from "${file.name}" via fallback parser` +
+            `${weakMapping ? " (normal header mapping too weak)" : ""}.`
+          );
           return;
         }
       }
     }
 
-    // If we get here, we couldn’t find a Club column in either path
-    const matchedCols = normIndex.filter(Boolean).length;
-    setImportMsg(
-      `Matched ${matchedCols} columns, but couldn't locate usable rows (no "Club"). ` +
-      `If possible, include "ClubType" or "Club Name" in the export, or share the top 2 header lines.`
-    );
+    // Keep normal path
+    if (mapped.length) {
+      setShots(prev => [...prev, ...mapped]);
+      setImportMsg(
+        `Imported ${mapped.length}/${totalRows || mapped.length} rows from "${file.name}" (sheet "${firstSheet}"). ` +
+        `Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}.`
+      );
+    } else {
+      setImportMsg(`I couldn’t find usable rows. If possible, include "ClubType/Club Name" and "Carry" or "Carry Distance" in the export.`);
+    }
   };
 
   function applyDerived(s: Shot): Shot {
@@ -654,38 +650,36 @@ export default function App() {
     return pool;
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
-  /** Outlier filter (2.5σ on Carry & Smash) */
+  /** Outlier filter (more permissive) */
   const filteredOutliers = useMemo(() => {
-  if (!excludeOutliers) return filtered;
+    if (!excludeOutliers) return filtered;
 
-  const getSmash = (s: Shot) =>
-    s.SmashFactor ?? (s.ClubSpeed_mph && s.BallSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
+    const getSmash = (s: Shot) =>
+      s.SmashFactor ?? (s.ClubSpeed_mph && s.BallSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
 
-  const carryVals = filtered.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-  const smashVals = filtered.map(getSmash).filter((x): x is number => x != null);
+    const carryVals = filtered.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
+    const smashVals = filtered.map(getSmash).filter((x): x is number => x != null);
 
-  const haveCarryStats = carryVals.length >= 5;
-  const haveSmashStats = smashVals.length >= 5;
+    const haveCarryStats = carryVals.length >= 5;
+    const haveSmashStats = smashVals.length >= 5;
 
-  const cm = haveCarryStats ? mean(carryVals) : 0;
-  const cs = haveCarryStats ? stddev(carryVals) : 0;
-  const sm = haveSmashStats ? mean(smashVals) : 0;
-  const ss = haveSmashStats ? stddev(smashVals) : 0;
+    const cm = haveCarryStats ? mean(carryVals) : 0;
+    const cs = haveCarryStats ? stddev(carryVals) : 0;
+    const sm = haveSmashStats ? mean(smashVals) : 0;
+    const ss = haveSmashStats ? stddev(smashVals) : 0;
 
-  return filtered.filter(s => {
-    let ok = true;
-    // Only apply a test if we have enough data for that metric AND the shot has that metric.
-    if (haveCarryStats && s.CarryDistance_yds != null) {
-      ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
-    }
-    if (haveSmashStats) {
-      const sv = getSmash(s);
-      if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss;
-    }
-    return ok;
-  });
-}, [filtered, excludeOutliers]);
-
+    return filtered.filter(s => {
+      let ok = true;
+      if (haveCarryStats && s.CarryDistance_yds != null) {
+        ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
+      }
+      if (haveSmashStats) {
+        const sv = getSmash(s);
+        if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss;
+      }
+      return ok;
+    });
+  }, [filtered, excludeOutliers]);
 
   /** KPIs & Shot Shape */
   const kpis = useMemo(() => {
@@ -704,7 +698,6 @@ export default function App() {
     const fade = filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length;
     const shotsN = filteredOutliers.length;
     const straight = Math.max(0, shotsN - draw - fade);
-    const pct = (n: number) => (shotsN ? (n / shotsN) * 100 : 0);
 
     return {
       avgCarry: carry.length ? mean(carry) : undefined,
@@ -717,9 +710,9 @@ export default function App() {
       avgLA: la.length ? mean(la) : undefined,
       shots: shotsN,
       shape: {
-        draw: { n: draw, pct: pct(draw) },
-        straight: { n: straight, pct: pct(straight) },
-        fade: { n: fade, pct: pct(fade) },
+        draw: { n: draw, pct: shotsN ? (draw / shotsN) * 100 : 0 },
+        straight: { n: straight, pct: shotsN ? (straight / shotsN) * 100 : 0 },
+        fade: { n: fade, pct: shotsN ? (fade / shotsN) * 100 : 0 },
       },
     };
   }, [filteredOutliers]);
@@ -933,6 +926,11 @@ export default function App() {
             <KPI label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={COLORS.brandTint} />
             <KPI label="Avg Spin" value={fmtNum(kpis.avgSpin, 0, " rpm")} color={COLORS.brand} />
             <KPI label="Shots" value={String(kpis.shots ?? 0)} color={COLORS.gray700} />
+          </div>
+
+          {/* Tiny debug line (helps verify filters) */}
+          <div className="text-xs" style={{ color: COLORS.gray600 }}>
+            Using <b>{filteredOutliers.length}</b> shots after filters (of {filtered.length} filtered, {shots.length} imported).
           </div>
 
           {/* Shot shape (FULL WIDTH) */}
