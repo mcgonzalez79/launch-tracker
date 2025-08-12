@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Scatter, ScatterChart, ZAxis, Label
@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 
 /** ===== THEME (Green + White) ===== */
 const COLORS = {
-  brand: "#006747",   // green
+  brand: "#006747",
   brandTint: "#2F8C76",
   brandSoft: "#ECF8F1",
   white: "#ffffff",
@@ -27,9 +27,9 @@ const clubPalette = [
   "#E377C2", "#17BECF", "#7F7F7F", "#BCBD22", "#AEC7E8", "#FFBB78",
 ];
 
-// Gap chart uses ONLY these two colors:
-const CARRY_BAR = "#1F77B4";    // blue
-const TOTAL_BAR = COLORS.brand; // green
+// Gap chart uses ONLY these two:
+const CARRY_BAR = "#1F77B4";      // blue
+const TOTAL_BAR = COLORS.brand;   // green
 
 /** ===== TYPES ===== */
 type Shot = {
@@ -113,6 +113,7 @@ const coalesceFaceToPath = (s: Shot) =>
     ? s.ClubFace_deg - s.ClubPath_deg
     : undefined);
 
+// Display order for clubs
 const ORDER = [
   "Driver",
   "3 Wood", "5 Wood", "7 Wood",
@@ -144,55 +145,76 @@ const orderIndex = (name: string) => {
   return 99;
 };
 
-/** ===== HEADER MAP ===== */
+/** Robust header normalization */
+function normalizeHeader(raw: string): string {
+  let s = String(raw || "").trim().toLowerCase();
+  // remove content in [] or () like "[yards]" or "(mph)"
+  s = s.replace(/\[[^\]]*\]/g, "").replace(/\([^\)]*\)/g, "");
+  s = s.replace(/[_\-]+/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/:$/, ""); // trailing colon
+  // unify words
+  s = s.replace(/\bclub speed\b/, "club speed")
+       .replace(/\bball speed\b/, "ball speed")
+       .replace(/\bsmash\s*factor\b/, "smash factor")
+       .replace(/\battack angle\b/, "attack angle")
+       .replace(/\bclub path\b/, "club path")
+       .replace(/\bclub face\b/, "club face")
+       .replace(/\bface to path\b/, "face to path")
+       .replace(/\blaunch angle\b/, "launch angle")
+       .replace(/\blaunch direction\b/, "launch direction")
+       .replace(/\bbackspin\b/, "backspin")
+       .replace(/\bsidespin\b/, "sidespin")
+       .replace(/\bspin rate\b/, "spin rate")
+       .replace(/\bspin axis\b/, "spin axis")
+       .replace(/\bapex height\b/, "apex height")
+       .replace(/\bcarry distance\b/, "carry distance")
+       .replace(/\bcarry deviation angle\b/, "carry deviation angle")
+       .replace(/\bcarry deviation distance\b/, "carry deviation distance")
+       .replace(/\btotal distance\b/, "total distance")
+       .replace(/\btotal deviation angle\b/, "total deviation angle")
+       .replace(/\btotal deviation distance\b/, "total deviation distance");
+  return s;
+}
+
+/** Header map after normalization */
 const headerMap: Record<string, keyof Shot> = {
   "club": "Club",
   "swings": "Swings",
+
   "club speed": "ClubSpeed_mph",
-  "club speed [mph]": "ClubSpeed_mph",
   "attack angle": "AttackAngle_deg",
-  "attack angle [deg]": "AttackAngle_deg",
   "club path": "ClubPath_deg",
-  "club path [deg]": "ClubPath_deg",
   "club face": "ClubFace_deg",
-  "club face [deg]": "ClubFace_deg",
   "face to path": "FaceToPath_deg",
-  "face to path [deg]": "FaceToPath_deg",
+
   "ball speed": "BallSpeed_mph",
-  "ball speed [mph]": "BallSpeed_mph",
   "smash factor": "SmashFactor",
+
   "launch angle": "LaunchAngle_deg",
-  "launch angle [deg]": "LaunchAngle_deg",
   "launch direction": "LaunchDirection_deg",
-  "launch direction [deg]": "LaunchDirection_deg",
+
   "backspin": "Backspin_rpm",
-  "backspin [rpm]": "Backspin_rpm",
   "sidespin": "Sidespin_rpm",
-  "sidespin [rpm]": "Sidespin_rpm",
   "spin rate": "SpinRate_rpm",
-  "spin rate [rpm]": "SpinRate_rpm",
   "spin rate type": "SpinRateType",
   "spin axis": "SpinAxis_deg",
-  "spin axis [deg]": "SpinAxis_deg",
+
   "apex height": "ApexHeight_yds",
-  "apex height [yds]": "ApexHeight_yds",
+
   "carry distance": "CarryDistance_yds",
-  "carry distance [yards]": "CarryDistance_yds",
   "carry deviation angle": "CarryDeviationAngle_deg",
-  "carry deviation angle [deg]": "CarryDeviationAngle_deg",
   "carry deviation distance": "CarryDeviationDistance_yds",
-  "carry deviation distance [yards]": "CarryDeviationDistance_yds",
+
   "total distance": "TotalDistance_yds",
-  "total distance [yards]": "TotalDistance_yds",
   "total deviation angle": "TotalDeviationAngle_deg",
-  "total deviation angle [deg]": "TotalDeviationAngle_deg",
   "total deviation distance": "TotalDeviationDistance_yds",
-  "total deviation distance [yards]": "TotalDeviationDistance_yds",
+
   "sessionid": "SessionId",
   "session id": "SessionId",
   "timestamp": "Timestamp",
   "date": "Timestamp",
-  "datetime": "Timestamp"
+  "datetime": "Timestamp",
 };
 
 /** ===== APP ===== */
@@ -205,8 +227,26 @@ export default function App() {
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
+  const [importMsg, setImportMsg] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("launch-tracker:shots");
+      if (raw) {
+        const parsed: Shot[] = JSON.parse(raw);
+        setShots(parsed);
+      }
+    } catch {}
+  }, []);
+  // Persist to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("launch-tracker:shots", JSON.stringify(shots));
+    } catch {}
+  }, [shots]);
 
   const clubs = useMemo(
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
@@ -238,68 +278,113 @@ export default function App() {
       { SessionId: id, Club: "60 (LW)", ClubSpeed_mph: 64.1, BallSpeed_mph: 63.4, SmashFactor: 0.99, LaunchAngle_deg: 27.6, Backspin_rpm: 5975, CarryDistance_yds: 60,  TotalDistance_yds: 70,  SpinAxis_deg: 4.9, Timestamp: "2025-08-08T12:26:00Z" },
     ];
     setShots(prev => [...prev, ...sample.map(applyDerived)]);
+    setImportMsg(`Loaded sample session (${sample.length} shots).`);
   };
 
+  /** ===== Importer (CSV/XLSX/XLS) with delimiter & header normalization ===== */
   const onFile = async (file: File) => {
-  let wb: XLSX.WorkBook;
+    let wb: XLSX.WorkBook;
+    try {
+      const isCSV =
+        /\.csv$/i.test(file.name) ||
+        file.type === "text/csv" ||
+        file.type === "application/vnd.ms-excel";
 
-  try {
-    const isCSV =
-      /\.csv$/i.test(file.name) ||
-      file.type === "text/csv" ||
-      file.type === "application/vnd.ms-excel"; // some CSVs report this
+      if (isCSV) {
+        let text = await file.text();
 
-    if (isCSV) {
-      // Read CSV as text (handles BOM, UTF-8, etc.)
-      const text = await file.text();
-      // If your export is TSV (tab-separated), pass { FS: "\t" } as a second option
-      wb = XLSX.read(text, { type: "string" /* , FS: "\t" */ });
-    } else {
-      // XLSX/XLS path
-      const buf = await file.arrayBuffer();
-      wb = XLSX.read(buf, { type: "array" });
+        // Detect delimiter: comma, semicolon, or tab
+        const firstLine = text.split(/\r?\n/)[0] || "";
+        const comma = (firstLine.match(/,/g) || []).length;
+        const semi = (firstLine.match(/;/g) || []).length;
+        const tabs = (firstLine.match(/\t/g) || []).length;
+        let FS = ",";
+        if (semi > comma && semi >= tabs) FS = ";";
+        if (tabs > comma && tabs >= semi) FS = "\t";
+
+        wb = XLSX.read(text, { type: "string", FS });
+      } else {
+        const buf = await file.arrayBuffer();
+        wb = XLSX.read(buf, { type: "array" });
+      }
+    } catch (err) {
+      console.error(err);
+      setImportMsg("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?");
+      return;
     }
-  } catch (err) {
-    console.error(err);
-    alert("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?");
-    return;
-  }
 
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
 
-  // If the file didn't include SessionId, create one from filename + timestamp
-  const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
+    // Convert to JSON with raw headers; we will normalize below
+    const rowsRaw: any[] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[];
+    if (!rowsRaw.length) {
+      setImportMsg("The file seems empty.");
+      return;
+    }
 
-  const mapped: Shot[] = rows
-    .map((row) => {
-      const shot: any = {};
-      Object.keys(row).forEach((keyRaw) => {
-        const key = String(keyRaw).trim().toLowerCase();
-        const mappedKey = headerMap[key];
+    // Build a normalized header index
+    const headerRow = rowsRaw[0] as any[];
+    const normIndex: (keyof Shot | undefined)[] = headerRow.map((h) => {
+      const key = normalizeHeader(String(h ?? ""));
+      return headerMap[key];
+    });
+
+    // If we fail to map at least one key, warn (but continue)
+    if (!normIndex.some(Boolean)) {
+      setImportMsg("Could not match any known columns. Please check your header names.");
+      return;
+    }
+
+    // Turn remaining rows into objects
+    const objects = rowsRaw.slice(1).map((rowArr) => {
+      const obj: Record<string, any> = {};
+      rowArr.forEach((cell: any, i: number) => {
+        const mappedKey = normIndex[i];
         if (!mappedKey) return;
-
-        if (mappedKey === "Timestamp") {
-          shot[mappedKey] = isoDate(row[keyRaw]);
-        } else if (mappedKey === "SpinRateType" || mappedKey === "Club" || mappedKey === "SessionId") {
-          const val = String(row[keyRaw] ?? "").trim();
-          if (val) shot[mappedKey] = val;
-        } else if (mappedKey === "Swings") {
-          const val = n(row[keyRaw]); if (val !== undefined) shot[mappedKey] = Math.round(val);
-        } else {
-          const val = n(row[keyRaw]); if (val !== undefined) shot[mappedKey] = val;
-        }
+        obj[mappedKey] = cell;
       });
+      return obj;
+    });
 
-      if (!shot.SessionId) shot.SessionId = fallbackId;
-      return applyDerived(shot as Shot);
-    })
-    .filter((s) => !!s.Club && s.CarryDistance_yds !== undefined);
+    const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
 
-  setShots((prev) => [...prev, ...mapped]);
-};
+    let totalRows = objects.length;
+    let mappedCount = 0;
+    const mapped: Shot[] = objects
+      .map((row) => {
+        const shot: any = {};
 
+        // Assign with number/date parsing
+        Object.keys(row).forEach((mappedKey) => {
+          const k = mappedKey as keyof Shot;
+          const v = row[k];
+
+          if (k === "Timestamp") {
+            shot[k] = isoDate(v);
+          } else if (k === "SpinRateType" || k === "Club" || k === "SessionId") {
+            const val = String(v ?? "").trim();
+            if (val) shot[k] = val;
+          } else if (k === "Swings") {
+            const val = n(v); if (val !== undefined) shot[k] = Math.round(val);
+          } else {
+            const val = n(v); if (val !== undefined) shot[k] = val;
+          }
+        });
+
+        if (!shot.SessionId) shot.SessionId = fallbackId;
+        if (!shot.Club) return null; // need at least the club
+        mappedCount++;
+        return applyDerived(shot as Shot);
+      })
+      .filter(Boolean) as Shot[];
+
+    // Keep rows even if they lack carry (charts may ignore them, but session list should update)
+    setShots((prev) => [...prev, ...mapped]);
+
+    const withCarry = mapped.filter(s => s.CarryDistance_yds !== undefined).length;
+    setImportMsg(`Imported ${mapped.length}/${totalRows} rows from "${file.name}" (${withCarry} with carry distance). Session: ${mapped[0]?.SessionId ?? "N/A"}`);
+  };
 
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
@@ -310,12 +395,16 @@ export default function App() {
     return s2;
   }
 
+  /** Filters */
   const filtered = useMemo(() => {
     let pool = shots;
+
     if (sessionFilter !== "ALL") {
       pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
     }
+
     pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
+
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(dateFrom) : null;
       const to = dateTo ? new Date(dateTo) : null;
@@ -329,31 +418,39 @@ export default function App() {
         return true;
       });
     }
+
     const minC = carryMin ? Number(carryMin) : undefined;
     const maxC = carryMax ? Number(carryMax) : undefined;
     if (minC !== undefined || maxC !== undefined) {
       pool = pool.filter(s => {
-        const c = s.CarryDistance_yds ?? 0;
+        const c = s.CarryDistance_yds ?? -Infinity;
         if (minC !== undefined && c < minC) return false;
         if (maxC !== undefined && c > maxC) return false;
         return true;
       });
     }
+
     return pool;
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
+  /** Outlier filter (2.5σ on Carry & Smash) */
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filtered;
+
     const carryVals = filtered.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
     const smashVals = filtered.map(s => s.SmashFactor!).filter((x): x is number => x != null);
+
     if (carryVals.length < 5 || smashVals.length < 5) return filtered;
+
     const cm = mean(carryVals), cs = stddev(carryVals);
     const sm = mean(smashVals), ss = stddev(smashVals);
     const inCarry = (x?: number) => x === undefined ? false : (x >= cm - 2.5 * cs && x <= cm + 2.5 * cs);
     const inSmash = (x?: number) => x === undefined ? false : (x >= sm - 2.5 * ss && x <= sm + 2.5 * ss);
+
     return filtered.filter(s => inCarry(s.CarryDistance_yds) && inSmash(s.SmashFactor));
   }, [filtered, excludeOutliers]);
 
+  /** KPIs & Shot Shape */
   const kpis = useMemo(() => {
     const grab = (sel: (s: Shot) => number | undefined) =>
       filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
@@ -390,6 +487,7 @@ export default function App() {
     };
   }, [filteredOutliers]);
 
+  /** Aggregates per club */
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     filteredOutliers.forEach(s => {
@@ -421,6 +519,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.white }}>
+      {/* Header */}
       <header className="px-6 py-4" style={{ background: COLORS.brand, color: COLORS.white }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker • Golf Launch Monitor Dashboard</h1>
@@ -449,6 +548,18 @@ export default function App() {
         </div>
       </header>
 
+      {/* Import message */}
+      {importMsg && (
+        <div className="px-6">
+          <div className="max-w-7xl mx-auto mt-4">
+            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: COLORS.blueSoft, color: COLORS.gray700, border: `1px solid ${COLORS.gray300}` }}>
+              {importMsg}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
         {/* Filters */}
         <aside className="col-span-12 lg:col-span-3">
@@ -535,6 +646,7 @@ export default function App() {
 
         {/* KPIs + Charts */}
         <section className="col-span-12 lg:col-span-9 space-y-8">
+          {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <KPI label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={COLORS.brand} />
             <KPI label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={COLORS.brandTint} />
@@ -544,6 +656,23 @@ export default function App() {
             <KPI label="Shots" value={String(kpis.shots ?? 0)} color={COLORS.gray700} />
           </div>
 
+          {/* Shot shape (FULL WIDTH) */}
+          <Card title="Shot Shape Distribution">
+            {!hasData ? <EmptyChart /> : (
+              <ShotShape draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
+            )}
+          </Card>
+
+          {/* Dispersion (FULL WIDTH) */}
+          <Card title="Dispersion — Driving Range View (50y to max)">
+            {!hasData ? <EmptyChart /> : (
+              <div style={{ width: "100%", height: 420 }}>
+                <RangeDispersion shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
+              </div>
+            )}
+          </Card>
+
+          {/* Gap chart */}
           <Card title="Gap Chart — Carry vs Total by Club">
             {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
@@ -562,6 +691,7 @@ export default function App() {
             )}
           </Card>
 
+          {/* Efficiency */}
           <Card title="Efficiency — Club Speed vs Ball Speed">
             {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
@@ -584,6 +714,7 @@ export default function App() {
             )}
           </Card>
 
+          {/* Launch vs Spin */}
           <Card title="Launch vs Spin — bubble size is Carry">
             {!hasData ? <EmptyChart /> : (
               <div style={{ width: "100%", height: 340 }}>
@@ -607,31 +738,7 @@ export default function App() {
             )}
           </Card>
 
-          {/* Shot shape (full width) */}
-          <Card title="Shot Shape Distribution">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
-              <ShotShape
-                draw={kpis.shape.draw}
-                straight={kpis.shape.straight}
-                fade={kpis.shape.fade}
-              />
-            )}
-          </Card>
-          
-          {/* Dispersion (full width) */}
-          <Card title="Dispersion — Driving Range View (50y to max)">
-            {!hasData ? (
-              <EmptyChart />
-            ) : (
-              <div style={{ width: "100%", height: 420 }}>
-                <RangeDispersion shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
-              </div>
-            )}
-          </Card>
-
-
+          {/* Club Averages */}
           <Card title="Club Averages">
             {!hasData ? <EmptyChart /> : (
               <div className="overflow-x-auto">
@@ -671,7 +778,7 @@ export default function App() {
       </main>
 
       <footer className="px-6 py-8 text-xs text-center" style={{ color: COLORS.gray600 }}>
-        Gap chart: Carry = blue, Total = green. Shot shape uses Spin Axis: Draw &lt; -2°, Straight within ±2°, Fade &gt; 2°.
+        Gap chart: Carry = blue, Total = green. Shot shape uses Spin Axis: Draw &lt; -2°, Straight within ±2°, Fade &gt; 2°. Data is saved locally in your browser.
       </footer>
     </div>
   );
