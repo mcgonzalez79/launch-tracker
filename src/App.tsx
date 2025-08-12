@@ -217,6 +217,37 @@ const headerMap: Record<string, keyof Shot> = {
   "datetime": "Timestamp",
 };
 
+/** ===== NEW: Find the best header row (supports two-row header+units) ===== */
+function findBestHeader(rowsRaw: any[][]) {
+  const MAX_SCAN = Math.min(20, rowsRaw.length);
+  let best = { idx: 0, map: [] as (keyof Shot | undefined)[], score: 0, usedTwoRows: false };
+
+  const scoreMap = (hdr: any[]) => {
+    const mapped = hdr.map((h) => headerMap[normalizeHeader(String(h ?? ""))]);
+    // reward hits + extra weight if we found a Club column
+    const score = mapped.filter(Boolean).length + (mapped.includes("Club" as keyof Shot) ? 2 : 0);
+    return { mapped, score };
+  };
+
+  for (let i = 0; i < MAX_SCAN; i++) {
+    const row = rowsRaw[i] || [];
+    // Single-row header
+    const s1 = scoreMap(row);
+    if (s1.score > best.score) best = { idx: i, map: s1.mapped, score: s1.score, usedTwoRows: false };
+
+    // Two-row (header + units) combined
+    if (i + 1 < rowsRaw.length) {
+      const row2 = rowsRaw[i + 1] || [];
+      const combined = row.map((v: any, c: number) =>
+        [v, row2[c]].filter(Boolean).join(" ")
+      );
+      const s2 = scoreMap(combined);
+      if (s2.score > best.score) best = { idx: i, map: s2.mapped, score: s2.score, usedTwoRows: true };
+    }
+  }
+  return best;
+}
+
 /** ===== APP ===== */
 export default function App() {
   const [shots, setShots] = useState<Shot[]>([]);
@@ -281,9 +312,10 @@ export default function App() {
     setImportMsg(`Loaded sample session (${sample.length} shots).`);
   };
 
-  /** ===== Importer (CSV/XLSX/XLS) with delimiter & header normalization ===== */
+  /** ===== Importer (CSV/XLSX/XLS) with auto header detection ===== */
   const onFile = async (file: File) => {
     let wb: XLSX.WorkBook;
+
     try {
       const isCSV =
         /\.csv$/i.test(file.name) ||
@@ -292,16 +324,13 @@ export default function App() {
 
       if (isCSV) {
         let text = await file.text();
-
-        // Detect delimiter: comma, semicolon, or tab
+        // Auto-detect delimiter
         const firstLine = text.split(/\r?\n/)[0] || "";
-        const comma = (firstLine.match(/,/g) || []).length;
-        const semi = (firstLine.match(/;/g) || []).length;
-        const tabs = (firstLine.match(/\t/g) || []).length;
-        let FS = ",";
-        if (semi > comma && semi >= tabs) FS = ";";
-        if (tabs > comma && tabs >= semi) FS = "\t";
-
+        const countChar = (src: string, ch: string) => (src.split(ch).length - 1);
+        const comma = countChar(firstLine, ",");
+        const semi = countChar(firstLine, ";");
+        const tabs = countChar(firstLine, "\t");
+        const FS = (tabs >= semi && tabs >= comma) ? "\t" : (semi > comma ? ";" : ",");
         wb = XLSX.read(text, { type: "string", FS });
       } else {
         const buf = await file.arrayBuffer();
@@ -313,77 +342,93 @@ export default function App() {
       return;
     }
 
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
+    // Choose the first non-empty sheet
+    const firstSheet = wb.SheetNames.find(n => {
+      const ws = wb.Sheets[n];
+      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+      return rr && rr.flat().some(v => v !== null && v !== "");
+    }) || wb.SheetNames[0];
 
-    // Convert to JSON with raw headers; we will normalize below
-    const rowsRaw: any[] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[];
+    const ws = wb.Sheets[firstSheet];
+    const rowsRaw: any[][] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[][];
+
     if (!rowsRaw.length) {
-      setImportMsg("The file seems empty.");
+      setImportMsg("The sheet seems empty.");
       return;
     }
 
-    // Build a normalized header index
-    const headerRow = rowsRaw[0] as any[];
-    const normIndex: (keyof Shot | undefined)[] = headerRow.map((h) => {
+    // Auto-detect header row (handles single and two-row headers)
+    const best = findBestHeader(rowsRaw);
+    const headerRow = rowsRaw[best.idx] || [];
+    const nextRow   = rowsRaw[best.idx + 1] || [];
+    const effectiveHeader = best.usedTwoRows
+      ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" "))
+      : headerRow;
+
+    // Build mapping
+    const normIndex: (keyof Shot | undefined)[] = effectiveHeader.map((h) => {
       const key = normalizeHeader(String(h ?? ""));
       return headerMap[key];
     });
 
-    // If we fail to map at least one key, warn (but continue)
-    if (!normIndex.some(Boolean)) {
-      setImportMsg("Could not match any known columns. Please check your header names.");
+    if (!normIndex.some(Boolean) || !normIndex.includes("Club")) {
+      setImportMsg(
+        `I couldn't find a proper header row with a "Club" column.\n` +
+        `Detected sheet: "${firstSheet}". Try cleaning the top rows or share the headers.`
+      );
       return;
     }
 
-    // Turn remaining rows into objects
-    const objects = rowsRaw.slice(1).map((rowArr) => {
-      const obj: Record<string, any> = {};
-      rowArr.forEach((cell: any, i: number) => {
-        const mappedKey = normIndex[i];
-        if (!mappedKey) return;
-        obj[mappedKey] = cell;
-      });
-      return obj;
-    });
-
+    // Convert data rows beneath the header
+    const dataRows = rowsRaw.slice(best.idx + 1);
     const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
-
-    let totalRows = objects.length;
+    let totalRows = 0;
     let mappedCount = 0;
-    const mapped: Shot[] = objects
-      .map((row) => {
-        const shot: any = {};
 
-        // Assign with number/date parsing
-        Object.keys(row).forEach((mappedKey) => {
-          const k = mappedKey as keyof Shot;
-          const v = row[k];
+    const mapped: Shot[] = [];
+    for (const rowArr of dataRows) {
+      // skip fully-empty rows
+      if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
+      totalRows++;
 
-          if (k === "Timestamp") {
-            shot[k] = isoDate(v);
-          } else if (k === "SpinRateType" || k === "Club" || k === "SessionId") {
-            const val = String(v ?? "").trim();
-            if (val) shot[k] = val;
-          } else if (k === "Swings") {
-            const val = n(v); if (val !== undefined) shot[k] = Math.round(val);
-          } else {
-            const val = n(v); if (val !== undefined) shot[k] = val;
-          }
-        });
+      const obj: any = {};
+      rowArr.forEach((cell: any, i: number) => {
+        const mk = normIndex[i];
+        if (!mk) return;
+        obj[mk] = cell;
+      });
 
-        if (!shot.SessionId) shot.SessionId = fallbackId;
-        if (!shot.Club) return null; // need at least the club
-        mappedCount++;
-        return applyDerived(shot as Shot);
-      })
-      .filter(Boolean) as Shot[];
+      // require Club to be present
+      if (!obj.Club) continue;
 
-    // Keep rows even if they lack carry (charts may ignore them, but session list should update)
-    setShots((prev) => [...prev, ...mapped]);
+      // Parse types
+      const shot: any = {};
+      Object.keys(obj).forEach((k) => {
+        const mk = k as keyof Shot;
+        const v = obj[mk];
+        if (mk === "Timestamp") shot[mk] = isoDate(v);
+        else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") {
+          const val = String(v ?? "").trim(); if (val) shot[mk] = val;
+        } else if (mk === "Swings") {
+          const val = n(v); if (val !== undefined) shot[mk] = Math.round(val);
+        } else {
+          const val = n(v); if (val !== undefined) shot[mk] = val;
+        }
+      });
 
-    const withCarry = mapped.filter(s => s.CarryDistance_yds !== undefined).length;
-    setImportMsg(`Imported ${mapped.length}/${totalRows} rows from "${file.name}" (${withCarry} with carry distance). Session: ${mapped[0]?.SessionId ?? "N/A"}`);
+      if (!shot.SessionId) shot.SessionId = fallbackId;
+
+      mapped.push(applyDerived(shot as Shot));
+      mappedCount++;
+    }
+
+    setShots(prev => [...prev, ...mapped]);
+
+    const matchedCols = normIndex.filter(Boolean).length;
+    setImportMsg(
+      `Imported ${mappedCount}/${totalRows} rows from "${file.name}" (sheet "${firstSheet}"). ` +
+      `Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}.`
+    );
   };
 
   function applyDerived(s: Shot): Shot {
@@ -552,7 +597,7 @@ export default function App() {
       {importMsg && (
         <div className="px-6">
           <div className="max-w-7xl mx-auto mt-4">
-            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: COLORS.blueSoft, color: COLORS.gray700, border: `1px solid ${COLORS.gray300}` }}>
+            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: COLORS.blueSoft, color: COLORS.gray700, border: `1px solid ${COLORS.gray300}`, whiteSpace: "pre-line" }}>
               {importMsg}
             </div>
           </div>
