@@ -579,21 +579,30 @@ export default function App() {
             )}
           </Card>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            <Card title="Dispersion — Driving Range View (50y to max)">
-              {!hasData ? <EmptyChart /> : (
-                <div style={{ width: "100%", height: 420 }}>
-                  <RangeDispersion shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
-                </div>
-              )}
-            </Card>
+          {/* Shot shape (full width) */}
+          <Card title="Shot Shape Distribution">
+            {!hasData ? (
+              <EmptyChart />
+            ) : (
+              <ShotShape
+                draw={kpis.shape.draw}
+                straight={kpis.shape.straight}
+                fade={kpis.shape.fade}
+              />
+            )}
+          </Card>
+          
+          {/* Dispersion (full width) */}
+          <Card title="Dispersion — Driving Range View (50y to max)">
+            {!hasData ? (
+              <EmptyChart />
+            ) : (
+              <div style={{ width: "100%", height: 420 }}>
+                <RangeDispersion shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
+              </div>
+            )}
+          </Card>
 
-            <Card title="Shot Shape Distribution">
-              {!hasData ? <EmptyChart /> : (
-                <ShotShape draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
-              )}
-            </Card>
-          </div>
 
           <Card title="Club Averages">
             {!hasData ? <EmptyChart /> : (
