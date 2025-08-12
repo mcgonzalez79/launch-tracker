@@ -23,14 +23,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # remove `cache: 'npm'` since we don't have a lockfile
 
-      - run: npm ci
+      - run: npm install          # <— use install, not ci
       - run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist          # <-- MUST be 'dist'
+          path: dist
 
   deploy:
     needs: build
