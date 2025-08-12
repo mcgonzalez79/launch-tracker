@@ -421,7 +421,6 @@ export default function App() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragKey = useRef<string | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -495,7 +494,6 @@ export default function App() {
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
-    thead
     const nextRow   = rowsRaw[best.idx + 1] || [];
     const effectiveHeader = best.usedTwoRows
       ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" "))
@@ -886,8 +884,8 @@ export default function App() {
                 <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" fill={T.textDim} />
               </YAxis>
               <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
-              {clubs.map((c, i) => (
-                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={clubPalette[i % clubPalette.length]} />
+              {clubs.map((c) => (
+                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
               ))}
             </ScatterChart>
           </ResponsiveContainer>
@@ -909,8 +907,8 @@ export default function App() {
               </YAxis>
               <ZAxis type="number" dataKey="CarryDistance_yds" range={[30, 400]} />
               <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
-              {clubs.map((c, i) => (
-                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={clubPalette[i % clubPalette.length]} />
+              {clubs.map((c) => (
+                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
               ))}
             </ScatterChart>
           </ResponsiveContainer>
@@ -929,7 +927,7 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {tableRows.map((r, idx) => (
+              {tableRows.map((r) => (
                 <tr key={r.club} className="border-t" style={{ borderColor: T.border }}>
                   <Td>
                     <span className="inline-flex items-center gap-2">
@@ -974,17 +972,7 @@ export default function App() {
 
   // Session Notes helpers
   const selectedSessionKey = sessionFilter === "ALL" ? "" : (sessionFilter || "Unknown Session");
-  const sessionNotes = useMemo(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
-  }, []); // not used directly anymore but kept to avoid confusion
-
-  // Notes state from earlier hook:
-  const sessionNoteMap = sessionNotes as Record<string, string>;
-  const [sessionNotesState, setSessionNotes] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:session-notes", JSON.stringify(sessionNotesState)); } catch {} }, [sessionNotesState]);
-  const sessionNote = selectedSessionKey ? (sessionNotesState[selectedSessionKey] || "") : "";
+  const sessionNote = selectedSessionKey ? (sessionNotes[selectedSessionKey] || "") : "";
   const saveSessionNote = (val: string) => {
     if (!selectedSessionKey) return;
     setSessionNotes(prev => ({ ...prev, [selectedSessionKey]: val }));
@@ -1027,7 +1015,7 @@ export default function App() {
         <aside className="col-span-12 lg:col-span-3 space-y-8">
           {/* Filters (not draggable) */}
           <Card theme={T} title="Filters">
-            {/* Import (moved here, green + full width) */}
+            {/* Import (green + full width) */}
             <div className="mb-4">
               <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
               <input
@@ -1140,7 +1128,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Load sample & Export moved here */}
+            {/* Load sample & Export here */}
             <div className="mb-4 flex flex-wrap gap-2">
               <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
                 Load sample
