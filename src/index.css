@@ -1,3 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Optional: small tweaks so things feel nice even without custom CSS */
+html, body, #root { height: 100%; }
+body { margin: 0; }
