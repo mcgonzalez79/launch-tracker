@@ -55,7 +55,7 @@ const clubPalette = [
 
 // Gap chart uses ONLY these two:
 const CARRY_BAR = "#1F77B4";      // blue
-const TOTAL_BAR = LIGHT.brand;    // (we’ll override with theme.brand in render)
+const TOTAL_BAR_LIGHT = LIGHT.brand;
 
 /** ================= TYPES ================= */
 type Shot = {
@@ -366,7 +366,6 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
 
 /** ===== Fingerprint for duplicate detection (robust across sessions/exports) ===== */
 function fpOf(s: Shot): string {
-  // Use key metrics rounded; include club + timestamp (if any)
   const r = (x?: number, d = 2) => (x == null ? "" : Number(x).toFixed(d));
   const t = s.Timestamp ? new Date(s.Timestamp).getTime() : "";
   return [
@@ -408,6 +407,9 @@ export default function App() {
       return raw ? JSON.parse(raw) : ["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"];
     } catch { return ["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"]; }
   });
+  const [sessionNotes, setSessionNotes] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragKey = useRef<string | null>(null);
@@ -426,10 +428,18 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {}
   }, [cardOrder]);
+  useEffect(() => {
+    try { localStorage.setItem("launch-tracker:session-notes", JSON.stringify(sessionNotes)); } catch {}
+  }, [sessionNotes]);
 
-  // Helpers for messages
-  const pushMsg = (text: string, type: Msg["type"] = "info") =>
-    setMsgs((prev) => [...prev, { id: Date.now() + Math.random(), text, type }]);
+  // Helpers for messages (auto-dismiss after 15s)
+  const pushMsg = (text: string, type: Msg["type"] = "info") => {
+    const id = Date.now() + Math.random();
+    setMsgs((prev) => [...prev, { id, text, type }]);
+    window.setTimeout(() => {
+      setMsgs((prev) => prev.filter(m => m.id !== id));
+    }, 15000);
+  };
   const closeMsg = (id: number) => setMsgs((prev) => prev.filter(m => m.id !== id));
 
   const clubs = useMemo(
@@ -446,9 +456,10 @@ export default function App() {
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  const loadSample = () => {
+  // Small built-in fallback sample (used only if /sampledata.csv not found)
+  const builtinSample = () => {
     const id = `Sample ${new Date().toLocaleString()}`;
-    const sample: Shot[] = [
+    return [
       { SessionId: id, Club: "Driver", ClubSpeed_mph: 85.1, BallSpeed_mph: 119.8, SmashFactor: 1.41, LaunchAngle_deg: 12.9, Backspin_rpm: 3465, CarryDistance_yds: 176, TotalDistance_yds: 193, SpinAxis_deg: -1.7, Timestamp: "2025-08-08T12:00:00Z" },
       { SessionId: id, Club: "4 Hybrid", ClubSpeed_mph: 80.1, BallSpeed_mph: 105.4, SmashFactor: 1.32, LaunchAngle_deg: 12.4, Backspin_rpm: 3391, CarryDistance_yds: 139, TotalDistance_yds: 161, SpinAxis_deg: -2.9, Timestamp: "2025-08-08T12:05:00Z" },
       { SessionId: id, Club: "5 Hybrid (5 Iron)", ClubSpeed_mph: 78.7, BallSpeed_mph: 99.3, SmashFactor: 1.26, LaunchAngle_deg: 11.8, Backspin_rpm: 3932, CarryDistance_yds: 120, TotalDistance_yds: 143, SpinAxis_deg: -7.7, Timestamp: "2025-08-08T12:08:00Z" },
@@ -459,54 +470,19 @@ export default function App() {
       { SessionId: id, Club: "Pitching Wedge", ClubSpeed_mph: 69.5, BallSpeed_mph: 84.1, SmashFactor: 1.21, LaunchAngle_deg: 20.1, Backspin_rpm: 5760, CarryDistance_yds: 99,  TotalDistance_yds: 109, SpinAxis_deg: 0.3, Timestamp: "2025-08-08T12:23:00Z" },
       { SessionId: id, Club: "60 (LW)", ClubSpeed_mph: 64.1, BallSpeed_mph: 63.4, SmashFactor: 0.99, LaunchAngle_deg: 27.6, Backspin_rpm: 5975, CarryDistance_yds: 60,  TotalDistance_yds: 70,  SpinAxis_deg: 4.9, Timestamp: "2025-08-08T12:26:00Z" },
     ].map(applyDerived);
-    // dedupe against existing
-    const existing = new Set(shots.map(fpOf));
-    const deduped = sample.filter(s => !existing.has(fpOf(s)));
-    setShots(prev => [...prev, ...deduped]);
-    pushMsg(`Loaded sample session (${deduped.length}/${sample.length} new; ${sample.length - deduped.length} duplicates skipped).`, "success");
   };
 
-  /** ===== Importer (CSV/XLSX/XLS) with dedupe + fallback ===== */
-  const onFile = async (file: File) => {
-    let wb: XLSX.WorkBook | null = null;
-    let textFromCSV: string | null = null;
-
-    try {
-      const isCSV =
-        /\.csv$/i.test(file.name) ||
-        file.type === "text/csv" ||
-        file.type === "application/vnd.ms-excel";
-
-      if (isCSV) {
-        textFromCSV = await file.text();
-        const firstLine = (textFromCSV.split(/\r?\n/)[0] || "");
-        const count = (ch: string) => (firstLine.match(new RegExp(ch, "g")) || []).length;
-        const FS = count("\t") >= count(";") && count("\t") >= count(",") ? "\t" : (count(";") > count(",") ? ";" : ",");
-        wb = XLSX.read(textFromCSV, { type: "string", FS });
-      } else {
-        const buf = await file.arrayBuffer();
-        wb = XLSX.read(buf, { type: "array" });
-      }
-    } catch (err) {
-      console.error(err);
-      pushMsg("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?", "error");
-      return;
-    }
-
-    // NORMAL path
-    const firstSheet = wb!.SheetNames.find(n => {
-      const ws = wb!.Sheets[n];
+  // ===== Import core (shared by file upload & sample fetch) =====
+  const processWorkbook = (wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) => {
+    const firstSheet = wb.SheetNames.find(n => {
+      const ws = wb.Sheets[n];
       const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
       return rr && rr.flat().some(v => v !== null && v !== "");
-    }) || wb!.SheetNames[0];
+    }) || wb.SheetNames[0];
 
-    const ws = wb!.Sheets[firstSheet];
+    const ws = wb.Sheets[firstSheet];
     const rowsRaw: any[][] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[][];
-
-    if (!rowsRaw.length) {
-      pushMsg("The sheet seems empty.", "warn");
-      return;
-    }
+    if (!rowsRaw.length) { pushMsg("The sheet seems empty.", "warn"); return; }
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
@@ -528,7 +504,7 @@ export default function App() {
 
     const startRow = best.idx + (best.usedTwoRows ? 2 : 1);
     const dataRows = rowsRaw.slice(startRow);
-    const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
+    const fallbackId = `${filename.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
 
     let totalRows = 0;
     const mapped: Shot[] = [];
@@ -577,18 +553,18 @@ export default function App() {
     if (textFromCSV && (weakMapping || mapped.length === 0)) {
       const weird = parseWeirdLaunchCSV(textFromCSV);
       if (weird) {
-        const ws = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
-        const carryCountWeird = ws.filter(s => s.CarryDistance_yds != null).length;
-        const preferFallback = carryCountWeird > carryCountNormal || (ws.length && mapped.length === 0);
+        const ws2 = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
+        const carryCountWeird = ws2.filter(s => s.CarryDistance_yds != null).length;
+        const preferFallback = carryCountWeird > carryCountNormal || (ws2.length && mapped.length === 0);
         if (preferFallback) {
-          finalShots = ws;
+          finalShots = ws2;
           usedFallback = true;
           fallbackRowsTotal = weird.dataRows.length;
         }
       }
     }
 
-    // ===== De-duplicate against existing + within this batch
+    // De-dupe
     const existing = new Set(shots.map(fpOf));
     const seen = new Set<string>();
     const deduped: Shot[] = [];
@@ -601,21 +577,16 @@ export default function App() {
       deduped.push(s);
     }
 
-    if (deduped.length) {
-      setShots(prev => [...prev, ...deduped]);
-    }
+    if (deduped.length) setShots(prev => [...prev, ...deduped]);
 
     if (usedFallback) {
       pushMsg(
-        `Imported ${deduped.length}/${fallbackRowsTotal} rows from "${file.name}" via fallback parser. ` +
-        `${dupCount} duplicates skipped.`,
+        `Imported ${deduped.length}/${fallbackRowsTotal} rows from "${filename}" via fallback parser. ${dupCount} duplicates skipped.`,
         "success"
       );
     } else if (finalShots.length) {
       pushMsg(
-        `Imported ${deduped.length}/${finalShots.length} rows from "${file.name}" (sheet "${firstSheet}"). ` +
-        `Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}. ` +
-        `${dupCount} duplicates skipped.`,
+        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}" (sheet "${wb.SheetNames[0]}"). Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}. ${dupCount} duplicates skipped.`,
         "success"
       );
     } else {
@@ -623,6 +594,55 @@ export default function App() {
     }
   };
 
+  // File input handler
+  const onFile = async (file: File) => {
+    let wb: XLSX.WorkBook | null = null;
+    let textFromCSV: string | null = null;
+
+    try {
+      const isCSV =
+        /\.csv$/i.test(file.name) ||
+        file.type === "text/csv" ||
+        file.type === "application/vnd.ms-excel";
+
+      if (isCSV) {
+        textFromCSV = await file.text();
+        const firstLine = (textFromCSV.split(/\r?\n/)[0] || "");
+        const count = (ch: string) => (firstLine.match(new RegExp(ch, "g")) || []).length;
+        const FS = count("\t") >= count(";") && count("\t") >= count(",") ? "\t" : (count(";") > count(",") ? ";" : ",");
+        wb = XLSX.read(textFromCSV, { type: "string", FS });
+      } else {
+        const buf = await file.arrayBuffer();
+        wb = XLSX.read(buf, { type: "array" });
+      }
+    } catch (err) {
+      console.error(err);
+      pushMsg("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?", "error");
+      return;
+    }
+
+    processWorkbook(wb!, textFromCSV, file.name);
+  };
+
+  // Load sample from /public/sampledata.csv, else fallback
+  const loadSample = async () => {
+    try {
+      const resp = await fetch("./sampledata.csv", { cache: "no-store" });
+      if (!resp.ok) throw new Error("sampledata.csv not found");
+      const text = await resp.text();
+      const wb = XLSX.read(text, { type: "string" });
+      processWorkbook(wb, text, "sampledata.csv");
+    } catch {
+      // fallback to tiny built-in demo
+      const sample = builtinSample();
+      const existing = new Set(shots.map(fpOf));
+      const deduped = sample.filter(s => !existing.has(fpOf(s)));
+      setShots(prev => [...prev, ...deduped]);
+      pushMsg(`Loaded built-in sample (${deduped.length}/${sample.length} new; ${sample.length - deduped.length} duplicates skipped).`, "success");
+    }
+  };
+
+  /** Derived/cleanup on import */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
     const Sm = coalesceSmash(s2);
@@ -836,7 +856,7 @@ export default function App() {
               <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
               <Legend wrapperStyle={{ color: T.text }} />
               <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
-              <Bar dataKey="avgTotal" name="Total (avg)" fill={T.brand} />
+              <Bar dataKey="avgTotal" name="Total (avg)" fill={dark ? DARK.brand : TOTAL_BAR_LIGHT} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -926,11 +946,12 @@ export default function App() {
   };
 
   // DnD handlers
-  const onDragStart = (key: string) => (e: React.DragEvent) => { dragKey.current = key; e.dataTransfer.effectAllowed = "move"; };
+  const dragKeyRef = useRef<string | null>(null);
+  const onDragStart = (key: string) => (e: React.DragEvent) => { dragKeyRef.current = key; e.dataTransfer.effectAllowed = "move"; };
   const onDragOver = (overKey: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   const onDrop = (overKey: string) => (e: React.DragEvent) => {
     e.preventDefault();
-    const from = dragKey.current; dragKey.current = null;
+    const from = dragKeyRef.current; dragKeyRef.current = null;
     if (!from || from === overKey) return;
     setCardOrder((prev) => {
       const arr = prev.slice();
@@ -939,6 +960,14 @@ export default function App() {
       arr.splice(j, 0, ...arr.splice(i, 1));
       return arr;
     });
+  };
+
+  // Session Notes helpers
+  const selectedSessionKey = sessionFilter === "ALL" ? "" : (sessionFilter || "Unknown Session");
+  const sessionNote = sessionNotes[selectedSessionKey] || "";
+  const saveSessionNote = (val: string) => {
+    if (!selectedSessionKey) return;
+    setSessionNotes(prev => ({ ...prev, [selectedSessionKey]: val }));
   };
 
   return (
@@ -951,31 +980,11 @@ export default function App() {
             <button onClick={() => setDark(!dark)} className="px-3 py-2 rounded-lg font-medium border" style={{ background: "#fff", color: T.brand, borderColor: "#fff" }}>
               {dark ? "Light mode" : "Dark mode"}
             </button>
-            <button onClick={loadSample} className="px-3 py-2 rounded-lg font-medium" style={{ background: "#fff", color: T.brand }}>
-              Load sample
-            </button>
-            <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg font-medium border" style={{ background: "#fff", color: T.brand, borderColor: "#fff" }}>
-              Export CSV
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onFile(f);
-                e.currentTarget.value = "";
-              }}
-              className="hidden"
-            />
-            <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg font-medium border" style={{ background: "#fff", color: T.brand, borderColor: "#fff" }}>
-              Import file
-            </button>
           </div>
         </div>
       </header>
 
-      {/* Messages (dismissible) */}
+      {/* Messages (dismissible & auto-hide) */}
       {msgs.length > 0 && (
         <div className="px-6 mt-4">
           <div className="max-w-7xl mx-auto flex flex-col gap-2">
@@ -994,9 +1003,31 @@ export default function App() {
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
-        {/* Filters (not draggable) */}
-        <aside className="col-span-12 lg:col-span-3">
+        {/* LEFT COLUMN: Filters + Session Notes */}
+        <aside className="col-span-12 lg:col-span-3 space-y-8">
+          {/* Filters (not draggable) */}
           <Card theme={T} title="Filters">
+            {/* Import (moved here, above Session) */}
+            <div className="mb-4">
+              <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onFile(f);
+                    e.currentTarget.value = "";
+                  }}
+                  className="hidden"
+                />
+                <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
+                  Import file
+                </button>
+              </div>
+            </div>
+
             {/* Session selector */}
             <div className="mb-3">
               <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Session</label>
@@ -1087,7 +1118,17 @@ export default function App() {
               </div>
             </div>
 
-            {/* Delete all moved to bottom */}
+            {/* Load sample & Export moved here */}
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
+                Load sample
+              </button>
+              <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
+                Export CSV
+              </button>
+            </div>
+
+            {/* Delete all at bottom */}
             <div className="pt-4 border-t" style={{ borderColor: T.border }}>
               <button className="px-3 py-2 rounded-lg text-sm border w-full"
                       style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
@@ -1096,9 +1137,28 @@ export default function App() {
               </button>
             </div>
           </Card>
+
+          {/* NEW: Session Notes (static card below Filters) */}
+          <Card theme={T} title="Session Notes">
+            {sessionFilter === "ALL" ? (
+              <div className="text-sm" style={{ color: T.textDim }}>Select a session to add notes.</div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="text-xs" style={{ color: T.textDim }}>Notes for: <b style={{ color: T.text }}>{sessionFilter}</b></div>
+                <textarea
+                  rows={6}
+                  value={sessionNote}
+                  onChange={(e) => saveSessionNote(e.target.value)}
+                  placeholder="Add notes about drills, swing thoughts, weather, range balls, etc."
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: T.border, background: T.panel, color: T.text }}
+                />
+              </div>
+            )}
+          </Card>
         </aside>
 
-        {/* Draggable Cards Area */}
+        {/* RIGHT COLUMN: Draggable Cards */}
         <section className="col-span-12 lg:col-span-9">
           <div className="grid grid-cols-1 gap-8">
             {cardOrder.map((key) => {
@@ -1324,7 +1384,7 @@ function toCSV(rows: Record<string, any>[]) {
     if (v == null) return "";
     const s = String(v).replace(/"/g, '""');
     return /[",\n]/.test(s) ? `"${s}"` : s;
-    };
+  };
   const lines = [headers.join(","), ...rows.map(r => headers.map(h => escape(r[h])).join(","))];
   return lines.join("\n");
 }
