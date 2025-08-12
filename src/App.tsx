@@ -241,20 +241,45 @@ export default function App() {
   };
 
   const onFile = async (file: File) => {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
+  let wb: XLSX.WorkBook;
 
-    const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
+  try {
+    const isCSV =
+      /\.csv$/i.test(file.name) ||
+      file.type === "text/csv" ||
+      file.type === "application/vnd.ms-excel"; // some CSVs report this
 
-    const mapped: Shot[] = rows.map((row) => {
+    if (isCSV) {
+      // Read CSV as text (handles BOM, UTF-8, etc.)
+      const text = await file.text();
+      // If your export is TSV (tab-separated), pass { FS: "\t" } as a second option
+      wb = XLSX.read(text, { type: "string" /* , FS: "\t" */ });
+    } else {
+      // XLSX/XLS path
+      const buf = await file.arrayBuffer();
+      wb = XLSX.read(buf, { type: "array" });
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?");
+    return;
+  }
+
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
+
+  // If the file didn't include SessionId, create one from filename + timestamp
+  const fallbackId = `${file.name.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
+
+  const mapped: Shot[] = rows
+    .map((row) => {
       const shot: any = {};
       Object.keys(row).forEach((keyRaw) => {
-        const key = keyRaw.trim().toLowerCase();
+        const key = String(keyRaw).trim().toLowerCase();
         const mappedKey = headerMap[key];
         if (!mappedKey) return;
+
         if (mappedKey === "Timestamp") {
           shot[mappedKey] = isoDate(row[keyRaw]);
         } else if (mappedKey === "SpinRateType" || mappedKey === "Club" || mappedKey === "SessionId") {
@@ -266,12 +291,15 @@ export default function App() {
           const val = n(row[keyRaw]); if (val !== undefined) shot[mappedKey] = val;
         }
       });
+
       if (!shot.SessionId) shot.SessionId = fallbackId;
       return applyDerived(shot as Shot);
-    }).filter(s => !!s.Club && s.CarryDistance_yds !== undefined);
+    })
+    .filter((s) => !!s.Club && s.CarryDistance_yds !== undefined);
 
-    setShots(prev => [...prev, ...mapped]);
-  };
+  setShots((prev) => [...prev, ...mapped]);
+};
+
 
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
