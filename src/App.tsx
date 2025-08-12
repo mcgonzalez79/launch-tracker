@@ -272,33 +272,43 @@ function parseWeirdLaunchCSV(text: string) {
 }
 
 function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId: string): Shot[] {
-  const idx = (name: string) => header.indexOf(name);
+  const norm = (s: string) => normalizeHeader(s);
+  const find = (aliases: string[]) => {
+    const wants = aliases.map(norm);
+    for (let i = 0; i < header.length; i++) {
+      if (wants.includes(norm(header[i] || ""))) return i;
+    }
+    return -1;
+  };
+
   const id = {
-    Date: idx("Date"),
-    Player: idx("Player"),
-    ClubName: header.includes("Club Name") ? idx("Club Name") : idx("ClubName"),
-    ClubType: idx("ClubType"),
-    ClubSpeed: idx("Club Speed"),
-    AttackAngle: idx("Attack Angle"),
-    ClubPath: idx("Club Path"),
-    ClubFace: idx("Club Face"),
-    FaceToPath: idx("Face to Path"),
-    BallSpeed: idx("Ball Speed"),
-    Smash: idx("Smash Factor"),
-    LaunchAngle: idx("Launch Angle"),
-    LaunchDir: idx("Launch Direction"),
-    Backspin: idx("Backspin"),
-    Sidespin: idx("Sidespin"),
-    SpinRate: idx("Spin Rate"),
-    SpinRateType: idx("Spin Rate Type"),
-    SpinAxis: idx("Spin Axis"),
-    Apex: idx("Apex Height"),
-    Carry: idx("Carry Distance"),
-    CarryDevAng: idx("Carry Deviation Angle"),
-    CarryDevDist: idx("Carry Deviation Distance"),
-    Total: idx("Total Distance"),
-    TotalDevAng: idx("Total Deviation Angle"),
-    TotalDevDist: idx("Total Deviation Distance"),
+    Date: find(["date", "timestamp", "datetime"]),
+    Player: find(["player", "golfer", "user"]),
+    ClubName: find(["club name", "clubname"]),
+    ClubType: find(["club type", "club"]),
+    ClubSpeed: find(["club speed"]),
+    AttackAngle: find(["attack angle"]),
+    ClubPath: find(["club path"]),
+    ClubFace: find(["club face"]),
+    FaceToPath: find(["face to path"]),
+    BallSpeed: find(["ball speed"]),
+    Smash: find(["smash factor", "smash"]),
+    LaunchAngle: find(["launch angle"]),
+    LaunchDir: find(["launch direction"]),
+    Backspin: find(["backspin"]),
+    Sidespin: find(["sidespin"]),
+    SpinRate: find(["spin rate"]),
+    SpinRateType: find(["spin rate type"]),
+    SpinAxis: find(["spin axis"]),
+    Apex: find(["apex height"]),
+    // Accept both "Carry Distance" and "Carry"
+    Carry: find(["carry distance", "carry"]),
+    CarryDevAng: find(["carry deviation angle"]),
+    CarryDevDist: find(["carry deviation distance"]),
+    // Accept both "Total Distance" and "Total"
+    Total: find(["total distance", "total"]),
+    TotalDevAng: find(["total deviation angle"]),
+    TotalDevDist: find(["total deviation distance"]),
   };
 
   const num = (v: any) => {
@@ -646,20 +656,36 @@ export default function App() {
 
   /** Outlier filter (2.5σ on Carry & Smash) */
   const filteredOutliers = useMemo(() => {
-    if (!excludeOutliers) return filtered;
+  if (!excludeOutliers) return filtered;
 
-    const carryVals = filtered.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
-    const smashVals = filtered.map(s => s.SmashFactor!).filter((x): x is number => x != null);
+  const getSmash = (s: Shot) =>
+    s.SmashFactor ?? (s.ClubSpeed_mph && s.BallSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
 
-    if (carryVals.length < 5 || smashVals.length < 5) return filtered;
+  const carryVals = filtered.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
+  const smashVals = filtered.map(getSmash).filter((x): x is number => x != null);
 
-    const cm = mean(carryVals), cs = stddev(carryVals);
-    const sm = mean(smashVals), ss = stddev(smashVals);
-    const inCarry = (x?: number) => x === undefined ? false : (x >= cm - 2.5 * cs && x <= cm + 2.5 * cs);
-    const inSmash = (x?: number) => x === undefined ? false : (x >= sm - 2.5 * ss && x <= sm + 2.5 * ss);
+  const haveCarryStats = carryVals.length >= 5;
+  const haveSmashStats = smashVals.length >= 5;
 
-    return filtered.filter(s => inCarry(s.CarryDistance_yds) && inSmash(s.SmashFactor));
-  }, [filtered, excludeOutliers]);
+  const cm = haveCarryStats ? mean(carryVals) : 0;
+  const cs = haveCarryStats ? stddev(carryVals) : 0;
+  const sm = haveSmashStats ? mean(smashVals) : 0;
+  const ss = haveSmashStats ? stddev(smashVals) : 0;
+
+  return filtered.filter(s => {
+    let ok = true;
+    // Only apply a test if we have enough data for that metric AND the shot has that metric.
+    if (haveCarryStats && s.CarryDistance_yds != null) {
+      ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
+    }
+    if (haveSmashStats) {
+      const sv = getSmash(s);
+      if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss;
+    }
+    return ok;
+  });
+}, [filtered, excludeOutliers]);
+
 
   /** KPIs & Shot Shape */
   const kpis = useMemo(() => {
