@@ -1352,6 +1352,9 @@ function JournalView({
 }) {
   const T = theme;
 
+  const HELP_TEXT =
+    "Use the Journal to capture longer-form notes from your sessions: swing thoughts and feels vs. reals, drills and rep counts, shot patterns and misses, goals and next steps, equipment tweaks, course notes, and conditions (wind/lie/balls). Entries auto-save per session—switch sessions to keep separate journals.";
+
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
     onInputHTML(editorRef.current?.innerHTML || "");
@@ -1365,6 +1368,7 @@ function JournalView({
   };
 
   React.useEffect(() => {
+    // sync DOM when switching sessions
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
@@ -1373,6 +1377,15 @@ function JournalView({
   return (
     <div className="grid grid-cols-1 gap-8">
       <Card theme={T} title={`Journal — ${sessionLabel}`}>
+        {/* helpful paragraph */}
+        <div
+          className="mb-4 text-sm rounded-lg px-4 py-3"
+          style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}
+        >
+          {HELP_TEXT}
+        </div>
+
+        {/* toolbar */}
         <div className="flex flex-wrap gap-2 mb-3">
           <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
           <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
@@ -1392,7 +1405,7 @@ function JournalView({
           <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
         </div>
 
-        {/* NOTE: removed invalid `placeholder` prop on div */}
+        {/* editor */}
         <div
           ref={editorRef}
           contentEditable
@@ -1400,13 +1413,20 @@ function JournalView({
           onKeyUp={onKeyUp}
           onBlur={onKeyUp}
           onPaste={onPaste}
-          className="min-h-[280px] rounded-lg p-4 text-sm"
-          style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }}
-          data-placeholder="Write your practice journal here…"
+          aria-label="Practice journal editor"
+          className="rounded-lg p-4 text-sm overflow-auto resize-y min-h-[420px]"
+          style={{
+            background: T.panel,
+            border: `1px solid ${T.border}`,
+            color: T.text,
+            // for browsers that ignore Tailwind resize utilities on divs:
+            resize: "vertical",
+          }}
+          data-placeholder="Start typing your journal here…"
         />
         {!value && (
           <div className="mt-2 text-xs" style={{ color: T.textDim }}>
-            Tip: your journal auto-saves per session ({sessionLabel}). Use the toolbar to format.
+            Tip: your journal auto-saves per session. Use the toolbar to format.
           </div>
         )}
       </Card>
