@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, Label, ComposedChart, ReferenceLine 
+  Scatter, ScatterChart, ZAxis, Label, ComposedChart, ReferenceLine, Cell
 } from "recharts";
 import * as XLSX from "xlsx";
 
@@ -150,6 +150,20 @@ const coalesceFaceToPath = (s: Shot) =>
     ? s.ClubFace_deg - s.ClubPath_deg
     : undefined);
 
+// Color helpers
+function hexToRgb(hex: string) {
+  const m = hex.replace("#", "");
+  const bigint = parseInt(m.length === 3 ? m.split("").map((c) => c + c).join("") : m, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return { r, g, b };
+}
+function alpha(hex: string, a = 0.25) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
 // Club display order
 const ORDER = [
   "Driver",
@@ -166,7 +180,7 @@ const orderIndex = (name: string) => {
   if (lower.includes("wood")) {
     const m = lower.match(/(\d+)\s*wood/);
     return m ? 1 + Number(m[1]) : 4;
-  }
+    }
   if (lower.includes("hybrid")) {
     const m = lower.match(/(\d+)\s*hybrid/);
     return m ? 10 + Number(m[1]) : 12;
@@ -436,8 +450,9 @@ export default function App() {
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
-      return raw ? JSON.parse(raw) : ["distanceBox", "highlights", "warnings"];
-    } catch { return ["distanceBox", "highlights", "warnings"]; }
+      // new defaults include PB & weaknesses
+      return raw ? JSON.parse(raw) : ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"];
+    } catch { return ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"]; }
   });
   useEffect(() => {
     try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {}
@@ -707,15 +722,17 @@ export default function App() {
     return s2;
   }
 
-  /** Filters */
-  const filtered = useMemo(() => {
-    let pool = shots;
+  /** Filters (with/without club) */
+  const baseFilter = (source: Shot[], skipClub = false) => {
+    let pool = source;
 
     if (sessionFilter !== "ALL") {
       pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
     }
 
-    pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
+    if (!skipClub) {
+      pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
+    }
 
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(dateFrom) : null;
@@ -743,17 +760,20 @@ export default function App() {
     }
 
     return pool;
-  }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
+  };
+
+  const filtered = useMemo(() => baseFilter(shots, false), [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
+  const filteredNoClub = useMemo(() => baseFilter(shots, true), [shots, sessionFilter, dateFrom, dateTo, carryMin, carryMax]);
 
   /** Outlier filter */
-  const filteredOutliers = useMemo(() => {
-    if (!excludeOutliers) return filtered;
+  const withOutliers = (pool: Shot[]) => {
+    if (!excludeOutliers) return pool;
 
     const getSmash = (s: Shot) =>
       s.SmashFactor ?? (s.ClubSpeed_mph && s.BallSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
 
-    const carryVals = filtered.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-    const smashVals = filtered.map(getSmash).filter((x): x is number => x != null);
+    const carryVals = pool.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
+    const smashVals = pool.map(getSmash).filter((x): x is number => x != null);
 
     const haveCarryStats = carryVals.length >= 5;
     const haveSmashStats = smashVals.length >= 5;
@@ -763,7 +783,7 @@ export default function App() {
     const sm = haveSmashStats ? mean(smashVals) : 0;
     const ss = haveSmashStats ? stddev(smashVals) : 0;
 
-    return filtered.filter(s => {
+    return pool.filter(s => {
       let ok = true;
       if (haveCarryStats && s.CarryDistance_yds != null) {
         ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
@@ -774,9 +794,12 @@ export default function App() {
       }
       return ok;
     });
-  }, [filtered, excludeOutliers]);
+  };
 
-  /** KPIs & Shot Shape */
+  const filteredOutliers = useMemo(() => withOutliers(filtered), [filtered, excludeOutliers]);
+  const filteredNoClubOutliers = useMemo(() => withOutliers(filteredNoClub), [filteredNoClub, excludeOutliers]);
+
+  /** KPIs & Shot Shape (based on current club selection) */
   const kpis = useMemo(() => {
     const grab = (sel: (s: Shot) => number | undefined) =>
       filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
@@ -812,7 +835,7 @@ export default function App() {
     };
   }, [filteredOutliers]);
 
-  /** Aggregates per club */
+  /** Aggregates per club (based on current club selection) */
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     filteredOutliers.forEach(s => {
@@ -1133,7 +1156,8 @@ export default function App() {
               theme={T}
               tableRows={tableRows}
               filteredOutliers={filteredOutliers}
-              clubs={clubs}
+              filteredNoClubOutliers={filteredNoClubOutliers}
+              allClubs={clubs}
               insightsOrder={insightsOrder}
               onDragStart={onDragStartInsight}
               onDragOver={onDragOverInsight}
@@ -1340,13 +1364,14 @@ function DashboardCards(props: {
 
 /** ================= INSIGHTS (reorderable) ================= */
 function InsightsView({
-  theme, tableRows, filteredOutliers, clubs,
+  theme, tableRows, filteredOutliers, filteredNoClubOutliers, allClubs,
   insightsOrder, onDragStart, onDragOver, onDrop
 }: {
   theme: Theme;
   tableRows: ClubRow[];
-  filteredOutliers: Shot[];
-  clubs: string[];
+  filteredOutliers: Shot[];              // respects club selection
+  filteredNoClubOutliers: Shot[];        // ignores club selection (for global insights)
+  allClubs: string[];
   insightsOrder: string[];
   onDragStart: (k: string) => (e: React.DragEvent) => void;
   onDragOver: (k: string) => (e: React.DragEvent) => void;
@@ -1354,28 +1379,104 @@ function InsightsView({
 }) {
   const T = theme;
 
-  const longest = filteredOutliers.reduce<{ club: string; carry: number } | null>((acc, s) => {
+  // ---- GLOBAL metrics (ignore club selection; still respect date/session/outliers/range)
+  const longest = filteredNoClubOutliers.reduce<{ club: string; carry: number } | null>((acc, s) => {
     const c = s.CarryDistance_yds ?? -Infinity;
     if (c <= 0) return acc;
     if (!acc || c > acc.carry) return { club: s.Club, carry: c };
     return acc;
   }, null);
 
-  const consistent = React.useMemo(() => {
-    const eligible = tableRows.filter(r => r.count >= 5 && r.sdCarry > 0);
+  const perClubGlobal = useMemo(() => {
+    const by = new Map<string, Shot[]>();
+    filteredNoClubOutliers.forEach(s => {
+      if (!by.has(s.Club)) by.set(s.Club, []);
+      by.get(s.Club)!.push(s);
+    });
+    const rows = [...by.entries()].map(([club, arr]) => {
+      const carry = arr.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
+      const smash = arr.map(s => s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined))
+                       .filter((x): x is number => x != null);
+      const lateral = arr.map(s => {
+        if (s.CarryDeviationDistance_yds != null) return s.CarryDeviationDistance_yds;
+        if (s.LaunchDirection_deg != null && s.CarryDistance_yds != null) {
+          const rad = (s.LaunchDirection_deg * Math.PI) / 180;
+          return s.CarryDistance_yds * Math.sin(rad);
+        }
+        return undefined;
+      }).filter((x): x is number => x != null);
+      return {
+        club,
+        n: arr.length,
+        sdCarry: carry.length ? stddev(carry) : Infinity,
+        meanSmash: smash.length ? mean(smash) : 0,
+        sdLateral: lateral.length ? stddev(lateral) : 0,
+        meanLateral: lateral.length ? mean(lateral) : 0,
+      };
+    });
+    return rows;
+  }, [filteredNoClubOutliers]);
+
+  const consistent = useMemo(() => {
+    const eligible = perClubGlobal.filter(r => r.n >= 5 && isFinite(r.sdCarry));
     if (!eligible.length) return null;
     return eligible.reduce((a, b) => (a.sdCarry <= b.sdCarry ? a : b));
-  }, [tableRows]);
+  }, [perClubGlobal]);
 
-  const gappingWarnings = React.useMemo(() => {
-    const sorted = [...tableRows].sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
+  // Efficiency score (0–100). Normalize smash factor to 1.50 “ideal” across clubs.
+  const efficiencyScore = useMemo(() => {
+    const perShot = filteredNoClubOutliers.map((s) => {
+      const sf = s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
+      if (!sf) return undefined;
+      const score = Math.max(0, Math.min(1, sf / 1.5));
+      return score * 100;
+    }).filter((x): x is number => x != null);
+    return perShot.length ? Math.round(mean(perShot)) : 0;
+  }, [filteredNoClubOutliers]);
+
+  // Tight gapping count (global)
+  const gappingWarnings = useMemo(() => {
+    const byClub = new Map<string, Shot[]>();
+    filteredNoClubOutliers.forEach((s) => {
+      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
+      byClub.get(s.Club)!.push(s);
+    });
+    const rows = [...byClub.entries()].map(([club, arr]) => {
+      const carry = arr.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
+      return { club, avgCarry: carry.length ? mean(carry) : 0 };
+    }).sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
     const bad: { a: string; b: string; gap: number }[] = [];
-    for (let i = 1; i < sorted.length; i++) {
-      const gap = Math.abs(sorted[i].avgCarry - sorted[i - 1].avgCarry);
-      if (gap < 12) bad.push({ a: sorted[i - 1].club, b: sorted[i].club, gap });
+    for (let i = 1; i < rows.length; i++) {
+      const gap = Math.abs(rows[i].avgCarry - rows[i - 1].avgCarry);
+      if (gap < 12) bad.push({ a: rows[i - 1].club, b: rows[i].club, gap });
     }
     return bad;
-  }, [tableRows]);
+  }, [filteredNoClubOutliers]);
+
+  // ---- PERSONAL BESTS (depends on current selection)
+  const personalBests = useMemo(() => {
+    const pool = filteredOutliers;
+    if (!pool.length) return null;
+    const pbCarry = pool.reduce((acc, s) =>
+      (s.CarryDistance_yds != null && (!acc || (s.CarryDistance_yds > acc.val)))
+        ? { val: s.CarryDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
+    const pbTotal = pool.reduce((acc, s) =>
+      (s.TotalDistance_yds != null && (!acc || (s.TotalDistance_yds > acc.val)))
+        ? { val: s.TotalDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
+
+    // Average shot direction in degrees (prefer LaunchDirection; fallback to derived)
+    const dirs = pool.map((s) => {
+      if (s.LaunchDirection_deg != null) return s.LaunchDirection_deg;
+      if (s.CarryDeviationDistance_yds != null && s.CarryDistance_yds != null && s.CarryDistance_yds > 0) {
+        const ratio = Math.max(-1, Math.min(1, s.CarryDeviationDistance_yds / s.CarryDistance_yds));
+        return (Math.asin(ratio) * 180) / Math.PI;
+      }
+      return undefined;
+    }).filter((x): x is number => x != null);
+    const avgDir = dirs.length ? mean(dirs) : 0;
+
+    return { pbCarry, pbTotal, avgDir };
+  }, [filteredOutliers]);
 
   const [metric, setMetric] = useState<"total" | "carry">("total");
 
@@ -1393,22 +1494,23 @@ function InsightsView({
               Switch to {metric === "total" ? "Carry" : "Total"}
             </button>
           </div>
-          <DistanceBoxChart theme={T} shots={filteredOutliers} clubs={clubs} metric={metric} />
+          {/* colored per club; tooltip shows BOTH metrics */}
+          <DistanceBoxChart theme={T} shots={filteredOutliers} clubs={allClubs} metric={metric} />
         </>
       )
     },
     highlights: {
-      title: "Highlights",
+      title: "Highlights (All Clubs)",
       body: (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds` : "-"} color={T.brand} />
+          <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds (${longest.club})` : "-"} color={T.brand} />
           <KPI theme={T} label="Most Consistent (club)" value={consistent ? `${consistent.club} (${consistent.sdCarry.toFixed(1)} sd)` : "-"} color={T.brandTint} />
-          <KPI theme={T} label="Clubs with Tight Gap" value={`${gappingWarnings.length}`} color={T.text} />
+          <KPI theme={T} label="Efficiency Score" value={`${efficiencyScore}/100`} color={T.text} />
         </div>
       )
     },
     warnings: {
-      title: "Gapping Warnings (Carry Δ < 12 yds)",
+      title: `Gapping Warnings (Carry Δ < 12 yds) — ${gappingWarnings.length} issue${gappingWarnings.length === 1 ? "" : "s"}`,
       body: gappingWarnings.length === 0 ? (
         <div style={{ color: T.textDim }}>No issues detected.</div>
       ) : (
@@ -1418,6 +1520,41 @@ function InsightsView({
           ))}
         </ul>
       )
+    },
+    personalBests: {
+      title: "Personal Bests (current selection)",
+      body: !personalBests ? (
+        <div style={{ color: T.textDim }}>No shots in selection.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <KPI theme={T} label="PB Carry" value={personalBests.pbCarry ? `${personalBests.pbCarry.val.toFixed(1)} yds (${personalBests.pbCarry.club})` : "-"} color={T.brand} />
+            <KPI theme={T} label="PB Total" value={personalBests.pbTotal ? `${personalBests.pbTotal.val.toFixed(1)} yds (${personalBests.pbTotal.club})` : "-"} color={T.brandTint} />
+            <KPI theme={T} label="Avg Shot Direction" value={`${personalBests.avgDir.toFixed(1)}°`} color={T.text} />
+          </div>
+          <DirectionGauge theme={T} degrees={personalBests.avgDir} />
+        </>
+      )
+    },
+    weaknesses: {
+      title: "Biggest Weaknesses (All Clubs)",
+      body: (() => {
+        if (!perClubGlobal.length) return <div style={{ color: T.textDim }}>Not enough data.</div>;
+        const eligible = perClubGlobal.filter(r => r.n >= 5);
+        if (!eligible.length) return <div style={{ color: T.textDim }}>Need at least 5 shots per club.</div>;
+        const right = eligible.reduce((a, b) => (a.meanLateral >= b.meanLateral ? a : b));
+        const left  = eligible.reduce((a, b) => (a.meanLateral <= b.meanLateral ? a : b));
+        const leastCons = eligible.reduce((a, b) => (a.sdCarry >= b.sdCarry ? a : b));
+        const worstEff  = eligible.reduce((a, b) => (a.meanSmash <= b.meanSmash ? a : b));
+        return (
+          <ul className="list-disc pl-6" style={{ color: T.text }}>
+            <li><b>Most right-biased:</b> {right.club} (avg lateral +{right.meanLateral.toFixed(1)} yds)</li>
+            <li><b>Most left-biased:</b> {left.club} (avg lateral {left.meanLateral.toFixed(1)} yds)</li>
+            <li><b>Least consistent carry:</b> {leastCons.club} (SD {leastCons.sdCarry.toFixed(1)} yds)</li>
+            <li><b>Lowest efficiency:</b> {worstEff.club} (avg smash {worstEff.meanSmash.toFixed(3)})</li>
+          </ul>
+        );
+      })()
     }
   };
 
@@ -1676,19 +1813,38 @@ function DistanceBoxChart({
   metric?: "total" | "carry";
 }) {
   const T = theme;
-  const get = (s: Shot) => metric === "total" ? s.TotalDistance_yds : s.CarryDistance_yds;
+  const getCarry = (s: Shot) => s.CarryDistance_yds;
+  const getTotal = (s: Shot) => s.TotalDistance_yds;
+  const get = (s: Shot) => (metric === "total" ? getTotal(s) : getCarry(s));
 
-  // Build stats per club ONLY for clubs that have data, then sort by your logical order (Driver → LW)
+  // Build stats per club ONLY for clubs that have data, then sort by your logical order
   const rows = clubs
     .map((club) => {
-      const vals = shots.filter(s => s.Club === club).map(get).filter((v): v is number => v != null);
+      const pool = shots.filter(s => s.Club === club);
+      const vals = pool.map(get).filter((v): v is number => v != null);
       if (!vals.length) return null;
+
+      // stats for current metric
       const min = Math.min(...vals);
       const max = Math.max(...vals);
       const q1 = quantile(vals, 0.25);
       const q3 = quantile(vals, 0.75);
       const med = quantile(vals, 0.5);
       const avg = mean(vals);
+
+      // also compute BOTH carry & total summaries for tooltip
+      const cVals = pool.map(getCarry).filter((v): v is number => v != null);
+      const tVals = pool.map(getTotal).filter((v): v is number => v != null);
+      const sumObj = (arr: number[]) => ({
+        min: Math.min(...arr),
+        q1: quantile(arr, 0.25),
+        median: quantile(arr, 0.5),
+        mean: mean(arr),
+        q3: quantile(arr, 0.75),
+        max: Math.max(...arr),
+        n: arr.length
+      });
+
       return {
         club,
         min, max, q1, q3, median: med, mean: avg,
@@ -1696,6 +1852,9 @@ function DistanceBoxChart({
         rangeWidth: Math.max(0, max - min),
         iqrStart: q1,
         iqrWidth: Math.max(0, q3 - q1),
+
+        carryStats: cVals.length ? sumObj(cVals) : null,
+        totalStats: tVals.length ? sumObj(tVals) : null,
       };
     })
     .filter(Boolean)
@@ -1705,65 +1864,69 @@ function DistanceBoxChart({
     return <div style={{ padding: 16, color: T.textDim }}>No shots for this selection.</div>;
   }
 
-  // Colors & marker widths
-  const rangeColor   = T.border;      // whisker (min→max)
-  const boxColor     = T.brand;       // Q1→Q3
-  const meanStroke   = T.white;       // mean tick
-  const medianStroke = T.brandTint;   // median tick
-  const tickHalfW    = 7;             // half-length of the little tick
-
-  // Compute a nice x-domain (adds padding on both ends)
+  // Compute a nice x-domain
   const xMin = Math.min(...rows.map(r => r.min));
   const xMax = Math.max(...rows.map(r => r.max));
   const pad  = Math.max(5, Math.round((xMax - xMin) * 0.05));
   const domain: [number, number] = [Math.max(0, xMin - pad), xMax + pad];
 
+  // per-row colors
+  const getColor = (club: string) => colorForClub(club, clubs, clubPalette);
+
+  // Custom tooltip shows BOTH metrics
+  const Tip = ({ active, payload }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    const r = payload[0].payload;
+    const c = r.carryStats, t = r.totalStats;
+    const line = (label: string, s: any) =>
+      s ? <div><b>{label}:</b> min {s.min.toFixed(1)} • Q1 {s.q1.toFixed(1)} • Med {s.median.toFixed(1)} • Mean {s.mean.toFixed(1)} • Q3 {s.q3.toFixed(1)} • max {s.max.toFixed(1)} (n={s.n})</div>
+        : <div><b>{label}:</b> —</div>;
+    return (
+      <div style={{ background: T.panel, border:`1px solid ${T.border}`, color: T.text, padding: 10, borderRadius: 8, maxWidth: 420 }}>
+        <div style={{ marginBottom: 6 }}><b>{r.club}</b></div>
+        {line("Carry", c)}
+        {line("Total", t)}
+      </div>
+    );
+  };
+
+  const tickHalfW = 7;
+
   return (
     <ResponsiveContainer width="100%" height={360}>
-      <ComposedChart
-        data={rows}
-        layout="vertical"
-        margin={{ top: 10, right: 16, bottom: 10, left: 16 }}
-      >
+      <ComposedChart data={rows} layout="vertical" margin={{ top: 10, right: 16, bottom: 10, left: 16 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
         <XAxis type="number" domain={domain} stroke={T.textDim} />
-        {/* interval={0} ensures every club label renders; order is exactly the array order */}
         <YAxis type="category" dataKey="club" interval={0} width={120} stroke={T.textDim} />
+        <Tooltip content={<Tip />} />
 
-        <Tooltip
-          contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }}
-          formatter={(v: any, n: any) => [v, n]}
-        />
-
-        {/* Min→Max “whisker”: transparent offset + visible width */}
+        {/* Min→Max (whisker) with per-row color at low alpha */}
         <Bar dataKey="rangeStart" stackId="range" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="rangeWidth" stackId="range" fill={rangeColor} barSize={6} radius={[4,4,4,4]} />
+        <Bar dataKey="rangeWidth" stackId="range" barSize={6} radius={[4,4,4,4]}>
+          {rows.map((r: any) => <Cell key={`w-${r.club}`} fill={alpha(getColor(r.club), 0.25)} />)}
+        </Bar>
 
-        {/* Q1→Q3 “box” on top */}
+        {/* Q1→Q3 box per-row in solid club color */}
         <Bar dataKey="iqrStart" stackId="iqr" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="iqrWidth" stackId="iqr" fill={boxColor} barSize={14} radius={[6,6,6,6]} opacity={0.95} />
+        <Bar dataKey="iqrWidth" stackId="iqr" barSize={14} radius={[6,6,6,6]} opacity={0.95}>
+          {rows.map((r: any) => <Cell key={`b-${r.club}`} fill={getColor(r.club)} />)}
+        </Bar>
 
-        {/* Median & Mean ticks aligned to the category row using ReferenceLine segments */}
-        {rows.map(r => (
+        {/* Median & Mean ticks aligned to the category row */}
+        {rows.map((r) => (
           <ReferenceLine
             key={`med-${r.club}`}
-            segment={[
-              { x: r.median - tickHalfW, y: r.club },
-              { x: r.median + tickHalfW, y: r.club },
-            ]}
-            stroke={medianStroke}
+            segment={[{ x: r.median - tickHalfW, y: r.club }, { x: r.median + tickHalfW, y: r.club }]}
+            stroke={T.brandTint}
             strokeWidth={3}
             ifOverflow="extendDomain"
           />
         ))}
-        {rows.map(r => (
+        {rows.map((r) => (
           <ReferenceLine
             key={`mean-${r.club}`}
-            segment={[
-              { x: r.mean - tickHalfW, y: r.club },
-              { x: r.mean + tickHalfW, y: r.club },
-            ]}
-            stroke={meanStroke}
+            segment={[{ x: r.mean - tickHalfW, y: r.club }, { x: r.mean + tickHalfW, y: r.club }]}
+            stroke={T.white}
             strokeWidth={3}
             ifOverflow="extendDomain"
           />
@@ -1773,6 +1936,42 @@ function DistanceBoxChart({
   );
 }
 
+/** ============ Personal bests: direction gauge ============ */
+function DirectionGauge({ theme, degrees }: { theme: Theme; degrees: number }) {
+  const T = theme;
+  // Clamp gauge to ±10°
+  const min = -10, max = 10;
+  const val = Math.max(min, Math.min(max, degrees));
+  const pct = (val - min) / (max - min);
+
+  const W = 360, H = 160;
+  const cx = W / 2, cy = H - 10, r = 140;
+
+  const angle = Math.PI * (1 - pct); // left = π, right = 0
+  const x = cx + r * Math.cos(angle);
+  const y = cy - r * Math.sin(angle);
+
+  const arc = (start: number, end: number) => {
+    const sx = cx + r * Math.cos(start);
+    const sy = cy - r * Math.sin(start);
+    const ex = cx + r * Math.cos(end);
+    const ey = cy - r * Math.sin(end);
+    const large = end - start <= Math.PI ? 0 : 1;
+    return `M ${sx} ${sy} A ${r} ${r} 0 ${large} 0 ${ex} ${ey}`;
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="160"
+         style={{ background: theme.brandSoft, borderRadius: 12, border: `1px solid ${theme.border}` }}>
+      <path d={arc(Math.PI, 0)} fill="none" stroke={theme.border} strokeWidth={12} />
+      <line x1={cx} y1={cy} x2={x} y2={y} stroke={theme.brand} strokeWidth={6} />
+      {/* tick labels */}
+      <text x={20} y={cy - 8} fontSize={12} fill={theme.textDim}>Left -10°</text>
+      <text x={W - 70} y={cy - 8} fontSize={12} fill={theme.textDim}>Right +10°</text>
+      <text x={cx - 30} y={20} fontSize={13} fill={theme.textDim}>Avg Dir {degrees.toFixed(1)}°</text>
+    </svg>
+  );
+}
 
 /** ================= UI PRIMITIVES ================= */
 function Card({ theme, title, children, dragHandle }: { theme: Theme; title: string; children: React.ReactNode; dragHandle?: boolean }) {
