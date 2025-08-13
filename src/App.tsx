@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, Label
+  Scatter, ScatterChart, ZAxis, Label, ComposedChart
 } from "recharts";
 import * as XLSX from "xlsx";
 
@@ -47,15 +47,14 @@ const DARK: Theme = {
   gridStripeB: "#0A1411",
 };
 
-// Per-club palette (distinct)
+// Per-club palette (distinct, stable)
 const clubPalette = [
   "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B",
   "#E377C2", "#17BECF", "#7F7F7F", "#BCBD22", "#AEC7E8", "#FFBB78",
 ];
 
 // Gap chart uses ONLY these two:
-const CARRY_BAR = "#1F77B4";      // blue
-const TOTAL_BAR_LIGHT = LIGHT.brand;
+const CARRY_BAR = "#1F77B4"; // blue
 
 /** ================= TYPES ================= */
 type Shot = {
@@ -117,6 +116,15 @@ const stddev = (arr: number[]) => {
   const v = mean(arr.map(x => (x - m) ** 2));
   return Math.sqrt(v);
 };
+const quantile = (arr: number[], p: number) => {
+  if (!arr.length) return NaN;
+  const a = [...arr].sort((x, y) => x - y);
+  const idx = (a.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return a[lo];
+  const h = idx - lo;
+  return a[lo] * (1 - h) + a[hi] * h;
+};
 const n = (v: any): number | undefined => {
   if (v === null || v === undefined) return undefined;
   const s = String(v).trim();
@@ -142,7 +150,7 @@ const coalesceFaceToPath = (s: Shot) =>
     ? s.ClubFace_deg - s.ClubPath_deg
     : undefined);
 
-// Display order for clubs
+// Club display order
 const ORDER = [
   "Driver",
   "3 Wood", "5 Wood", "7 Wood",
@@ -187,7 +195,7 @@ function normalizeHeader(raw: string): string {
   return s;
 }
 
-/** Header map after normalization (+ extra synonyms) */
+/** Header -> Shot key map (after normalization) */
 const headerMap: Record<string, keyof Shot> = {
   "club": "Club",
   "club type": "Club",
@@ -232,7 +240,7 @@ const headerMap: Record<string, keyof Shot> = {
   "datetime": "Timestamp",
 };
 
-/** ===== Find the best header row (supports two-row header+units) ===== */
+/** Find best header row (supports two-row header+units) */
 function findBestHeader(rowsRaw: any[][]) {
   const MAX_SCAN = Math.min(20, rowsRaw.length);
   let best = { idx: 0, map: [] as (keyof Shot | undefined)[], score: 0, usedTwoRows: false };
@@ -415,6 +423,7 @@ export default function App() {
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
+
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     try {
@@ -422,26 +431,51 @@ export default function App() {
       return raw ? JSON.parse(raw) : ["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"];
     } catch { return ["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"]; }
   });
+
+  // Insights re-ordering
+  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("launch-tracker:insights-order");
+      return raw ? JSON.parse(raw) : ["distanceBox", "highlights", "warnings"];
+    } catch { return ["distanceBox", "highlights", "warnings"]; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {}
+  }, [insightsOrder]);
+
   const [sessionNotes, setSessionNotes] = useState<Record<string, string>>(() => {
     try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
   });
 
-  // JOURNAL (WYSIWYG) — per-session content
+  // Journal
   const journalKey = sessionFilter === "ALL" ? "GLOBAL" : (sessionFilter || "Unknown Session");
   const [journalHTML, setJournalHTML] = useState<string>(() => {
     try { return localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""; } catch { return ""; }
   });
+  const editorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // load content when session changes
     try { setJournalHTML(localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""); } catch {}
   }, [journalKey]);
   useEffect(() => {
-    // autosave
     try { localStorage.setItem(`launch-tracker:journal:${journalKey}`, journalHTML); } catch {}
   }, [journalKey, journalHTML]);
 
+  // Measure Filters card height (for Journal default height)
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const [filtersHeight, setFiltersHeight] = useState<number>(420);
+  useEffect(() => {
+    const el = filtersRef.current;
+    if (!el) return;
+    const update = () => setFiltersHeight(el.getBoundingClientRect().height || 420);
+    const ro = new ResizeObserver(() => update());
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    update();
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const dragKeyRef = useRef<string | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -461,13 +495,11 @@ export default function App() {
     try { localStorage.setItem("launch-tracker:session-notes", JSON.stringify(sessionNotes)); } catch {}
   }, [sessionNotes]);
 
-  // Helpers for messages (auto-dismiss after 15s)
+  // Messages with auto-dismiss
   const pushMsg = (text: string, type: Msg["type"] = "info") => {
     const id = Date.now() + Math.random();
     setMsgs((prev) => [...prev, { id, text, type }]);
-    window.setTimeout(() => {
-      setMsgs((prev) => prev.filter(m => m.id !== id));
-    }, 15000);
+    window.setTimeout(() => setMsgs((prev) => prev.filter(m => m.id !== id)), 15000);
   };
   const closeMsg = (id: number) => setMsgs((prev) => prev.filter(m => m.id !== id));
 
@@ -485,7 +517,7 @@ export default function App() {
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  // Small built-in fallback sample
+  // Built-in tiny sample fallback
   const builtinSample = () => {
     const id = `Sample ${new Date().toLocaleString()}`;
     return [
@@ -501,7 +533,7 @@ export default function App() {
     ].map(applyDerived);
   };
 
-  // ===== Import core (shared by file upload & sample fetch) =====
+  // ===== Import core =====
   const processWorkbook = (wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) => {
     const firstSheet = wb.SheetNames.find(n => {
       const ws = wb.Sheets[n];
@@ -713,7 +745,7 @@ export default function App() {
     return pool;
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
-  /** Outlier filter (more permissive) */
+  /** Outlier filter */
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filtered;
 
@@ -833,24 +865,39 @@ export default function App() {
     pushMsg("All data deleted.", "success");
   };
 
-  // DnD handlers (dashboard cards)
-  const dragKeyRef = useRef<string | null>(null);
+  // DnD helpers
   const onDragStart = (key: string) => (e: React.DragEvent) => { dragKeyRef.current = key; e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver = (overKey: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const onDrop = (overKey: string) => (e: React.DragEvent) => {
+  const onDragOver = (key: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDrop = (key: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const from = dragKeyRef.current; dragKeyRef.current = null;
-    if (!from || from === overKey) return;
+    if (!from || from === key) return;
     setCardOrder((prev) => {
       const arr = prev.slice();
-      const i = arr.indexOf(from), j = arr.indexOf(overKey);
+      const i = arr.indexOf(from), j = arr.indexOf(key);
       if (i === -1 || j === -1) return prev;
       arr.splice(j, 0, ...arr.splice(i, 1));
       return arr;
     });
   };
 
-  // Session Notes helpers
+  // Insights DnD
+  const onDragStartInsight = (k: string) => (e: React.DragEvent) => { dragKeyRef.current = k; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOverInsight  = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDropInsight      = (k: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const from = dragKeyRef.current; dragKeyRef.current = null;
+    if (!from || from === k) return;
+    setInsightsOrder((prev) => {
+      const arr = prev.slice();
+      const i = arr.indexOf(from), j = arr.indexOf(k);
+      if (i === -1 || j === -1) return prev;
+      arr.splice(j, 0, ...arr.splice(i, 1));
+      return arr;
+    });
+  };
+
+  // Session notes helpers
   const selectedSessionKey = sessionFilter === "ALL" ? "" : (sessionFilter || "Unknown Session");
   const sessionNote = selectedSessionKey ? (sessionNotes[selectedSessionKey] || "") : "";
   const saveSessionNote = (val: string) => {
@@ -866,7 +913,6 @@ export default function App() {
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker</h1>
 
           <div className="flex items-center gap-2">
-            {/* View switch: Dashboard / Insights / Journal */}
             <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
             <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
             <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
@@ -884,7 +930,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Messages (dismissible & auto-hide) */}
+      {/* Messages */}
       {msgs.length > 0 && (
         <div className="px-6 mt-4">
           <div className="max-w-7xl mx-auto flex flex-col gap-2">
@@ -903,142 +949,144 @@ export default function App() {
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
-        {/* LEFT COLUMN: Filters + Session Notes */}
+        {/* LEFT: Filters + Session Notes */}
         <aside className="col-span-12 lg:col-span-3 space-y-8">
-          {/* Filters (not draggable) */}
-          <Card theme={T} title="Filters">
-            {/* Import (green + full width) */}
-            <div className="mb-4">
-              <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onFile(f);
-                  e.currentTarget.value = "";
-                }}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full px-3 py-2 rounded-lg text-sm"
-                style={{ background: T.brand, color: "#fff", border: `1px solid ${T.brand}` }}
-              >
-                Import file
-              </button>
-            </div>
-
-            {/* Session selector */}
-            <div className="mb-3">
-              <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Session</label>
-              <div className="flex gap-2">
-                <select
-                  value={sessionFilter}
-                  onChange={(e) => setSessionFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: T.border, background: T.panel, color: T.text }}
-                >
-                  {sessions.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+          {/* Filters */}
+          <div ref={filtersRef}>
+            <Card theme={T} title="Filters">
+              {/* Import */}
+              <div className="mb-4">
+                <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onFile(f);
+                    e.currentTarget.value = "";
+                  }}
+                  className="hidden"
+                />
                 <button
-                  className="px-3 py-2 rounded-lg text-sm border"
-                  style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
-                  onClick={deleteSession}
-                  disabled={sessionFilter === "ALL"}
-                  title="Delete selected session"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full px-3 py-2 rounded-lg text-sm"
+                  style={{ background: T.brand, color: "#fff", border: `1px solid ${T.brand}` }}
                 >
-                  Delete
+                  Import file
                 </button>
               </div>
-            </div>
 
-            {/* Vertical Club selector */}
-            <div className="mb-5">
-              <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Clubs</label>
-              <ClubList theme={T} options={clubs} selected={selectedClubs} onChange={setSelectedClubs} palette={clubPalette} />
-              <div className="mt-3 flex gap-2">
-                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.brand, background: T.panel }} onClick={() => setSelectedClubs(clubs)} disabled={!clubs.length}>
-                  Select all
-                </button>
-                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => setSelectedClubs([])} disabled={!selectedClubs.length}>
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            {/* Carry range */}
-            <div className="mb-5">
-              <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Carry Distance Range (yds)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <input type="number" placeholder={carryBounds.min ? String(carryBounds.min) : "min"} value={carryMin} onChange={(e) => setCarryMin(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
-                <input type="number" placeholder={carryBounds.max ? String(carryBounds.max) : "max"} value={carryMax} onChange={(e) => setCarryMax(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
-              </div>
-              <div className="mt-2">
-                <button onClick={() => { setCarryMin(""); setCarryMax(""); }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
-                  Reset range
-                </button>
-              </div>
-            </div>
-
-            {/* Outliers + Dates */}
-            <div className="mb-4 flex items-center justify-between">
-              <label className="text-sm font-medium" style={{ color: T.text }}>Exclude outliers (2.5σ)</label>
-              <input type="checkbox" checked={excludeOutliers} onChange={(e) => setExcludeOutliers(e.target.checked)} />
-            </div>
-
-            <div className="mb-6">
-              <label className="text-sm font-medium block" style={{ color: T.text }}>Date range</label>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-2 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-2 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
-              </div>
-              <div className="mt-2 flex gap-2">
-                {[
-                  { label: "Last 7d", days: 7 },
-                  { label: "Last 30d", days: 30 },
-                  { label: "Last 90d", days: 90 },
-                ].map(({ label, days }) => (
-                  <button key={label} className="px-2 py-1 text-xs rounded-md border"
-                          style={{ borderColor: T.border, color: T.brand, background: T.panel }}
-                          onClick={() => {
-                            const to = new Date();
-                            const from = new Date();
-                            from.setDate(to.getDate() - days + 1);
-                            setDateFrom(from.toISOString().slice(0, 10));
-                            setDateTo(to.toISOString().slice(0, 10));
-                          }}>
-                    {label}
+              {/* Session selector */}
+              <div className="mb-3">
+                <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Session</label>
+                <div className="flex gap-2">
+                  <select
+                    value={sessionFilter}
+                    onChange={(e) => setSessionFilter(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                    style={{ borderColor: T.border, background: T.panel, color: T.text }}
+                  >
+                    {sessions.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="px-3 py-2 rounded-lg text-sm border"
+                    style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
+                    onClick={deleteSession}
+                    disabled={sessionFilter === "ALL"}
+                    title="Delete selected session"
+                  >
+                    Delete
                   </button>
-                ))}
-                <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => { setDateFrom(""); setDateTo(""); }}>
-                  Reset
+                </div>
+              </div>
+
+              {/* Clubs */}
+              <div className="mb-5">
+                <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Clubs</label>
+                <ClubList theme={T} options={clubs} selected={selectedClubs} onChange={setSelectedClubs} palette={clubPalette} />
+                <div className="mt-3 flex gap-2">
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.brand, background: T.panel }} onClick={() => setSelectedClubs(clubs)} disabled={!clubs.length}>
+                    Select all
+                  </button>
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => setSelectedClubs([])} disabled={!selectedClubs.length}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Carry range */}
+              <div className="mb-5">
+                <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Carry Distance Range (yds)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" placeholder={carryBounds.min ? String(carryBounds.min) : "min"} value={carryMin} onChange={(e) => setCarryMin(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
+                  <input type="number" placeholder={carryBounds.max ? String(carryBounds.max) : "max"} value={carryMax} onChange={(e) => setCarryMax(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
+                </div>
+                <div className="mt-2">
+                  <button onClick={() => { setCarryMin(""); setCarryMax(""); }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
+                    Reset range
+                  </button>
+                </div>
+              </div>
+
+              {/* Outliers + Dates */}
+              <div className="mb-4 flex items-center justify-between">
+                <label className="text-sm font-medium" style={{ color: T.text }}>Exclude outliers (2.5σ)</label>
+                <input type="checkbox" checked={excludeOutliers} onChange={(e) => setExcludeOutliers(e.target.checked)} />
+              </div>
+
+              <div className="mb-6">
+                <label className="text-sm font-medium block" style={{ color: T.text }}>Date range</label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-2 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-2 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  {[
+                    { label: "Last 7d", days: 7 },
+                    { label: "Last 30d", days: 30 },
+                    { label: "Last 90d", days: 90 },
+                  ].map(({ label, days }) => (
+                    <button key={label} className="px-2 py-1 text-xs rounded-md border"
+                            style={{ borderColor: T.border, color: T.brand, background: T.panel }}
+                            onClick={() => {
+                              const to = new Date();
+                              const from = new Date();
+                              from.setDate(to.getDate() - days + 1);
+                              setDateFrom(from.toISOString().slice(0, 10));
+                              setDateTo(to.toISOString().slice(0, 10));
+                            }}>
+                      {label}
+                    </button>
+                  ))}
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => { setDateFrom(""); setDateTo(""); }}>
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {/* Sample / Export */}
+              <div className="mb-4 flex flex-wrap gap-2">
+                <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
+                  Load sample
+                </button>
+                <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
+                  Export CSV
                 </button>
               </div>
-            </div>
 
-            {/* Load sample & Export here */}
-            <div className="mb-4 flex flex-wrap gap-2">
-              <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
-                Load sample
-              </button>
-              <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
-                Export CSV
-              </button>
-            </div>
-
-            {/* Delete all at bottom */}
-            <div className="pt-4 border-t" style={{ borderColor: T.border }}>
-              <button className="px-3 py-2 rounded-lg text-sm border w-full"
-                      style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
-                      onClick={deleteAll}>
-                Delete all data
-              </button>
-            </div>
-          </Card>
+              {/* Delete all */}
+              <div className="pt-4 border-t" style={{ borderColor: T.border }}>
+                <button className="px-3 py-2 rounded-lg text-sm border w-full"
+                        style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
+                        onClick={deleteAll}>
+                  Delete all data
+                </button>
+              </div>
+            </Card>
+          </div>
 
           {/* Session Notes */}
           <Card theme={T} title="Session Notes">
@@ -1060,7 +1108,7 @@ export default function App() {
           </Card>
         </aside>
 
-        {/* RIGHT COLUMN: content by VIEW */}
+        {/* RIGHT */}
         <section className="col-span-12 lg:col-span-9">
           {view === "dashboard" && (
             <DashboardCards
@@ -1081,7 +1129,16 @@ export default function App() {
           )}
 
           {view === "insights" && (
-            <InsightsView theme={T} tableRows={tableRows} filteredOutliers={filteredOutliers} clubs={clubs} />
+            <InsightsView
+              theme={T}
+              tableRows={tableRows}
+              filteredOutliers={filteredOutliers}
+              clubs={clubs}
+              insightsOrder={insightsOrder}
+              onDragStart={onDragStartInsight}
+              onDragOver={onDragOverInsight}
+              onDrop={onDropInsight}
+            />
           )}
 
           {view === "journal" && (
@@ -1091,13 +1148,14 @@ export default function App() {
               value={journalHTML}
               onInputHTML={setJournalHTML}
               sessionLabel={journalKey}
+              defaultHeightPx={filtersHeight}
             />
           )}
         </section>
       </main>
 
       <footer className="px-6 py-8 text-xs text-center" style={{ color: T.textDim }}>
-        Gap chart: Carry = blue, Total = green. Shot shape uses Spin Axis: Draw &lt; -2°, Straight within ±2°, Fade &gt; 2°. Data is saved locally in your browser.
+        Gap chart: Carry = blue, Total = green. Shot shape: Draw &lt; -2°, Straight ±2°, Fade &gt; 2°. Data is saved locally in your browser.
       </footer>
     </div>
   );
@@ -1169,7 +1227,7 @@ function DashboardCards(props: {
               <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
               <Legend wrapperStyle={{ color: T.text }} />
               <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
-              <Bar dataKey="avgTotal" name="Total (avg)" fill={DARK.brand} />
+              <Bar dataKey="avgTotal" name="Total (avg)" fill={T.brand} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1280,11 +1338,22 @@ function DashboardCards(props: {
   );
 }
 
-/** ================= INSIGHTS VIEW (placeholder + a few basics) ================= */
-function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Theme; tableRows: ClubRow[]; filteredOutliers: Shot[]; clubs: string[] }) {
+/** ================= INSIGHTS (reorderable) ================= */
+function InsightsView({
+  theme, tableRows, filteredOutliers, clubs,
+  insightsOrder, onDragStart, onDragOver, onDrop
+}: {
+  theme: Theme;
+  tableRows: ClubRow[];
+  filteredOutliers: Shot[];
+  clubs: string[];
+  insightsOrder: string[];
+  onDragStart: (k: string) => (e: React.DragEvent) => void;
+  onDragOver: (k: string) => (e: React.DragEvent) => void;
+  onDrop: (k: string) => (e: React.DragEvent) => void;
+}) {
   const T = theme;
 
-  // Simple insights now; you can expand later
   const longest = filteredOutliers.reduce<{ club: string; carry: number } | null>((acc, s) => {
     const c = s.CarryDistance_yds ?? -Infinity;
     if (c <= 0) return acc;
@@ -1292,14 +1361,13 @@ function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Th
     return acc;
   }, null);
 
-  const consistent = useMemo(() => {
+  const consistent = React.useMemo(() => {
     const eligible = tableRows.filter(r => r.count >= 5 && r.sdCarry > 0);
     if (!eligible.length) return null;
-    const best = eligible.reduce((a, b) => (a.sdCarry <= b.sdCarry ? a : b));
-    return best;
+    return eligible.reduce((a, b) => (a.sdCarry <= b.sdCarry ? a : b));
   }, [tableRows]);
 
-  const gappingWarnings = useMemo(() => {
+  const gappingWarnings = React.useMemo(() => {
     const sorted = [...tableRows].sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
     const bad: { a: string; b: string; gap: number }[] = [];
     for (let i = 1; i < sorted.length; i++) {
@@ -1309,46 +1377,82 @@ function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Th
     return bad;
   }, [tableRows]);
 
-  return (
-    <div className="grid grid-cols-1 gap-8">
-      <Card theme={T} title="Highlights">
+  const [metric, setMetric] = useState<"total" | "carry">("total");
+
+  const CARDS: Record<string, { title: string; body: JSX.Element }> = {
+    distanceBox: {
+      title: `Distance Distribution by Club — ${metric === "total" ? "Total" : "Carry"} (yds)`,
+      body: (
+        <>
+          <div className="mb-3">
+            <button
+              onClick={() => setMetric(metric === "total" ? "carry" : "total")}
+              className="px-2 py-1 text-xs rounded-md border"
+              style={{ borderColor: T.border, color: T.brand, background: T.panel }}
+            >
+              Switch to {metric === "total" ? "Carry" : "Total"}
+            </button>
+          </div>
+          <DistanceBoxChart theme={T} shots={filteredOutliers} clubs={clubs} metric={metric} />
+        </>
+      )
+    },
+    highlights: {
+      title: "Highlights",
+      body: (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds` : "-"} color={T.brand} />
           <KPI theme={T} label="Most Consistent (club)" value={consistent ? `${consistent.club} (${consistent.sdCarry.toFixed(1)} sd)` : "-"} color={T.brandTint} />
           <KPI theme={T} label="Clubs with Tight Gap" value={`${gappingWarnings.length}`} color={T.text} />
         </div>
-      </Card>
+      )
+    },
+    warnings: {
+      title: "Gapping Warnings (Carry Δ < 12 yds)",
+      body: gappingWarnings.length === 0 ? (
+        <div style={{ color: T.textDim }}>No issues detected.</div>
+      ) : (
+        <ul className="list-disc pl-6" style={{ color: T.text }}>
+          {gappingWarnings.map((g, i) => (
+            <li key={i}><b>{g.a}</b> ↔ <b>{g.b}</b> : {g.gap.toFixed(1)} yds</li>
+          ))}
+        </ul>
+      )
+    }
+  };
 
-      <Card theme={T} title="Gapping Warnings (Carry Δ &lt; 12 yds)">
-        {gappingWarnings.length === 0 ? (
-          <div style={{ color: T.textDim }}>No issues detected.</div>
-        ) : (
-          <ul className="list-disc pl-6" style={{ color: T.text }}>
-            {gappingWarnings.map((g, i) => (
-              <li key={i}><b>{g.a}</b> ↔ <b>{g.b}</b> : {g.gap.toFixed(1)} yds</li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card theme={T} title="Future Insights">
-        <div style={{ color: T.textDim }}>
-          Add personalized recommendations, trend charts, “what to practice next,” session comparisons, etc. This section is a placeholder, more cards added as they are built.
-        </div>
-      </Card>
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      {insightsOrder.map((key) => {
+        const c = CARDS[key];
+        if (!c) return null;
+        return (
+          <div key={key}
+               draggable
+               onDragStart={onDragStart(key)}
+               onDragOver={onDragOver(key)}
+               onDrop={onDrop(key)}
+               style={{ cursor: "grab" }}>
+            <Card theme={T} title={c.title} dragHandle>
+              {c.body}
+            </Card>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/** ================= JOURNAL VIEW (WYSIWYG) ================= */
+/** ================= JOURNAL VIEW ================= */
 function JournalView({
-  theme, editorRef, value, onInputHTML, sessionLabel
+  theme, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx
 }: {
   theme: Theme;
   editorRef: React.RefObject<HTMLDivElement>;
   value: string;
   onInputHTML: (html: string) => void;
   sessionLabel: string;
+  defaultHeightPx?: number;
 }) {
   const T = theme;
 
@@ -1367,25 +1471,24 @@ function JournalView({
     onInputHTML(editorRef.current?.innerHTML || "");
   };
 
-  React.useEffect(() => {
-    // sync DOM when switching sessions
+  useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
   }, [value, editorRef]);
 
+  // Reserve room for help + toolbar
+  const RESERVED = 160;
+  const minEditorH = Math.max(420, Math.floor((defaultHeightPx || 420) - RESERVED));
+
   return (
     <div className="grid grid-cols-1 gap-8">
       <Card theme={T} title={`Journal — ${sessionLabel}`}>
-        {/* helpful paragraph */}
-        <div
-          className="mb-4 text-sm rounded-lg px-4 py-3"
-          style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}
-        >
+        <div className="mb-4 text-sm rounded-lg px-4 py-3"
+             style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}>
           {HELP_TEXT}
         </div>
 
-        {/* toolbar */}
         <div className="flex flex-wrap gap-2 mb-3">
           <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
           <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
@@ -1394,18 +1497,13 @@ function JournalView({
           <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "<h3>")} />
           <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
           <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
-          <ToolbarBtn
-            theme={T}
-            label="Link"
-            onClick={() => {
-              const url = window.prompt("Enter URL");
-              if (url) exec("createLink", url);
-            }}
-          />
+          <ToolbarBtn theme={T} label="Link" onClick={() => {
+            const url = window.prompt("Enter URL");
+            if (url) exec("createLink", url);
+          }} />
           <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
         </div>
 
-        {/* editor */}
         <div
           ref={editorRef}
           contentEditable
@@ -1414,12 +1512,12 @@ function JournalView({
           onBlur={onKeyUp}
           onPaste={onPaste}
           aria-label="Practice journal editor"
-          className="rounded-lg p-4 text-sm overflow-auto resize-y min-h-[420px]"
+          className="rounded-lg p-4 text-sm overflow-auto resize-y"
           style={{
             background: T.panel,
             border: `1px solid ${T.border}`,
             color: T.text,
-            // for browsers that ignore Tailwind resize utilities on divs:
+            minHeight: `${minEditorH}px`,
             resize: "vertical",
           }}
           data-placeholder="Start typing your journal here…"
@@ -1433,7 +1531,6 @@ function JournalView({
     </div>
   );
 }
-
 
 /** ================= Range-style dispersion (SVG) ================= */
 function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
@@ -1518,7 +1615,7 @@ function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots
         );
       })}
 
-      {/* LEFT legend (vertical list) */}
+      {/* LEFT legend */}
       <g transform={`translate(40, ${PAD_T})`}>
         <rect x={0} y={-8} width={LEGEND_W - 20} height={Math.min(innerH, clubs.length * 22)} rx={8} ry={8}
               fill={T.white} opacity={0.9} stroke={T.border} />
@@ -1563,6 +1660,95 @@ function ShotShape({
       <Box title="Straight" pct={straight.pct} n={straight.n} bg={T.greenSoft} color={T.brand} />
       <Box title="Fade" pct={fade.pct} n={fade.n} bg={T.orangeSoft} color="#F59E0B" />
     </div>
+  );
+}
+
+/** ================= DistanceBoxChart (Insights) ================= */
+function DistanceBoxChart({
+  theme,
+  shots,
+  clubs,
+  metric = "total"
+}: {
+  theme: Theme;
+  shots: Shot[];
+  clubs: string[];
+  metric?: "total" | "carry";
+}) {
+  const T = theme;
+  const get = (s: Shot) => metric === "total" ? s.TotalDistance_yds : s.CarryDistance_yds;
+
+  const rows = clubs.map((club) => {
+    const valsClub = shots.filter(s => s.Club === club).map(get).filter((v): v is number => v != null);
+    if (!valsClub.length) return null;
+    const min = Math.min(...valsClub);
+    const max = Math.max(...valsClub);
+    const q1 = quantile(valsClub, 0.25);
+    const q3 = quantile(valsClub, 0.75);
+    const med = quantile(valsClub, 0.5);
+    const avg = mean(valsClub);
+    return {
+      club,
+      min, max, q1, q3, median: med, mean: avg,
+      rangeStart: min,
+      rangeWidth: Math.max(0, max - min),
+      iqrStart: q1,
+      iqrWidth: Math.max(0, q3 - q1),
+    };
+  }).filter(Boolean) as any[];
+
+  rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
+
+  const rangeColor = T.border;
+  const boxColor   = T.brandTint;
+  const meanStroke = T.white;
+  const medianStroke = T.brand;
+
+  const Mark = ({ cx, cy, stroke, w = 12 }: any) => (
+    <g>
+      <line x1={cx - w/2} x2={cx + w/2} y1={cy} y2={cy} stroke={stroke} strokeWidth={3} />
+    </g>
+  );
+
+  const Tip = ({ active, payload }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    const r = payload[0].payload;
+    return (
+      <div style={{ background: T.panel, border:`1px solid ${T.border}`, color: T.text, padding: 8, borderRadius: 8 }}>
+        <div><b>{r.club}</b></div>
+        <div style={{ fontSize: 12, opacity: .9 }}>
+          <div>Min: {r.min.toFixed(1)}</div>
+          <div>Q1: {r.q1.toFixed(1)}</div>
+          <div>Median: {r.median.toFixed(1)}</div>
+          <div>Mean: {r.mean.toFixed(1)}</div>
+          <div>Q3: {r.q3.toFixed(1)}</div>
+          <div>Max: {r.max.toFixed(1)}</div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <ResponsiveContainer width="100%" height={360}>
+      <ComposedChart data={rows} layout="vertical" margin={{ top: 10, right: 16, bottom: 10, left: 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+        <XAxis type="number" stroke={T.textDim} />
+        <YAxis type="category" dataKey="club" stroke={T.textDim} width={110} />
+        <Tooltip content={<Tip />} />
+
+        {/* Min→Max line */}
+        <Bar dataKey="rangeStart" stackId="range" fill="transparent" isAnimationActive={false} />
+        <Bar dataKey="rangeWidth" stackId="range" fill={rangeColor} barSize={6} radius={[4,4,4,4]} />
+
+        {/* Q1→Q3 box */}
+        <Bar dataKey="iqrStart" stackId="iqr" fill="transparent" isAnimationActive={false} />
+        <Bar dataKey="iqrWidth" stackId="iqr" fill={boxColor} barSize={14} radius={[6,6,6,6]} opacity={0.9} />
+
+        {/* Median & Mean markers */}
+        <Scatter data={rows} name="Median" shape={(p: any) => <Mark {...p} stroke={medianStroke} />} dataKey="median" />
+        <Scatter data={rows} name="Mean"   shape={(p: any) => <Mark {...p} stroke={meanStroke} />} dataKey="mean" />
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 
@@ -1667,7 +1853,7 @@ function IconMoon() {
   );
 }
 
-/** ================= UTIL: CSV export ================= */
+/** ================= UTIL: numbers & CSV ================= */
 function fmtNum(v: number | undefined, fixed: number, suffix: string) {
   return v === undefined ? "-" : `${v.toFixed(fixed)}${suffix}`;
 }
