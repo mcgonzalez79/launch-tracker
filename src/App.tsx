@@ -447,15 +447,26 @@ export default function App() {
   });
 
   // Insights re-ordering
+  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"];
+
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
-      // new defaults include PB & weaknesses
-      return raw ? JSON.parse(raw) : ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"];
-    } catch { return ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"]; }
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) {
+        // Keep saved order, append any new defaults (no duplicates)
+        return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
+      }
+      return INSIGHTS_DEFAULT;
+    } catch {
+      return INSIGHTS_DEFAULT;
+    }
   });
+  
   useEffect(() => {
-    try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {}
+    try {
+      localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder));
+    } catch {}
   }, [insightsOrder]);
 
   const [sessionNotes, setSessionNotes] = useState<Record<string, string>>(() => {
