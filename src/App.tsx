@@ -107,6 +107,7 @@ type ClubRow = {
 };
 
 type Msg = { id: number; text: string; type?: "info" | "success" | "warn" | "error" };
+type ViewKey = "dashboard" | "insights" | "journal";
 
 /** ================= STATS & HELPERS ================= */
 const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
@@ -363,7 +364,7 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
   return shots;
 }
 
-/** ===== Fingerprint for duplicate detection (robust across sessions/exports) ===== */
+/** ===== Fingerprint for duplicate detection ===== */
 function fpOf(s: Shot): string {
   const r = (x?: number, d = 2) => (x == null ? "" : Number(x).toFixed(d));
   const t = s.Timestamp ? new Date(s.Timestamp).getTime() : "";
@@ -381,11 +382,10 @@ function fpOf(s: Shot): string {
   ].join("|");
 }
 
-/** ===== Stable color for a club (consistent across filters) ===== */
+/** ===== Stable color for a club ===== */
 function colorForClub(club: string, clubsAll: string[], palette: string[]) {
   const idx = clubsAll.findIndex(c => c.toLowerCase() === club.toLowerCase());
   if (idx >= 0) return palette[idx % palette.length];
-  // fallback stable hash
   let h = 0;
   for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
   return palette[h % palette.length];
@@ -399,6 +399,12 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:theme", dark ? "dark" : "light"); } catch {} }, [dark]);
   const T = dark ? DARK : LIGHT;
+
+  // VIEW (Dashboard / Insights / Journal)
+  const [view, setView] = useState<ViewKey>(() => {
+    try { return (localStorage.getItem("launch-tracker:view") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:view", view); } catch {} }, [view]);
 
   // DATA + UI state
   const [shots, setShots] = useState<Shot[]>([]);
@@ -420,7 +426,22 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
   });
 
+  // JOURNAL (WYSIWYG) — per-session content
+  const journalKey = sessionFilter === "ALL" ? "GLOBAL" : (sessionFilter || "Unknown Session");
+  const [journalHTML, setJournalHTML] = useState<string>(() => {
+    try { return localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""; } catch { return ""; }
+  });
+  useEffect(() => {
+    // load content when session changes
+    try { setJournalHTML(localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""); } catch {}
+  }, [journalKey]);
+  useEffect(() => {
+    // autosave
+    try { localStorage.setItem(`launch-tracker:journal:${journalKey}`, journalHTML); } catch {}
+  }, [journalKey, journalHTML]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -464,7 +485,7 @@ export default function App() {
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  // Small built-in fallback sample (used only if /sampledata.csv not found)
+  // Small built-in fallback sample
   const builtinSample = () => {
     const id = `Sample ${new Date().toLocaleString()}`;
     return [
@@ -514,13 +535,10 @@ export default function App() {
     const dataRows = rowsRaw.slice(startRow);
     const fallbackId = `${filename.replace(/\.[^.]+$/, "")} • ${new Date().toLocaleString()}`;
 
-    let totalRows = 0;
     const mapped: Shot[] = [];
-
     if (clubIdx !== -1) {
       for (const rowArr of dataRows) {
         if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
-        totalRows++;
 
         const obj: any = {};
         rowArr.forEach((cell: any, i: number) => {
@@ -556,7 +574,6 @@ export default function App() {
     // Fallback parser if needed
     let finalShots: Shot[] = mapped;
     let usedFallback = false;
-    let fallbackRowsTotal = 0;
 
     if (textFromCSV && (weakMapping || mapped.length === 0)) {
       const weird = parseWeirdLaunchCSV(textFromCSV);
@@ -567,7 +584,6 @@ export default function App() {
         if (preferFallback) {
           finalShots = ws2;
           usedFallback = true;
-          fallbackRowsTotal = weird.dataRows.length;
         }
       }
     }
@@ -589,12 +605,12 @@ export default function App() {
 
     if (usedFallback) {
       pushMsg(
-        `Imported ${deduped.length}/${fallbackRowsTotal} rows from "${filename}" via fallback parser. ${dupCount} duplicates skipped.`,
+        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}" via fallback parser. ${dupCount} duplicates skipped.`,
         "success"
       );
     } else if (finalShots.length) {
       pushMsg(
-        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}" (sheet "${wb.SheetNames[0]}"). Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}. ${dupCount} duplicates skipped.`,
+        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}". Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}. ${dupCount} duplicates skipped.`,
         "success"
       );
     } else {
@@ -641,7 +657,6 @@ export default function App() {
       const wb = XLSX.read(text, { type: "string" });
       processWorkbook(wb, text, "sampledata.csv");
     } catch {
-      // fallback to tiny built-in demo
       const sample = builtinSample();
       const existing = new Set(shots.map(fpOf));
       const deduped = sample.filter(s => !existing.has(fpOf(s)));
@@ -795,7 +810,7 @@ export default function App() {
 
   const hasData = filteredOutliers.length > 0;
 
-  /** Delete a session (and helper to delete all) */
+  /** Delete a session / all */
   const deleteSession = () => {
     if (sessionFilter === "ALL") return;
     const name = sessionFilter;
@@ -818,142 +833,7 @@ export default function App() {
     pushMsg("All data deleted.", "success");
   };
 
-  // ---- Card registry (for drag-reorder) ----
-  const CARDS: Record<string, { title: string; render: () => JSX.Element }> = {
-    kpis: {
-      title: "Key Metrics",
-      render: () => (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <KPI theme={T} label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={T.brand} />
-            <KPI theme={T} label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={T.brandTint} />
-            <KPI theme={T} label="Carry Consistency" value={fmtNum(kpis.sdCarry, 1, " sd")} color={T.brand} />
-            <KPI theme={T} label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={T.brandTint} />
-            <KPI theme={T} label="Avg Spin" value={fmtNum(kpis.avgSpin, 0, " rpm")} color={T.brand} />
-            <KPI theme={T} label="Shots" value={String(kpis.shots ?? 0)} color={T.text} />
-          </div>
-          <div className="text-xs mt-2" style={{ color: T.textDim }}>
-            Using <b>{filteredOutliers.length}</b> shots after filters (of {filtered.length} filtered, {shots.length} imported).
-          </div>
-        </>
-      )
-    },
-    shape: {
-      title: "Shot Shape Distribution",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
-      ))
-    },
-    dispersion: {
-      title: "Dispersion — Driving Range View (50y to max)",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <div style={{ width: "100%", height: 420 }}>
-          <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
-        </div>
-      ))
-    },
-    gap: {
-      title: "Gap Chart — Carry vs Total by Club",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <div style={{ width: "100%", height: 340 }}>
-          <ResponsiveContainer>
-            <BarChart data={tableRows}>
-              <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-              <XAxis dataKey="club" stroke={T.textDim} />
-              <YAxis stroke={T.textDim} />
-              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
-              <Legend wrapperStyle={{ color: T.text }} />
-              <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
-              <Bar dataKey="avgTotal" name="Total (avg)" fill={dark ? DARK.brand : TOTAL_BAR_LIGHT} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ))
-    },
-    eff: {
-      title: "Efficiency — Club Speed vs Ball Speed",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <div style={{ width: "100%", height: 340 }}>
-          <ResponsiveContainer>
-            <ScatterChart>
-              <CartesianGrid stroke={T.border} />
-              <XAxis type="number" dataKey="ClubSpeed_mph" name="Club Speed" unit=" mph" stroke={T.textDim}>
-                <Label value="Club Speed (mph)" position="insideBottom" offset={-5} fill={T.textDim} />
-              </XAxis>
-              <YAxis type="number" dataKey="BallSpeed_mph" name="Ball Speed" unit=" mph" stroke={T.textDim}>
-                <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" fill={T.textDim} />
-              </YAxis>
-              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
-              {clubs.map((c) => (
-                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
-              ))}
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-      ))
-    },
-    launchspin: {
-      title: "Launch vs Spin — bubble size is Carry",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <div style={{ width: "100%", height: 340 }}>
-          <ResponsiveContainer>
-            <ScatterChart>
-              <CartesianGrid stroke={T.border} />
-              <XAxis type="number" dataKey="LaunchAngle_deg" name="Launch Angle" unit=" °" stroke={T.textDim}>
-                <Label value="Launch Angle (°)" position="insideBottom" offset={-5} fill={T.textDim} />
-              </XAxis>
-              <YAxis type="number" dataKey="SpinRate_rpm" name="Spin Rate" unit=" rpm" stroke={T.textDim}>
-                <Label value="Spin Rate (rpm)" angle={-90} position="insideLeft" fill={T.textDim} />
-              </YAxis>
-              <ZAxis type="number" dataKey="CarryDistance_yds" range={[30, 400]} />
-              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
-              {clubs.map((c) => (
-                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
-              ))}
-            </ScatterChart>
-          </ResponsiveContainer>
-        </div>
-      ))
-    },
-    table: {
-      title: "Club Averages",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm" style={{ color: T.text }}>
-            <thead>
-              <tr className="text-left" style={{ color: T.textDim }}>
-                <Th theme={T}>Club</Th><Th theme={T}>Shots</Th><Th theme={T}>Avg Carry</Th><Th theme={T}>Avg Total</Th><Th theme={T}>Carry SD</Th>
-                <Th theme={T}>Avg Smash</Th><Th theme={T}>Avg Spin</Th><Th theme={T}>Avg Club Spd</Th><Th theme={T}>Avg Ball Spd</Th><Th theme={T}>Avg Launch</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.map((r) => (
-                <tr key={r.club} className="border-t" style={{ borderColor: T.border }}>
-                  <Td>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-3 h-3 inline-block rounded-full" style={{ background: colorForClub(r.club, clubs, clubPalette) }} />
-                      {r.club}
-                    </span>
-                  </Td>
-                  <Td>{r.count}</Td>
-                  <Td>{r.avgCarry.toFixed(1)}</Td>
-                  <Td>{r.avgTotal.toFixed(1)}</Td>
-                  <Td>{r.sdCarry.toFixed(1)}</Td>
-                  <Td>{r.avgSmash.toFixed(3)}</Td>
-                  <Td>{Math.round(r.avgSpin)}</Td>
-                  <Td>{r.avgCS.toFixed(1)}</Td>
-                  <Td>{r.avgBS.toFixed(1)}</Td>
-                  <Td>{r.avgLA.toFixed(1)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))
-    },
-  };
-
-  // DnD handlers
+  // DnD handlers (dashboard cards)
   const dragKeyRef = useRef<string | null>(null);
   const onDragStart = (key: string) => (e: React.DragEvent) => { dragKeyRef.current = key; e.dataTransfer.effectAllowed = "move"; };
   const onDragOver = (overKey: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
@@ -983,10 +863,22 @@ export default function App() {
       {/* Header */}
       <header className="px-6 py-4" style={{ background: T.brand, color: "#fff" }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-wide">Launch Tracker • Golf Launch Monitor Dashboard</h1>
-          <div className="flex gap-2 items-center">
-            <button onClick={() => setDark(!dark)} className="px-3 py-2 rounded-lg font-medium border" style={{ background: "#fff", color: T.brand, borderColor: "#fff" }}>
-              {dark ? "Light mode" : "Dark Mode"}
+          <h1 className="text-xl font-semibold tracking-wide">Launch Tracker</h1>
+
+          <div className="flex items-center gap-2">
+            {/* View switch: Dashboard / Insights / Journal */}
+            <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
+            <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
+            <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
+
+            {/* Theme toggle (icon) */}
+            <button
+              onClick={() => setDark(!dark)}
+              className="ml-3 p-2 rounded-lg border"
+              style={{ background: "#ffffff10", borderColor: "#ffffff55" }}
+              title={dark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {dark ? <IconSun /> : <IconMoon />}
             </button>
           </div>
         </div>
@@ -1168,26 +1060,39 @@ export default function App() {
           </Card>
         </aside>
 
-        {/* RIGHT COLUMN: Draggable Cards */}
+        {/* RIGHT COLUMN: content by VIEW */}
         <section className="col-span-12 lg:col-span-9">
-          <div className="grid grid-cols-1 gap-8">
-            {cardOrder.map((key) => {
-              const card = CARDS[key];
-              if (!card) return null;
-              return (
-                <div key={key}
-                     draggable
-                     onDragStart={onDragStart(key)}
-                     onDragOver={onDragOver(key)}
-                     onDrop={onDrop(key)}
-                     style={{ cursor: "grab" }}>
-                  <Card theme={T} title={card.title} dragHandle>
-                    {card.render()}
-                  </Card>
-                </div>
-              );
-            })}
-          </div>
+          {view === "dashboard" && (
+            <DashboardCards
+              theme={T}
+              cardOrder={cardOrder}
+              setCardOrder={setCardOrder}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              hasData={hasData}
+              kpis={kpis}
+              filteredOutliers={filteredOutliers}
+              filtered={filtered}
+              shots={shots}
+              tableRows={tableRows}
+              clubs={clubs}
+            />
+          )}
+
+          {view === "insights" && (
+            <InsightsView theme={T} tableRows={tableRows} filteredOutliers={filteredOutliers} clubs={clubs} />
+          )}
+
+          {view === "journal" && (
+            <JournalView
+              theme={T}
+              editorRef={editorRef}
+              value={journalHTML}
+              onInputHTML={setJournalHTML}
+              sessionLabel={journalKey}
+            />
+          )}
         </section>
       </main>
 
@@ -1198,9 +1103,307 @@ export default function App() {
   );
 }
 
-/** ================= Range-style dispersion (SVG) =================
- *  Legend uses the full club list; points use stable colorForClub()
- */
+/** ================= DASHBOARD CARDS ================= */
+function DashboardCards(props: {
+  theme: Theme;
+  cardOrder: string[];
+  setCardOrder: (v: string[]) => void;
+  onDragStart: (k: string) => (e: React.DragEvent) => void;
+  onDragOver: (k: string) => (e: React.DragEvent) => void;
+  onDrop: (k: string) => (e: React.DragEvent) => void;
+  hasData: boolean;
+  kpis: any;
+  filteredOutliers: Shot[];
+  filtered: Shot[];
+  shots: Shot[];
+  tableRows: ClubRow[];
+  clubs: string[];
+}) {
+  const {
+    theme: T, cardOrder, onDragStart, onDragOver, onDrop,
+    hasData, kpis, filteredOutliers, filtered, shots, tableRows, clubs
+  } = props;
+
+  const CARDS: Record<string, { title: string; render: () => JSX.Element }> = {
+    kpis: {
+      title: "Key Metrics",
+      render: () => (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+            <KPI theme={T} label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={T.brand} />
+            <KPI theme={T} label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={T.brandTint} />
+            <KPI theme={T} label="Carry Consistency" value={fmtNum(kpis.sdCarry, 1, " sd")} color={T.brand} />
+            <KPI theme={T} label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={T.brandTint} />
+            <KPI theme={T} label="Avg Spin" value={fmtNum(kpis.avgSpin, 0, " rpm")} color={T.brand} />
+            <KPI theme={T} label="Shots" value={String(kpis.shots ?? 0)} color={T.text} />
+          </div>
+          <div className="text-xs mt-2" style={{ color: T.textDim }}>
+            Using <b>{filteredOutliers.length}</b> shots after filters (of {filtered.length} filtered, {shots.length} imported).
+          </div>
+        </>
+      )
+    },
+    shape: {
+      title: "Shot Shape Distribution",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
+      ))
+    },
+    dispersion: {
+      title: "Dispersion — Driving Range View (50y to max)",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <div style={{ width: "100%", height: 420 }}>
+          <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} palette={clubPalette} />
+        </div>
+      ))
+    },
+    gap: {
+      title: "Gap Chart — Carry vs Total by Club",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <div style={{ width: "100%", height: 340 }}>
+          <ResponsiveContainer>
+            <BarChart data={tableRows}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+              <XAxis dataKey="club" stroke={T.textDim} />
+              <YAxis stroke={T.textDim} />
+              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
+              <Legend wrapperStyle={{ color: T.text }} />
+              <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
+              <Bar dataKey="avgTotal" name="Total (avg)" fill={DARK.brand} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ))
+    },
+    eff: {
+      title: "Efficiency — Club Speed vs Ball Speed",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <div style={{ width: "100%", height: 340 }}>
+          <ResponsiveContainer>
+            <ScatterChart>
+              <CartesianGrid stroke={T.border} />
+              <XAxis type="number" dataKey="ClubSpeed_mph" name="Club Speed" unit=" mph" stroke={T.textDim}>
+                <Label value="Club Speed (mph)" position="insideBottom" offset={-5} fill={T.textDim} />
+              </XAxis>
+              <YAxis type="number" dataKey="BallSpeed_mph" name="Ball Speed" unit=" mph" stroke={T.textDim}>
+                <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" fill={T.textDim} />
+              </YAxis>
+              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
+              {clubs.map((c) => (
+                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      ))
+    },
+    launchspin: {
+      title: "Launch vs Spin — bubble size is Carry",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <div style={{ width: "100%", height: 340 }}>
+          <ResponsiveContainer>
+            <ScatterChart>
+              <CartesianGrid stroke={T.border} />
+              <XAxis type="number" dataKey="LaunchAngle_deg" name="Launch Angle" unit=" °" stroke={T.textDim}>
+                <Label value="Launch Angle (°)" position="insideBottom" offset={-5} fill={T.textDim} />
+              </XAxis>
+              <YAxis type="number" dataKey="SpinRate_rpm" name="Spin Rate" unit=" rpm" stroke={T.textDim}>
+                <Label value="Spin Rate (rpm)" angle={-90} position="insideLeft" fill={T.textDim} />
+              </YAxis>
+              <ZAxis type="number" dataKey="CarryDistance_yds" range={[30, 400]} />
+              <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v: any, n: any) => [v, n]} />
+              {clubs.map((c) => (
+                <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={colorForClub(c, clubs, clubPalette)} />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      ))
+    },
+    table: {
+      title: "Club Averages",
+      render: () => (!hasData ? <EmptyChart theme={T} /> : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm" style={{ color: T.text }}>
+            <thead>
+              <tr className="text-left" style={{ color: T.textDim }}>
+                <Th theme={T}>Club</Th><Th theme={T}>Shots</Th><Th theme={T}>Avg Carry</Th><Th theme={T}>Avg Total</Th><Th theme={T}>Carry SD</Th>
+                <Th theme={T}>Avg Smash</Th><Th theme={T}>Avg Spin</Th><Th theme={T}>Avg Club Spd</Th><Th theme={T}>Avg Ball Spd</Th><Th theme={T}>Avg Launch</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((r) => (
+                <tr key={r.club} className="border-t" style={{ borderColor: T.border }}>
+                  <Td>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-3 h-3 inline-block rounded-full" style={{ background: colorForClub(r.club, clubs, clubPalette) }} />
+                      {r.club}
+                    </span>
+                  </Td>
+                  <Td>{r.count}</Td>
+                  <Td>{r.avgCarry.toFixed(1)}</Td>
+                  <Td>{r.avgTotal.toFixed(1)}</Td>
+                  <Td>{r.sdCarry.toFixed(1)}</Td>
+                  <Td>{r.avgSmash.toFixed(3)}</Td>
+                  <Td>{Math.round(r.avgSpin)}</Td>
+                  <Td>{r.avgCS.toFixed(1)}</Td>
+                  <Td>{r.avgBS.toFixed(1)}</Td>
+                  <Td>{r.avgLA.toFixed(1)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))
+    },
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      {cardOrder.map((key) => {
+        const card = CARDS[key];
+        if (!card) return null;
+        return (
+          <div key={key}
+               draggable
+               onDragStart={onDragStart(key)}
+               onDragOver={onDragOver(key)}
+               onDrop={onDrop(key)}
+               style={{ cursor: "grab" }}>
+            <Card theme={T} title={card.title} dragHandle>
+              {card.render()}
+            </Card>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** ================= INSIGHTS VIEW (placeholder + a few basics) ================= */
+function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Theme; tableRows: ClubRow[]; filteredOutliers: Shot[]; clubs: string[] }) {
+  const T = theme;
+
+  // Simple insights now; you can expand later
+  const longest = filteredOutliers.reduce<{ club: string; carry: number } | null>((acc, s) => {
+    const c = s.CarryDistance_yds ?? -Infinity;
+    if (c <= 0) return acc;
+    if (!acc || c > acc.carry) return { club: s.Club, carry: c };
+    return acc;
+  }, null);
+
+  const consistent = useMemo(() => {
+    const eligible = tableRows.filter(r => r.count >= 5 && r.sdCarry > 0);
+    if (!eligible.length) return null;
+    const best = eligible.reduce((a, b) => (a.sdCarry <= b.sdCarry ? a : b));
+    return best;
+  }, [tableRows]);
+
+  const gappingWarnings = useMemo(() => {
+    const sorted = [...tableRows].sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
+    const bad: { a: string; b: string; gap: number }[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const gap = Math.abs(sorted[i].avgCarry - sorted[i - 1].avgCarry);
+      if (gap < 12) bad.push({ a: sorted[i - 1].club, b: sorted[i].club, gap });
+    }
+    return bad;
+  }, [tableRows]);
+
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      <Card theme={T} title="Highlights">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds` : "-"} color={T.brand} />
+          <KPI theme={T} label="Most Consistent (club)" value={consistent ? `${consistent.club} (${consistent.sdCarry.toFixed(1)} sd)` : "-"} color={T.brandTint} />
+          <KPI theme={T} label="Clubs with Tight Gap" value={`${gappingWarnings.length}`} color={T.text} />
+        </div>
+      </Card>
+
+      <Card theme={T} title="Gapping Warnings (Carry Δ &lt; 12 yds)">
+        {gappingWarnings.length === 0 ? (
+          <div style={{ color: T.textDim }}>No issues detected.</div>
+        ) : (
+          <ul className="list-disc pl-6" style={{ color: T.text }}>
+            {gappingWarnings.map((g, i) => (
+              <li key={i}><b>{g.a}</b> ↔ <b>{g.b}</b> : {g.gap.toFixed(1)} yds</li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card theme={T} title="Future Insights">
+        <div style={{ color: T.textDim }}>
+          Add personalized recommendations, trend charts, “what to practice next,” session comparisons, and more. This section is a placeholder—drop in cards here as we build them.
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** ================= JOURNAL VIEW (WYSIWYG) ================= */
+function JournalView({
+  theme, editorRef, value, onInputHTML, sessionLabel
+}: { theme: Theme; editorRef: React.RefObject<HTMLDivElement>; value: string; onInputHTML: (html: string) => void; sessionLabel: string; }) {
+  const T = theme;
+
+  const exec = (cmd: string, arg?: string) => {
+    document.execCommand(cmd, false, arg);
+    // sync state
+    onInputHTML(editorRef.current?.innerHTML || "");
+  };
+  const onKeyUp = () => onInputHTML(editorRef.current?.innerHTML || "");
+  const onPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
+  };
+  useEffect(() => {
+    // Keep DOM in sync when switching sessions
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || "";
+    }
+  }, [value, editorRef]);
+
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      <Card theme={T} title={`Journal — ${sessionLabel}`}>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
+          <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
+          <ToolbarBtn theme={T} label={<u>U</u>} onClick={() => exec("underline")} />
+          <ToolbarBtn theme={T} label="H2" onClick={() => exec("formatBlock", "<h2>")} />
+          <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "<h3>")} />
+          <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
+          <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
+          <ToolbarBtn theme={T} label="Link" onClick={() => {
+            const url = window.prompt("Enter URL");
+            if (url) exec("createLink", url);
+          }} />
+          <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
+        </div>
+
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onKeyUp={onKeyUp}
+          onBlur={onKeyUp}
+          onPaste={onPaste}
+          className="min-h-[280px] rounded-lg p-4 text-sm"
+          style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }}
+          placeholder="Write your practice journal here…"
+        />
+        {!value && (
+          <div className="mt-2 text-xs" style={{ color: T.textDim }}>
+            Tip: your journal auto-saves per session ({sessionLabel}). Use the toolbar to format.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** ================= Range-style dispersion (SVG) ================= */
 function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
   const T = theme;
 
@@ -1382,6 +1585,55 @@ function ClubList({ theme, options, selected, onChange, palette }: { theme: Them
 function EmptyChart({ theme }: { theme: Theme }) { return <div style={{ padding: 16, color: theme.textDim }}>No shots in this range.</div>; }
 function Th({ children, theme }: { children: React.ReactNode; theme: Theme }) { return <th className="py-2 pr-4" style={{ color: theme.textDim }}>{children}</th>; }
 function Td({ children }: { children: React.ReactNode }) { return <td className="py-2 pr-4">{children}</td>; }
+function TopTab({ theme, label, active, onClick }: { theme: Theme; label: string; active: boolean; onClick: () => void }) {
+  const T = theme;
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-2 rounded-lg text-sm border"
+      style={{
+        background: active ? "#ffffff" : "#ffffff22",
+        borderColor: "#ffffff55",
+        color: active ? T.brand : "#fff",
+        fontWeight: active ? 600 : 500
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+function ToolbarBtn({ theme, label, onClick }: { theme: Theme; label: React.ReactNode; onClick: () => void }) {
+  const T = theme;
+  return (
+    <button onClick={onClick} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
+      {label}
+    </button>
+  );
+}
+function IconSun() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFD166" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="12" r="4" fill="#FFD166" />
+      <g stroke="#fff" strokeLinecap="round">
+        <line x1="12" y1="2" x2="12" y2="4" />
+        <line x1="12" y1="20" x2="12" y2="22" />
+        <line x1="2" y1="12" x2="4" y2="12" />
+        <line x1="20" y1="12" x2="22" y2="12" />
+        <line x1="4.93" y1="4.93" x2="6.34" y2="6.34" />
+        <line x1="17.66" y1="17.66" x2="19.07" y2="19.07" />
+        <line x1="4.93" y1="19.07" x2="6.34" y2="17.66" />
+        <line x1="17.66" y1="6.34" x2="19.07" y2="4.93" />
+      </g>
+    </svg>
+  );
+}
+function IconMoon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="currentColor" strokeWidth="1.5">
+      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+    </svg>
+  );
+}
 
 /** ================= UTIL: CSV export ================= */
 function fmtNum(v: number | undefined, fixed: number, suffix: string) {
