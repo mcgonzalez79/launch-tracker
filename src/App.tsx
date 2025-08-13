@@ -986,7 +986,7 @@ export default function App() {
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker • Golf Launch Monitor Dashboard</h1>
           <div className="flex gap-2 items-center">
             <button onClick={() => setDark(!dark)} className="px-3 py-2 rounded-lg font-medium border" style={{ background: "#fff", color: T.brand, borderColor: "#fff" }}>
-              {dark ? "Light mode" : "Dark mode"}
+              {dark ? "Light mode" : "Dark Mode"}
             </button>
           </div>
         </div>
