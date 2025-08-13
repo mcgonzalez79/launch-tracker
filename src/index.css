@@ -5,3 +5,10 @@
 /* Optional: small tweaks so things feel nice even without custom CSS */
 html, body, #root { height: 100%; }
 body { margin: 0; }
+
+/* Show a placeholder for the contentEditable when empty */
+[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8; /* slate-400 */
+}
+
