@@ -1333,7 +1333,7 @@ function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Th
 
       <Card theme={T} title="Future Insights">
         <div style={{ color: T.textDim }}>
-          Add personalized recommendations, trend charts, “what to practice next,” session comparisons, and more. This section is a placeholder—drop in cards here as we build them.
+          Add personalized recommendations, trend charts, “what to practice next,” session comparisons, etc. This section is a placeholder, more cards added as they are built.
         </div>
       </Card>
     </div>
