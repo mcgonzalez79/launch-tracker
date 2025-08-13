@@ -1343,22 +1343,28 @@ function InsightsView({ theme, tableRows, filteredOutliers, clubs }: { theme: Th
 /** ================= JOURNAL VIEW (WYSIWYG) ================= */
 function JournalView({
   theme, editorRef, value, onInputHTML, sessionLabel
-}: { theme: Theme; editorRef: React.RefObject<HTMLDivElement>; value: string; onInputHTML: (html: string) => void; sessionLabel: string; }) {
+}: {
+  theme: Theme;
+  editorRef: React.RefObject<HTMLDivElement>;
+  value: string;
+  onInputHTML: (html: string) => void;
+  sessionLabel: string;
+}) {
   const T = theme;
 
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
-    // sync state
     onInputHTML(editorRef.current?.innerHTML || "");
   };
   const onKeyUp = () => onInputHTML(editorRef.current?.innerHTML || "");
-  const onPaste = (e: React.ClipboardEvent) => {
+  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
     const text = e.clipboardData.getData("text/plain");
     document.execCommand("insertText", false, text);
+    onInputHTML(editorRef.current?.innerHTML || "");
   };
-  useEffect(() => {
-    // Keep DOM in sync when switching sessions
+
+  React.useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
@@ -1375,13 +1381,18 @@ function JournalView({
           <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "<h3>")} />
           <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
           <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
-          <ToolbarBtn theme={T} label="Link" onClick={() => {
-            const url = window.prompt("Enter URL");
-            if (url) exec("createLink", url);
-          }} />
+          <ToolbarBtn
+            theme={T}
+            label="Link"
+            onClick={() => {
+              const url = window.prompt("Enter URL");
+              if (url) exec("createLink", url);
+            }}
+          />
           <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
         </div>
 
+        {/* NOTE: removed invalid `placeholder` prop on div */}
         <div
           ref={editorRef}
           contentEditable
@@ -1391,7 +1402,7 @@ function JournalView({
           onPaste={onPaste}
           className="min-h-[280px] rounded-lg p-4 text-sm"
           style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }}
-          placeholder="Write your practice journal here…"
+          data-placeholder="Write your practice journal here…"
         />
         {!value && (
           <div className="mt-2 text-xs" style={{ color: T.textDim }}>
@@ -1402,6 +1413,7 @@ function JournalView({
     </div>
   );
 }
+
 
 /** ================= Range-style dispersion (SVG) ================= */
 function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
