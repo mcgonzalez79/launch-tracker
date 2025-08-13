@@ -3,6 +3,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/launch-tracker/',   // EXACTLY your repo name with slashes
+  base: './',            // <- robust for any branch/subpath
   build: { outDir: 'dist' },
 });
