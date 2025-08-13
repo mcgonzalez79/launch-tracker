@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, Label, ComposedChart
+  Scatter, ScatterChart, ZAxis, Label, ComposedChart, ReferenceLine 
 } from "recharts";
 import * as XLSX from "xlsx";
 
@@ -1678,79 +1678,101 @@ function DistanceBoxChart({
   const T = theme;
   const get = (s: Shot) => metric === "total" ? s.TotalDistance_yds : s.CarryDistance_yds;
 
-  const rows = clubs.map((club) => {
-    const valsClub = shots.filter(s => s.Club === club).map(get).filter((v): v is number => v != null);
-    if (!valsClub.length) return null;
-    const min = Math.min(...valsClub);
-    const max = Math.max(...valsClub);
-    const q1 = quantile(valsClub, 0.25);
-    const q3 = quantile(valsClub, 0.75);
-    const med = quantile(valsClub, 0.5);
-    const avg = mean(valsClub);
-    return {
-      club,
-      min, max, q1, q3, median: med, mean: avg,
-      rangeStart: min,
-      rangeWidth: Math.max(0, max - min),
-      iqrStart: q1,
-      iqrWidth: Math.max(0, q3 - q1),
-    };
-  }).filter(Boolean) as any[];
+  // Build stats per club ONLY for clubs that have data, then sort by your logical order (Driver → LW)
+  const rows = clubs
+    .map((club) => {
+      const vals = shots.filter(s => s.Club === club).map(get).filter((v): v is number => v != null);
+      if (!vals.length) return null;
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const q1 = quantile(vals, 0.25);
+      const q3 = quantile(vals, 0.75);
+      const med = quantile(vals, 0.5);
+      const avg = mean(vals);
+      return {
+        club,
+        min, max, q1, q3, median: med, mean: avg,
+        rangeStart: min,
+        rangeWidth: Math.max(0, max - min),
+        iqrStart: q1,
+        iqrWidth: Math.max(0, q3 - q1),
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => orderIndex(a.club) - orderIndex(b.club)) as any[];
 
-  rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
+  if (!rows.length) {
+    return <div style={{ padding: 16, color: T.textDim }}>No shots for this selection.</div>;
+  }
 
-  const rangeColor = T.border;
-  const boxColor   = T.brandTint;
-  const meanStroke = T.white;
-  const medianStroke = T.brand;
+  // Colors & marker widths
+  const rangeColor   = T.border;      // whisker (min→max)
+  const boxColor     = T.brand;       // Q1→Q3
+  const meanStroke   = T.white;       // mean tick
+  const medianStroke = T.brandTint;   // median tick
+  const tickHalfW    = 7;             // half-length of the little tick
 
-  const Mark = ({ cx, cy, stroke, w = 12 }: any) => (
-    <g>
-      <line x1={cx - w/2} x2={cx + w/2} y1={cy} y2={cy} stroke={stroke} strokeWidth={3} />
-    </g>
-  );
-
-  const Tip = ({ active, payload }: any) => {
-    if (!active || !payload || !payload.length) return null;
-    const r = payload[0].payload;
-    return (
-      <div style={{ background: T.panel, border:`1px solid ${T.border}`, color: T.text, padding: 8, borderRadius: 8 }}>
-        <div><b>{r.club}</b></div>
-        <div style={{ fontSize: 12, opacity: .9 }}>
-          <div>Min: {r.min.toFixed(1)}</div>
-          <div>Q1: {r.q1.toFixed(1)}</div>
-          <div>Median: {r.median.toFixed(1)}</div>
-          <div>Mean: {r.mean.toFixed(1)}</div>
-          <div>Q3: {r.q3.toFixed(1)}</div>
-          <div>Max: {r.max.toFixed(1)}</div>
-        </div>
-      </div>
-    );
-  };
+  // Compute a nice x-domain (adds padding on both ends)
+  const xMin = Math.min(...rows.map(r => r.min));
+  const xMax = Math.max(...rows.map(r => r.max));
+  const pad  = Math.max(5, Math.round((xMax - xMin) * 0.05));
+  const domain: [number, number] = [Math.max(0, xMin - pad), xMax + pad];
 
   return (
     <ResponsiveContainer width="100%" height={360}>
-      <ComposedChart data={rows} layout="vertical" margin={{ top: 10, right: 16, bottom: 10, left: 16 }}>
+      <ComposedChart
+        data={rows}
+        layout="vertical"
+        margin={{ top: 10, right: 16, bottom: 10, left: 16 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-        <XAxis type="number" stroke={T.textDim} />
-        <YAxis type="category" dataKey="club" stroke={T.textDim} width={110} />
-        <Tooltip content={<Tip />} />
+        <XAxis type="number" domain={domain} stroke={T.textDim} />
+        {/* interval={0} ensures every club label renders; order is exactly the array order */}
+        <YAxis type="category" dataKey="club" interval={0} width={120} stroke={T.textDim} />
 
-        {/* Min→Max line */}
+        <Tooltip
+          contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }}
+          formatter={(v: any, n: any) => [v, n]}
+        />
+
+        {/* Min→Max “whisker”: transparent offset + visible width */}
         <Bar dataKey="rangeStart" stackId="range" fill="transparent" isAnimationActive={false} />
         <Bar dataKey="rangeWidth" stackId="range" fill={rangeColor} barSize={6} radius={[4,4,4,4]} />
 
-        {/* Q1→Q3 box */}
+        {/* Q1→Q3 “box” on top */}
         <Bar dataKey="iqrStart" stackId="iqr" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="iqrWidth" stackId="iqr" fill={boxColor} barSize={14} radius={[6,6,6,6]} opacity={0.9} />
+        <Bar dataKey="iqrWidth" stackId="iqr" fill={boxColor} barSize={14} radius={[6,6,6,6]} opacity={0.95} />
 
-        {/* Median & Mean markers */}
-        <Scatter data={rows} name="Median" shape={(p: any) => <Mark {...p} stroke={medianStroke} />} dataKey="median" />
-        <Scatter data={rows} name="Mean"   shape={(p: any) => <Mark {...p} stroke={meanStroke} />} dataKey="mean" />
+        {/* Median & Mean ticks aligned to the category row using ReferenceLine segments */}
+        {rows.map(r => (
+          <ReferenceLine
+            key={`med-${r.club}`}
+            segment={[
+              { x: r.median - tickHalfW, y: r.club },
+              { x: r.median + tickHalfW, y: r.club },
+            ]}
+            stroke={medianStroke}
+            strokeWidth={3}
+            ifOverflow="extendDomain"
+          />
+        ))}
+        {rows.map(r => (
+          <ReferenceLine
+            key={`mean-${r.club}`}
+            segment={[
+              { x: r.mean - tickHalfW, y: r.club },
+              { x: r.mean + tickHalfW, y: r.club },
+            ]}
+            stroke={meanStroke}
+            strokeWidth={3}
+            ifOverflow="extendDomain"
+          />
+        ))}
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
+
 
 /** ================= UI PRIMITIVES ================= */
 function Card({ theme, title, children, dragHandle }: { theme: Theme; title: string; children: React.ReactNode; dragHandle?: boolean }) {
