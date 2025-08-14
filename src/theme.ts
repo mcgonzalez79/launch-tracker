@@ -9,6 +9,8 @@ export type Theme = {
 
   cardBg: string;
   text: string;
+  textDim: string;  // NEW
+  border: string;   // NEW
   grid: string;
 
   kpiCarry: string;
@@ -29,9 +31,13 @@ export const themeLight: Theme = {
 
   cardBg: "#ffffff",
   text: "#0f172a",
+  textDim: "#64748b",
+  border: "#e5e7eb",
   grid: "#e5e7eb",
 
   kpiCarry: "#006747",
+  // If you want Total to be green too, set this to brand as well:
+  // kpiTotal: "#006747",
   kpiTotal: "#3A86FF",
   kpiSmash: "#EF476F",
   kpiSpin: "#2F8C76",
@@ -49,6 +55,8 @@ export const themeDark: Theme = {
 
   cardBg: "#111827",
   text: "#e5e7eb",
+  textDim: "#94a3b8",
+  border: "#374151",
   grid: "#374151",
 
   kpiCarry: "#34d399",
