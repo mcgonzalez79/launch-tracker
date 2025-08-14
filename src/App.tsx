@@ -185,6 +185,7 @@ export default function App() {
       const wb = XLSX.read(text, { type: "string" });
       processWorkbook(wb, text, "sampledata.csv");
     } catch {
+      // minimal built-in
       const id = `Sample ${new Date().toLocaleString()}`;
       const sample: Shot[] = [
         { SessionId: id, Club: "Driver", ClubSpeed_mph: 85.1, BallSpeed_mph: 119.8, SmashFactor: 1.41, LaunchAngle_deg: 12.9, CarryDistance_yds: 176, TotalDistance_yds: 193, SpinAxis_deg: -1.7, Timestamp: "2025-08-08T12:00:00Z" },
@@ -242,7 +243,30 @@ export default function App() {
   const filteredNoClubOutliers = useMemo(() => withOutliers(filteredNoClub), [filteredNoClub, excludeOutliers]);
   const hasData = filteredOutliers.length > 0;
 
-  /* Club Averages table rows (for Dashboard) */
+  /* Club Averages table rows (for Insights, print, etc.) */
+  const tableRows: ClubRow[] = useMemo(() => {
+    const byClub = new Map<string, Shot[]>(); filteredOutliers.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
+    const rows: ClubRow[] = [];
+    for (const [club, arr] of byClub.entries()) {
+      const grab = (sel: (s: Shot) => number | undefined) => arr.map(sel).filter((x): x is number => x !== undefined);
+      const carry = grab(s => s.CarryDistance_yds);
+      rows.push({
+        club,
+        count: arr.length,
+        avgCarry: carry.length ? mean(carry) : 0,
+        avgTotal: (grab(s => s.TotalDistance_yds).length ? mean(grab(s => s.TotalDistance_yds)) : 0),
+        avgSmash: (grab(s => s.SmashFactor).length ? mean(grab(s => s.SmashFactor)) : 0),
+        avgSpin: (grab(s => s.SpinRate_rpm).length ? mean(grab(s => s.SpinRate_rpm)) : 0),
+        avgCS: (grab(s => s.ClubSpeed_mph).length ? mean(grab(s => s.ClubSpeed_mph)) : 0),
+        avgBS: (grab(s => s.BallSpeed_mph).length ? mean(grab(s => s.BallSpeed_mph)) : 0),
+        avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
+        avgF2P: (grab(s => coalesceFaceToPath(s)).length ? mean(grab(s => coalesceFaceToPath(s))) : 0),
+      });
+    }
+    return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
+  }, [filteredOutliers]);
+
+  /* NEW: tableRows for Dashboard (moved out of JSX to avoid hook-in-prop) */
   const tableRowsDash: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     filteredOutliers.forEach(s => {
@@ -255,20 +279,22 @@ export default function App() {
       const grab = (sel: (s: Shot) => number | undefined) =>
         arr.map(sel).filter((x): x is number => x !== undefined);
 
+      const carry = grab(s => s.CarryDistance_yds);
+
       const avg = (vals: number[]) => (vals.length ? vals.reduce((a,b)=>a+b,0) / vals.length : 0);
       const f2pSel = (s: Shot) => (s.ClubFace_deg != null && s.ClubPath_deg != null) ? (s.ClubFace_deg - s.ClubPath_deg) : undefined;
 
       rows.push({
         club,
         count: arr.length,
-        avgCarry:  avg(grab(s => s.CarryDistance_yds)),
-        avgTotal:  avg(grab(s => s.TotalDistance_yds)),
-        avgSmash:  avg(grab(s => s.SmashFactor)),
-        avgSpin:   avg(grab(s => s.SpinRate_rpm)),
-        avgCS:     avg(grab(s => s.ClubSpeed_mph)),
-        avgBS:     avg(grab(s => s.BallSpeed_mph)),
-        avgLA:     avg(grab(s => s.LaunchAngle_deg)),
-        avgF2P:    avg(grab(f2pSel)),
+        avgCarry: avg(carry),
+        avgTotal: avg(grab(s => s.TotalDistance_yds)),
+        avgSmash: avg(grab(s => s.SmashFactor)),
+        avgSpin: avg(grab(s => s.SpinRate_rpm)),
+        avgCS:   avg(grab(s => s.ClubSpeed_mph)),
+        avgBS:   avg(grab(s => s.BallSpeed_mph)),
+        avgLA:   avg(grab(s => s.LaunchAngle_deg)),
+        avgF2P:  avg(grab(f2pSel)),
       });
     }
     return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
@@ -298,11 +324,13 @@ export default function App() {
   const onDrop      = (k: string) => (e: React.DragEvent) => { e.preventDefault(); const from = dragKeyRef.current; dragKeyRef.current = null; if (!from || from === k) return;
     setCardOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; }); };
 
-  // DnD (insights) – separate drop handler to reorder insightsOrder
-  const onDropInsight = (k: string) => (e: React.DragEvent) => { e.preventDefault(); const from = dragKeyRef.current; dragKeyRef.current = null; if (!from || from === k) return;
+  // DnD (insights)
+  const onDragStartInsight = onDragStart;
+  const onDragOverInsight  = onDragOver;
+  const onDropInsight      = (k: string) => (e: React.DragEvent) => { e.preventDefault(); const from = dragKeyRef.current; dragKeyRef.current = null; if (!from || from === k) return;
     setInsightsOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; }); };
 
-  // Print Club Averages (unchanged)
+  // Print Club Averages
   const printClubAverages = () => {
     const win = window.open("", "_blank", "width=900,height=700"); if (!win) return;
     win.document.write(`<html><head><title>Club Averages</title><style>
@@ -311,7 +339,7 @@ export default function App() {
       th,td{border:1px solid #ddd;padding:8px;text-align:left} th{background:#f8fafc}
     </style></head><body><h1>Launch Tracker — Club Averages</h1><table>
       <tr><th>Club</th><th>Shots</th><th>Avg Carry</th><th>Avg Total</th><th>Avg Smash</th><th>Avg Spin</th><th>Avg Club Spd</th><th>Avg Ball Spd</th><th>Avg Launch</th><th>Face-to-Path</th></tr>
-      ${tableRowsDash.map(r=>`<tr><td>${r.club}</td><td>${r.count}</td><td>${r.avgCarry.toFixed(1)}</td><td>${r.avgTotal.toFixed(1)}</td><td>${r.avgSmash.toFixed(3)}</td><td>${Math.round(r.avgSpin)}</td><td>${r.avgCS.toFixed(1)}</td><td>${r.avgBS.toFixed(1)}</td><td>${r.avgLA.toFixed(1)}</td><td>${r.avgF2P.toFixed(2)}°</td></tr>`).join("")}
+      ${tableRows.map(r=>`<tr><td>${r.club}</td><td>${r.count}</td><td>${r.avgCarry.toFixed(1)}</td><td>${r.avgTotal.toFixed(1)}</td><td>${r.avgSmash.toFixed(3)}</td><td>${Math.round(r.avgSpin)}</td><td>${r.avgCS.toFixed(1)}</td><td>${r.avgBS.toFixed(1)}</td><td>${r.avgLA.toFixed(1)}</td><td>${r.avgF2P.toFixed(2)}°</td></tr>`).join("")}
     </table><script>window.onload=()=>window.print()</script></body></html>`); win.document.close();
   };
 
@@ -323,8 +351,8 @@ export default function App() {
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker</h1>
           <div className="flex items-center gap-2">
             <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-            <TopTab theme={T} label="Insights"  active={view === "insights"}  onClick={() => setView("insights")} />
-            <TopTab theme={T} label="Journal"   active={view === "journal"}   onClick={() => setView("journal")} />
+            <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
+            <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
             <button onClick={() => setDark(!dark)} className="ml-3 p-2 rounded-lg border" style={{ background: "#ffffff10", borderColor: "#ffffff55" }} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
               {dark ? <IconSun /> : <IconMoon />}
             </button>
@@ -404,7 +432,7 @@ export default function App() {
               filteredOutliers={filteredOutliers}
               filtered={filtered}
               shots={shots}
-              tableRows={tableRowsDash}
+              tableRows={tableRowsDash}   // <-- using top-level memo now
               clubs={clubs}
             />
           )}
@@ -412,10 +440,10 @@ export default function App() {
           {view === "insights" && (
             <InsightsView
               theme={T}
-              tableRows={tableRowsDash}
+              tableRows={tableRows}
+              filteredOutliers={filteredOutliers}
               filteredNoClubOutliers={filteredNoClubOutliers}
               allClubs={clubs}
-              selectedClubs={selectedClubs}
               insightsOrder={insightsOrder}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
