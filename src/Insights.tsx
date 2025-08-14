@@ -30,7 +30,7 @@ type Props = {
   onDrop: (k: string) => (e: React.DragEvent) => void;
 };
 
-/* ========= Palette — derived by index in allClubs so it matches Filters ========= */
+/* ========= Palette ========= */
 const CLUB_PALETTE = [
   "#1f77b4", "#00A980", "#FFB703", "#EF476F", "#8E44AD",
   "#2ECC71", "#E67E22", "#00B8D9", "#F94144", "#577590",
@@ -99,7 +99,7 @@ function DistanceDistributionCard({ theme, tableRows, allClubs }: { theme: Theme
   );
 
   return (
-    <Card title="Distance Distribution (by Club)" draggable={false}>
+    <Card theme={theme} title="Distance Distribution (by Club)">
       <div style={{ width: "100%", height: 360 }}>
         <ResponsiveContainer>
           <BarChart data={data} layout="vertical" margin={{ left: 18, right: 18, top: 8, bottom: 8 }}>
@@ -112,7 +112,6 @@ function DistanceDistributionCard({ theme, tableRows, allClubs }: { theme: Theme
               }
             />
             <Legend />
-            {/* Use stable club colors for the "carry vs total" bars via custom dataKey accessors */}
             <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
             <Bar dataKey="avgTotal" name="Total (avg)" fill={TOTAL_BAR} />
           </BarChart>
@@ -153,7 +152,7 @@ function HighlightsCard({
   }, [allData]);
 
   return (
-    <Card title="Highlights (All Sessions / All Clubs)">
+    <Card theme={theme} title="Highlights (All Sessions / All Clubs)">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div>
           <div className="text-slate-500">Longest Carry</div>
@@ -205,7 +204,7 @@ function GappingWarningsCard({
   }, [allData]);
 
   return (
-    <Card title="Gapping Warnings (All Clubs)">
+    <Card theme={theme} title="Gapping Warnings (All Clubs)">
       <div className="text-sm space-y-3">
         <div>
           <div className="font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
@@ -260,7 +259,7 @@ function PersonalRecordsCard({
   }, [selectedData]);
 
   return (
-    <Card title="Personal Records (current selection)">
+    <Card theme={theme} title="Personal Records (current selection)">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div>
           <div className="text-slate-500">PR Carry</div>
@@ -294,7 +293,7 @@ function ProgressCard({
   }, [selectedData]);
 
   return (
-    <Card title="Club Progress (Carry over Time)">
+    <Card theme={theme} title="Club Progress (Carry over Time)">
       <div style={{ width: "100%", height: 280 }}>
         <ResponsiveContainer>
           <LineChart data={series} margin={{ left: 8, right: 18, top: 8, bottom: 8 }}>
@@ -335,7 +334,7 @@ function WeaknessesCard({
   }, [allData]);
 
   return (
-    <Card title="Biggest Weakness (All Data)">
+    <Card theme={theme} title="Biggest Weakness (All Data)">
       <div className="text-sm">
         {finding.worstSmash == null ? (
           <div className="text-slate-500">Not enough data yet.</div>
