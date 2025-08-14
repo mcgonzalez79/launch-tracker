@@ -1,122 +1,95 @@
-// Theme + palette + helpers used across App, Dashboard, and Insights
-
+/* Theme + shared colors/ordering + color helpers */
 export type Theme = {
-  brand: string;
-  brandTint: string;  // <- added
-  brandSoft: string;
-
-  text: string;
-  textSoft: string;
-  textDim: string;
-
-  white: string;
-  bg: string;
-
-  card: string;
-  cardBorder: string;
-  border: string;
-  kpi: string;
-
-  tooltipBg: string;
-  tooltipText: string;
-
-  dispBg: string;
-  gridStripeA: string;
-  gridStripeB: string;
-
-  blueSoft: string;
-  greenSoft: string;
-  orangeSoft: string;
+  brand: string; brandTint: string; brandSoft: string; white: string;
+  text: string; textDim: string; border: string; panel: string;
+  blueSoft: string; greenSoft: string; orangeSoft: string;
+  kpiBorder: string; gridStripeA: string; gridStripeB: string;
 };
 
-/** Bar colors used across charts (Dashboard expects these) */
-export const CARRY_BAR = "#2563EB"; // blue
-export const TOTAL_BAR = "#16A34A"; // green
-
-/** Semi-transparent helper (Dashboard imports) */
-export function alpha(hex: string, a: number): string {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
-  const n = parseInt(full, 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
-/** Club colors & palette (Dashboard imports colorForClub and clubPalette) */
-const CLUB_COLORS: Record<string, string> = {
-  "Driver": "#2563EB",
-  "3 Wood": "#10B981",
-  "4 Hybrid": "#F59E0B",
-  "5 Hybrid (5 Iron)": "#EF4444",
-  "6 Iron": "#8B5CF6",
-  "7 Iron": "#0EA5E9",
-  "8 Iron": "#14B8A6",
-  "9 Iron": "#F97316",
-  "Pitching Wedge": "#22C55E",
-  "60 (LW)": "#E11D48",
-};
-export const clubPalette = Object.values(CLUB_COLORS);
-export function colorForClub(club: string): string {
-  return CLUB_COLORS[club] || "#64748B";
-}
-
-/** Light/Dark themes with all required fields */
 export const LIGHT: Theme = {
-  brand: "#0B7A3B",
-  brandTint: "#2F8C76",     // <- pleasant lighter green for accents
-  brandSoft: "#E7F5EC",
-
-  text: "#0f172a",
-  textSoft: "#475569",
-  textDim: "#64748B",
-
+  brand: "#006747",
+  brandTint: "#2F8C76",
+  brandSoft: "#ECF8F1",
   white: "#ffffff",
-  bg: "#F8FAFC",
-
-  card: "#ffffff",
-  cardBorder: "#e5e7eb",
-  border: "#e5e7eb",
-  kpi: "#F1F5F9",
-
-  tooltipBg: "#0f172a",
-  tooltipText: "#ffffff",
-
-  dispBg: "#F2F9F5",
-  gridStripeA: "#F8FAF9",
-  gridStripeB: "#ECF6F0",
-
-  blueSoft: "#DBEAFE",
-  greenSoft: "#DCFCE7",
-  orangeSoft: "#FFEDD5",
+  text: "#0f172a",
+  textDim: "#475569",
+  border: "#E5E7EB",
+  panel: "#ffffff",
+  blueSoft: "#EEF5FF",
+  greenSoft: "#EDFDF3",
+  orangeSoft: "#FFF6EC",
+  kpiBorder: "#E5E7EB",
+  gridStripeA: "#E8F4EE",
+  gridStripeB: "#F4FBF8",
 };
 
 export const DARK: Theme = {
-  brand: "#23B26D",
-  brandTint: "#34D399",     // <- lighter green tint for dark mode
-  brandSoft: "#14312A",
+  brand: "#25B07C",
+  brandTint: "#43C593",
+  brandSoft: "#0F1B17",
+  white: "#0B0F14",
+  text: "#E6EDF3",
+  textDim: "#93A1B3",
+  border: "#2B3542",
+  panel: "#111827",
+  blueSoft: "#0E223B",
+  greenSoft: "#0F2420",
+  orangeSoft: "#2A1909",
+  kpiBorder: "#2B3542",
+  gridStripeA: "#0E1915",
+  gridStripeB: "#0A1411",
+};
 
-  text: "#E5E7EB",
-  textSoft: "#94A3B8",
-  textDim: "#9CA3AF",
+/* Shot-shape colors */
+export const DRAW_BLUE = "#4EA3FF";
+export const STRAIGHT_GREEN = LIGHT.brand;
+export const FADE_ORANGE = "#F59E0B";
 
-  white: "#0B1220",
-  bg: "#0B1220",
+/* Two bars in Gap chart */
+export const CARRY_BAR = "#1F77B4";
+export const TOTAL_BAR = "#2CA02C";
 
-  card: "#0F172A",
-  cardBorder: "#1F2937",
-  border: "#1F2937",
-  kpi: "#111827",
+/* Stable per-club palette */
+export const clubPalette = [
+  "#1F77B4", "#2CA02C", "#FF7F0E", "#D62728", "#9467BD",
+  "#8C564B", "#E377C2", "#17BECF", "#7F7F7F", "#BCBD22",
+  "#AEC7E8", "#FFBB78",
+];
 
-  tooltipBg: "#111827",
-  tooltipText: "#F1F5F9",
+/* Display order helpers */
+export const ORDER = [
+  "Driver", "3 Wood", "5 Wood", "7 Wood",
+  "2 Hybrid", "3 Hybrid", "4 Hybrid", "5 Hybrid", "5 Hybrid (5 Iron)",
+  "3 Iron", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron",
+  "Pitching Wedge", "Gap Wedge", "Sand Wedge", "Lob Wedge", "60 (LW)"
+];
+export const orderIndex = (name: string) => {
+  const i = ORDER.findIndex(o => o.toLowerCase() === name.toLowerCase());
+  if (i >= 0) return i;
+  const lower = name.toLowerCase();
+  if (lower.includes("driver")) return 0;
+  if (lower.includes("wood")) { const m = lower.match(/(\d+)\s*wood/); return m ? 1 + Number(m[1]) : 4; }
+  if (lower.includes("hybrid")) { const m = lower.match(/(\d+)\s*hybrid/); return m ? 10 + Number(m[1]) : 12; }
+  if (lower.includes("iron")) { const m = lower.match(/(\d+)\s*iron/); return m ? 20 + Number(m[1]) : 28; }
+  if (lower.includes("pitch") || lower.includes("pw")) return 40;
+  if (lower.includes("gap")) return 41;
+  if (lower.includes("sand") || lower.includes("(sw)")) return 42;
+  if (lower.includes("lob") || lower.includes("(lw)")) return 43;
+  return 99;
+};
 
-  dispBg: "#0F1A15",
-  gridStripeA: "#0C1612",
-  gridStripeB: "#0D1A14",
-
-  blueSoft: "#1E293B",
-  greenSoft: "#0F1F18",
-  orangeSoft: "#1A130B",
+export const hexToRgb = (hex: string) => {
+  const m = hex.replace("#", "");
+  const bigint = parseInt(m.length === 3 ? m.split("").map(c => c + c).join("") : m, 16);
+  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+};
+export const alpha = (hex: string, a = 0.25) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+};
+export const colorForClub = (club: string, clubsAll: string[], palette: string[]) => {
+  const idx = clubsAll.findIndex(c => c.toLowerCase() === club.toLowerCase());
+  if (idx >= 0) return palette[idx % palette.length];
+  let h = 0; for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
 };
