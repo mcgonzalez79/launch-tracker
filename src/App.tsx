@@ -14,14 +14,13 @@ import { Shot, ClubRow, orderIndex, mean } from "./utils";
 type Tab = "dashboard" | "insights" | "journal";
 
 type Session = {
-  id: string;           // stable id, e.g., filename + size + first/last timestamp hash
-  name: string;         // nice label (filename or user edited)
-  addedAt: number;      // epoch ms
-  rows: Shot[];         // parsed shots for this session
+  id: string;
+  name: string;
+  addedAt: number;
+  rows: Shot[];
 };
 
 type Toast = { id: string; kind: "info" | "success" | "warn" | "error"; text: string; createdAt: number };
-
 const TOAST_TTL_MS = 15000;
 
 /** Numeric helper */
@@ -47,11 +46,9 @@ const isoDate = (v: any): string | undefined => {
 
 /** Map incoming headers to Shot fields (flexible keys) */
 const headerMap: Record<string, keyof Shot> = {
-  // core
   "club": "Club",
   "swings": "Swings",
 
-  // speeds, face/path, angles
   "club speed": "ClubSpeed_mph",
   "club speed [mph]": "ClubSpeed_mph",
   "ball speed": "BallSpeed_mph",
@@ -66,13 +63,11 @@ const headerMap: Record<string, keyof Shot> = {
   "face to path": "FaceToPath_deg",
   "face to path [deg]": "FaceToPath_deg",
 
-  // launch
   "launch angle": "LaunchAngle_deg",
   "launch angle [deg]": "LaunchAngle_deg",
   "launch direction": "LaunchDirection_deg",
   "launch direction [deg]": "LaunchDirection_deg",
 
-  // spin
   "backspin": "Backspin_rpm",
   "backspin [rpm]": "Backspin_rpm",
   "sidespin": "Sidespin_rpm",
@@ -83,7 +78,6 @@ const headerMap: Record<string, keyof Shot> = {
   "spin axis": "SpinAxis_deg",
   "spin axis [deg]": "SpinAxis_deg",
 
-  // flight / result
   "apex height": "ApexHeight_yds",
   "apex height [yds]": "ApexHeight_yds",
   "carry distance": "CarryDistance_yds",
@@ -99,7 +93,6 @@ const headerMap: Record<string, keyof Shot> = {
   "total deviation distance": "TotalDeviationDistance_yds",
   "total deviation distance [yards]": "TotalDeviationDistance_yds",
 
-  // bookkeeping
   "sessionid": "SessionId",
   "session id": "SessionId",
   "timestamp": "Timestamp",
@@ -170,7 +163,6 @@ async function fileToSession(file: File): Promise<Session> {
   const ws = wb.Sheets[sheetName];
   const shots = sheetToShots(ws);
 
-  // fingerprint: filename + size + first/last TS/carry
   const first = shots[0], last = shots[shots.length - 1];
   const fp = [
     file.name, file.size,
@@ -230,7 +222,6 @@ export default function App() {
     const item: Toast = { ...t, id: Math.random().toString(36).slice(2), createdAt: Date.now() };
     setToasts(prev => [...prev, item]);
   }, []);
-  // autoclose
   React.useEffect(() => {
     const i = setInterval(() => {
       setToasts(prev => prev.filter(t => Date.now() - t.createdAt < TOAST_TTL_MS));
@@ -249,7 +240,7 @@ export default function App() {
         if (exists) { dup++; continue; }
         setSessions(prev => [...prev, session]);
         added++;
-      } catch (e) {
+      } catch {
         pushToast({ kind: "error", text: `Failed to import "${file.name}"` });
       }
     }
@@ -292,7 +283,7 @@ export default function App() {
     [allShots]
   );
 
-  /** >>> NEW: club color mapping (Driver -> LW order) */
+  /** Club color mapping (Driver -> LW order) */
   const CLUB_PALETTE = React.useMemo(
     () => ["#3A86FF", "#FF7F0E", "#2ECC71", "#EF476F", "#8E44AD", "#00B8D9", "#F94144", "#577590", "#E67E22", "#F72585"],
     []
@@ -307,7 +298,6 @@ export default function App() {
     (club: string) => clubColorMap.get(club) ?? CLUB_PALETTE[0],
     [clubColorMap, CLUB_PALETTE]
   );
-  /** <<< NEW: club color mapping */
 
   /** Filters (club, date, carry range) */
   const filteredBase = React.useMemo(() => {
@@ -316,7 +306,6 @@ export default function App() {
       const set = new Set(selectedClubs);
       pool = pool.filter(s => set.has(s.Club));
     }
-    // date range
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(dateFrom) : null;
       const to = dateTo ? new Date(dateTo) : null;
@@ -330,7 +319,6 @@ export default function App() {
         return true;
       });
     }
-    // carry range
     if (carryMin !== "" || carryMax !== "") {
       const lo = carryMin === "" ? -Infinity : Number(carryMin);
       const hi = carryMax === "" ? Infinity  : Number(carryMax);
@@ -360,10 +348,7 @@ export default function App() {
 
   /** A variant that ignores club selection (for some Insights cards) */
   const filteredNoClubBase = React.useMemo(() => {
-    // like filteredBase but without club filter
     let pool = allShots;
-
-    // date range
     if (dateFrom || dateTo) {
       const from = dateFrom ? new Date(dateFrom) : null;
       const to = dateTo ? new Date(dateTo) : null;
@@ -377,7 +362,6 @@ export default function App() {
         return true;
       });
     }
-    // carry range
     if (carryMin !== "" || carryMax !== "") {
       const lo = carryMin === "" ? -Infinity : Number(carryMin);
       const hi = carryMax === "" ? Infinity  : Number(carryMax);
@@ -407,7 +391,7 @@ export default function App() {
   /** A raw all-clubs pool (ignoring outliers) for global PRs if needed */
   const filteredNoClub = filteredNoClubBase;
 
-  /** Club averages table rows (for Dashboard & Insights if needed) */
+  /** Club averages table rows */
   const tableRows: ClubRow[] = React.useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     filteredOutliers.forEach(s => {
@@ -445,7 +429,7 @@ export default function App() {
         avgCS: m(cs),
         avgBS: m(bs),
         avgLA: m(la),
-        // optional: face-to-path shown on dashboard’s table if your component supports it
+        // extra field used by your updated dashboard table
         // @ts-ignore
         avgF2P: m(f2p),
       } as any);
@@ -478,26 +462,16 @@ export default function App() {
     setInsightsOrder(arr);
   };
 
-  /** Load sample (uses your latest sample structure) */
+  /** Load sample */
   const loadSample = React.useCallback(() => {
-    // You can replace with your real sample rows; kept tiny synthetic here.
     const sample: Shot[] = [
       { Club: "Driver",  ClubSpeed_mph: 85.1, BallSpeed_mph: 119.8, SmashFactor: 1.41, LaunchAngle_deg: 12.9, Backspin_rpm: 3465, CarryDistance_yds: 176, TotalDistance_yds: 193, SpinAxis_deg: -1.7, Timestamp: "2025-08-08T12:00:00Z" },
       { Club: "4 Hybrid", ClubSpeed_mph: 80.1, BallSpeed_mph: 105.4, SmashFactor: 1.32, LaunchAngle_deg: 12.4, Backspin_rpm: 3391, CarryDistance_yds: 139, TotalDistance_yds: 161, SpinAxis_deg: -2.9, Timestamp: "2025-08-08T12:05:00Z" },
       { Club: "7 Iron",  ClubSpeed_mph: 72.5, BallSpeed_mph: 90.0, SmashFactor: 1.24, LaunchAngle_deg: 13.9, Backspin_rpm: 4463, CarryDistance_yds: 103, TotalDistance_yds: 121, SpinAxis_deg: 1.1, Timestamp: "2025-08-08T12:14:00Z" },
       { Club: "60 (LW)",  ClubSpeed_mph: 64.1, BallSpeed_mph: 63.4, SmashFactor: 0.99, LaunchAngle_deg: 27.6, Backspin_rpm: 5975, CarryDistance_yds: 60, TotalDistance_yds: 70, SpinAxis_deg: 4.9, Timestamp: "2025-08-08T12:26:00Z" },
     ];
-    const sess: Session = {
-      id: "sample",
-      name: "Sample Data",
-      addedAt: Date.now(),
-      rows: sample
-    };
-    // replace or add
-    setSessions(prev => {
-      const p = prev.filter(s => s.id !== "sample");
-      return [...p, sess];
-    });
+    const sess: Session = { id: "sample", name: "Sample Data", addedAt: Date.now(), rows: sample };
+    setSessions(prev => [...prev.filter(s => s.id !== "sample"), sess]);
     setSelectedSessionId("ALL");
     pushToast({ kind: "success", text: "Loaded sample data" });
   }, [pushToast]);
@@ -508,6 +482,12 @@ export default function App() {
       <span style={{ fontWeight: 700, letterSpacing: 0.2, color: theme.brand }}>Launch Tracker</span>
     </div>
   );
+
+  // Convert carry range to strings for Filters panel (to match expected prop types)
+  const carryMinStr = carryMin === "" ? "" : String(carryMin);
+  const carryMaxStr = carryMax === "" ? "" : String(carryMax);
+  const setCarryMinFromString = (s: string) => setCarryMin(s.trim() === "" ? "" : Number(s));
+  const setCarryMaxFromString = (s: string) => setCarryMax(s.trim() === "" ? "" : Number(s));
 
   return (
     <div style={{ minHeight: "100vh", background: theme.appBg, color: theme.text }}>
@@ -567,9 +547,9 @@ export default function App() {
           <FiltersPanel
             theme={theme}
             // data context
-            sessions={sessions}
-            selectedSessionId={selectedSessionId}
-            setSelectedSessionId={setSelectedSessionId}
+            sessions={sessions as any}                 {/* if your Filters expects string[], keep as any */}
+            selectedSessionId={selectedSessionId as any}
+            setSelectedSessionId={setSelectedSessionId as any}
             clubs={clubs}
             selectedClubs={selectedClubs}
             setSelectedClubs={setSelectedClubs}
@@ -578,11 +558,13 @@ export default function App() {
             setExcludeOutliers={setExcludeOutliers}
             dateFrom={dateFrom} dateTo={dateTo}
             setDateFrom={setDateFrom} setDateTo={setDateTo}
-            carryMin={carryMin} carryMax={carryMax}
-            setCarryMin={setCarryMin} setCarryMax={setCarryMax}
+            carryMin={carryMinStr as any}             {/* expect string in Filters */}
+            carryMax={carryMaxStr as any}
+            setCarryMin={setCarryMinFromString as any}
+            setCarryMax={setCarryMaxFromString as any}
             // actions
             onImportFiles={onImportFiles}
-            onDeleteSession={deleteSession}
+            onDeleteSession={deleteSession as any}
             onDeleteAll={clearAll}
             onExportCsv={exportCsv}
             onLoadSample={loadSample}
@@ -598,9 +580,7 @@ export default function App() {
               theme={theme}
               clubs={clubs}
               tableRows={tableRows}
-              // datasets
               filteredOutliers={filteredOutliers}
-              // for dispersion etc. if your Dashboard needs color mapping too
               clubColorOf={clubColorOf}
             />
           )}
@@ -617,8 +597,7 @@ export default function App() {
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDrop={onDrop}
-              // >>> NEW: pass exact color mapping so boxplot matches Filters
-              clubColorOf={clubColorOf}
+              clubColorOf={clubColorOf}   // ensures boxplot matches filter colors
             />
           )}
 
