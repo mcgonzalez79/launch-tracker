@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, Label, ComposedChart, ReferenceLine, Cell
+  Scatter, ScatterChart, ZAxis, Label, ComposedChart, ReferenceLine, Cell, LineChart, Line
 } from "recharts";
 import * as XLSX from "xlsx";
 
-/** ================= THEME ================= */
+/* ================= THEME ================= */
 type Theme = {
   brand: string; brandTint: string; brandSoft: string; white: string;
   text: string; textDim: string; border: string; panel: string;
@@ -47,16 +47,23 @@ const DARK: Theme = {
   gridStripeB: "#0A1411",
 };
 
-// Per-club palette (distinct, stable)
+// Club colors (stable, also used in Distance Distribution)
 const clubPalette = [
-  "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B",
-  "#E377C2", "#17BECF", "#7F7F7F", "#BCBD22", "#AEC7E8", "#FFBB78",
+  "#1F77B4", "#2CA02C", "#FF7F0E", "#D62728", "#9467BD",
+  "#8C564B", "#E377C2", "#17BECF", "#7F7F7F", "#BCBD22",
+  "#AEC7E8", "#FFBB78",
 ];
 
-// Gap chart uses ONLY these two:
-const CARRY_BAR = "#1F77B4"; // blue
+// Gap chart colors (2 only)
+const CARRY_BAR = "#1F77B4"; // (Draw blue)
+const TOTAL_BAR = "#2CA02C"; // (Straight green)
 
-/** ================= TYPES ================= */
+// Shot-shape palette for cross-card consistency
+const DRAW_BLUE = "#4EA3FF";
+const STRAIGHT_GREEN = LIGHT.brand;
+const FADE_ORANGE = "#F59E0B";
+
+/* ================= TYPES ================= */
 type Shot = {
   SessionId?: string;
   Timestamp?: string;
@@ -97,18 +104,18 @@ type ClubRow = {
   count: number;
   avgCarry: number;
   avgTotal: number;
-  sdCarry: number;
   avgSmash: number;
   avgSpin: number;
   avgCS: number;
   avgBS: number;
   avgLA: number;
+  avgF2P: number;
 };
 
 type Msg = { id: number; text: string; type?: "info" | "success" | "warn" | "error" };
 type ViewKey = "dashboard" | "insights" | "journal";
 
-/** ================= STATS & HELPERS ================= */
+/* ================= STATS & HELPERS ================= */
 const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
 const stddev = (arr: number[]) => {
   if (arr.length < 2) return 0;
@@ -150,7 +157,6 @@ const coalesceFaceToPath = (s: Shot) =>
     ? s.ClubFace_deg - s.ClubPath_deg
     : undefined);
 
-// Color helpers
 function hexToRgb(hex: string) {
   const m = hex.replace("#", "");
   const bigint = parseInt(m.length === 3 ? m.split("").map((c) => c + c).join("") : m, 16);
@@ -164,10 +170,9 @@ function alpha(hex: string, a = 0.25) {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-// Club display order
+// Display order
 const ORDER = [
-  "Driver",
-  "3 Wood", "5 Wood", "7 Wood",
+  "Driver", "3 Wood", "5 Wood", "7 Wood",
   "2 Hybrid", "3 Hybrid", "4 Hybrid", "5 Hybrid", "5 Hybrid (5 Iron)",
   "3 Iron", "4 Iron", "5 Iron", "6 Iron", "7 Iron", "8 Iron", "9 Iron",
   "Pitching Wedge", "Gap Wedge", "Sand Wedge", "Lob Wedge", "60 (LW)"
@@ -180,7 +185,7 @@ const orderIndex = (name: string) => {
   if (lower.includes("wood")) {
     const m = lower.match(/(\d+)\s*wood/);
     return m ? 1 + Number(m[1]) : 4;
-    }
+  }
   if (lower.includes("hybrid")) {
     const m = lower.match(/(\d+)\s*hybrid/);
     return m ? 10 + Number(m[1]) : 12;
@@ -196,65 +201,30 @@ const orderIndex = (name: string) => {
   return 99;
 };
 
-/** Robust header normalization (with CamelCase split) */
+/* ========== Header normalization / parsing (unchanged core) ========== */
 function normalizeHeader(raw: string): string {
   let s = String(raw || "").trim();
-  s = s.replace(/([a-z])([A-Z])/g, "$1 $2"); // CamelCase -> spaced
-  s = s.toLowerCase();
+  s = s.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
   s = s.replace(/\[[^\]]*\]/g, "").replace(/\([^\)]*\)/g, "");
-  s = s.replace(/[_\-]+/g, " ");
-  s = s.replace(/\s+/g, " ").trim();
-  s = s.replace(/:$/, "");
+  s = s.replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim().replace(/:$/, "");
   s = s.replace(/\bsmash\s*factor\b/, "smash factor");
   return s;
 }
-
-/** Header -> Shot key map (after normalization) */
 const headerMap: Record<string, keyof Shot> = {
-  "club": "Club",
-  "club type": "Club",
-  "clubname": "Club",
-  "club name": "Club",
+  "club": "Club", "club type": "Club", "clubname": "Club", "club name": "Club",
   "swings": "Swings",
-
-  "club speed": "ClubSpeed_mph",
-  "attack angle": "AttackAngle_deg",
-  "club path": "ClubPath_deg",
-  "club face": "ClubFace_deg",
-  "face to path": "FaceToPath_deg",
-
-  "ball speed": "BallSpeed_mph",
-  "smash factor": "SmashFactor",
-
-  "launch angle": "LaunchAngle_deg",
-  "launch direction": "LaunchDirection_deg",
-
-  "backspin": "Backspin_rpm",
-  "sidespin": "Sidespin_rpm",
-  "spin rate": "SpinRate_rpm",
-  "spin rate type": "SpinRateType",
-  "spin axis": "SpinAxis_deg",
-
-  "apex height": "ApexHeight_yds",
-
-  "carry distance": "CarryDistance_yds",
-  "carry": "CarryDistance_yds",
-  "carry deviation angle": "CarryDeviationAngle_deg",
-  "carry deviation distance": "CarryDeviationDistance_yds",
-
-  "total distance": "TotalDistance_yds",
-  "total": "TotalDistance_yds",
-  "total deviation angle": "TotalDeviationAngle_deg",
-  "total deviation distance": "TotalDeviationDistance_yds",
-
-  "sessionid": "SessionId",
-  "session id": "SessionId",
-  "timestamp": "Timestamp",
-  "date": "Timestamp",
-  "datetime": "Timestamp",
+  "club speed": "ClubSpeed_mph", "attack angle": "AttackAngle_deg", "club path": "ClubPath_deg",
+  "club face": "ClubFace_deg", "face to path": "FaceToPath_deg",
+  "ball speed": "BallSpeed_mph", "smash factor": "SmashFactor",
+  "launch angle": "LaunchAngle_deg", "launch direction": "LaunchDirection_deg",
+  "backspin": "Backspin_rpm", "sidespin": "Sidespin_rpm", "spin rate": "SpinRate_rpm", "spin rate type": "SpinRateType",
+  "spin axis": "SpinAxis_deg", "apex height": "ApexHeight_yds",
+  "carry distance": "CarryDistance_yds", "carry": "CarryDistance_yds",
+  "carry deviation angle": "CarryDeviationAngle_deg", "carry deviation distance": "CarryDeviationDistance_yds",
+  "total distance": "TotalDistance_yds", "total": "TotalDistance_yds",
+  "total deviation angle": "TotalDeviationAngle_deg", "total deviation distance": "TotalDeviationDistance_yds",
+  "sessionid": "SessionId", "session id": "SessionId", "timestamp": "Timestamp", "date": "Timestamp", "datetime": "Timestamp",
 };
-
-/** Find best header row (supports two-row header+units) */
 function findBestHeader(rowsRaw: any[][]) {
   const MAX_SCAN = Math.min(20, rowsRaw.length);
   let best = { idx: 0, map: [] as (keyof Shot | undefined)[], score: 0, usedTwoRows: false };
@@ -276,29 +246,23 @@ function findBestHeader(rowsRaw: any[][]) {
   }
   return best;
 }
-
-/** ===== Fallback parser for "weird CSV" ===== */
 function parseWeirdLaunchCSV(text: string) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (!lines.length) return null;
   const split = (line: string) => line.replace(/\t/g, "").replace(/"/g, "").trim().split(",");
   const header = split(lines[0]).map((h) => h.trim());
-  const unitsLooksLike = (s: string) => /\[[^\]]*\]/.test(s);
   const maybeUnits = lines[1] ? split(lines[1]) : [];
-  const hasUnits = maybeUnits.some(unitsLooksLike);
+  const hasUnits = maybeUnits.some((s) => /\[[^\]]*\]/.test(s));
   const dataRows = lines.slice(hasUnits ? 2 : 1).map(split);
-  const hasClub = header.includes("ClubType") || header.includes("Club Name") || header.includes("ClubName");
+  const hasClub = header.some(h => /club/i.test(h));
   if (!hasClub) return null;
   return { header, dataRows };
 }
-
 function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId: string): Shot[] {
   const norm = (s: string) => normalizeHeader(s);
   const find = (aliases: string[]) => {
     const wants = aliases.map(norm);
-    for (let i = 0; i < header.length; i++) {
-      if (wants.includes(norm(header[i] || ""))) return i;
-    }
+    for (let i = 0; i < header.length; i++) if (wants.includes(norm(header[i] || ""))) return i;
     return -1;
   };
   const id = {
@@ -336,14 +300,7 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
   };
   const parseWeirdTimestamp = (v: string | undefined) => {
     if (!v) return undefined;
-    const s = String(v).trim();
-    const m = s.match(/^(\d{1,2}\/\d{1,2}\/\d{4})(\d{1,2}:\d{2}:\d{2})(AM|PM)$/i);
-    if (m) {
-      const str = `${m[1]} ${m[2]} ${m[3].toUpperCase()}`;
-      const d = new Date(str);
-      if (!isNaN(d.getTime())) return d.toISOString();
-    }
-    const d2 = new Date(s);
+    const d2 = new Date(v);
     return isNaN(d2.getTime()) ? undefined : d2.toISOString();
   };
   const shots: Shot[] = [];
@@ -355,6 +312,7 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
     if (!club && nm) club = nm;
     else if (club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club = `${nm} ${club}`.trim();
     if (!club) continue;
+
     const shot: Shot = {
       SessionId: fallbackSessionId,
       Club: club,
@@ -386,49 +344,42 @@ function weirdRowsToShots(header: string[], rows: string[][], fallbackSessionId:
   return shots;
 }
 
-/** ===== Fingerprint for duplicate detection ===== */
+/* De-dupe key */
 function fpOf(s: Shot): string {
   const r = (x?: number, d = 2) => (x == null ? "" : Number(x).toFixed(d));
   const t = s.Timestamp ? new Date(s.Timestamp).getTime() : "";
   return [
     s.Club?.toLowerCase().trim(),
-    r(s.CarryDistance_yds, 1),
-    r(s.TotalDistance_yds, 1),
-    r(s.BallSpeed_mph, 1),
-    r(s.ClubSpeed_mph, 1),
-    r(s.LaunchAngle_deg, 1),
-    r(s.SpinRate_rpm, 0),
-    r(s.LaunchDirection_deg, 1),
-    r(s.ApexHeight_yds, 1),
+    r(s.CarryDistance_yds, 1), r(s.TotalDistance_yds, 1),
+    r(s.BallSpeed_mph, 1), r(s.ClubSpeed_mph, 1),
+    r(s.LaunchAngle_deg, 1), r(s.SpinRate_rpm, 0),
+    r(s.LaunchDirection_deg, 1), r(s.ApexHeight_yds, 1),
     t
   ].join("|");
 }
-
-/** ===== Stable color for a club ===== */
 function colorForClub(club: string, clubsAll: string[], palette: string[]) {
   const idx = clubsAll.findIndex(c => c.toLowerCase() === club.toLowerCase());
   if (idx >= 0) return palette[idx % palette.length];
-  let h = 0;
-  for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
+  let h = 0; for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
   return palette[h % palette.length];
 }
 
-/** ================= APP ================= */
+/* ================= APP ================= */
 export default function App() {
-  // THEME
+  // Theme
   const [dark, setDark] = useState<boolean>(() => {
     try { return localStorage.getItem("launch-tracker:theme") === "dark"; } catch { return false; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:theme", dark ? "dark" : "light"); } catch {} }, [dark]);
   const T = dark ? DARK : LIGHT;
 
-  // VIEW (Dashboard / Insights / Journal)
+  // View
   const [view, setView] = useState<ViewKey>(() => {
     try { return (localStorage.getItem("launch-tracker:view") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:view", view); } catch {} }, [view]);
 
-  // DATA + UI state
+  // Data & UI state
   const [shots, setShots] = useState<Shot[]>([]);
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [excludeOutliers, setExcludeOutliers] = useState<boolean>(true);
@@ -446,32 +397,19 @@ export default function App() {
     } catch { return ["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"]; }
   });
 
-  // Insights re-ordering
-  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "warnings", "personalBests", "weaknesses"];
-
+  // Insights order (merge-safe)
+  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "warnings", "personalRecords", "progress", "weaknesses"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
       const saved = raw ? JSON.parse(raw) : null;
       if (Array.isArray(saved) && saved.length) {
-        // Keep saved order, append any new defaults (no duplicates)
         return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
       }
       return INSIGHTS_DEFAULT;
-    } catch {
-      return INSIGHTS_DEFAULT;
-    }
+    } catch { return INSIGHTS_DEFAULT; }
   });
-  
-  useEffect(() => {
-    try {
-      localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder));
-    } catch {}
-  }, [insightsOrder]);
-
-  const [sessionNotes, setSessionNotes] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:session-notes") || "{}"); } catch { return {}; }
-  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
   // Journal
   const journalKey = sessionFilter === "ALL" ? "GLOBAL" : (sessionFilter || "Unknown Session");
@@ -479,47 +417,27 @@ export default function App() {
     try { return localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""; } catch { return ""; }
   });
   const editorRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    try { setJournalHTML(localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""); } catch {}
-  }, [journalKey]);
-  useEffect(() => {
-    try { localStorage.setItem(`launch-tracker:journal:${journalKey}`, journalHTML); } catch {}
-  }, [journalKey, journalHTML]);
+  useEffect(() => { try { setJournalHTML(localStorage.getItem(`launch-tracker:journal:${journalKey}`) || ""); } catch {} }, [journalKey]);
+  useEffect(() => { try { localStorage.setItem(`launch-tracker:journal:${journalKey}`, journalHTML); } catch {} }, [journalKey, journalHTML]);
 
-  // Measure Filters card height (for Journal default height)
+  // Measure Filters height (for journal)
   const filtersRef = useRef<HTMLDivElement>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(420);
   useEffect(() => {
-    const el = filtersRef.current;
-    if (!el) return;
+    const el = filtersRef.current; if (!el) return;
     const update = () => setFiltersHeight(el.getBoundingClientRect().height || 420);
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    window.addEventListener("resize", update);
-    update();
+    const ro = new ResizeObserver(update); ro.observe(el);
+    window.addEventListener("resize", update); update();
     return () => { ro.disconnect(); window.removeEventListener("resize", update); };
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragKeyRef = useRef<string | null>(null);
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("launch-tracker:shots");
-      if (raw) setShots(JSON.parse(raw));
-    } catch {}
-  }, []);
-  // Persist to localStorage
-  useEffect(() => {
-    try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {}
-  }, [shots]);
-  useEffect(() => {
-    try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {}
-  }, [cardOrder]);
-  useEffect(() => {
-    try { localStorage.setItem("launch-tracker:session-notes", JSON.stringify(sessionNotes)); } catch {}
-  }, [sessionNotes]);
+  // Load/persist
+  useEffect(() => { try { const raw = localStorage.getItem("launch-tracker:shots"); if (raw) setShots(JSON.parse(raw)); } catch {} }, []);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Messages with auto-dismiss
   const pushMsg = (text: string, type: Msg["type"] = "info") => {
@@ -533,40 +451,38 @@ export default function App() {
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
   );
-  const sessions = useMemo(() => {
-    const ids = Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session")));
-    return ["ALL", ...ids.sort()];
-  }, [shots]);
+  const sessions = useMemo(() => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()], [shots]);
   const carryBounds = useMemo(() => {
     const vals = shots.map(s => s.CarryDistance_yds).filter((v): v is number => v !== undefined);
     if (!vals.length) return { min: 0, max: 0 };
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  // Built-in tiny sample fallback
+  // Built-in mini sample
   const builtinSample = () => {
     const id = `Sample ${new Date().toLocaleString()}`;
     return [
       { SessionId: id, Club: "Driver", ClubSpeed_mph: 85.1, BallSpeed_mph: 119.8, SmashFactor: 1.41, LaunchAngle_deg: 12.9, Backspin_rpm: 3465, CarryDistance_yds: 176, TotalDistance_yds: 193, SpinAxis_deg: -1.7, Timestamp: "2025-08-08T12:00:00Z" },
       { SessionId: id, Club: "4 Hybrid", ClubSpeed_mph: 80.1, BallSpeed_mph: 105.4, SmashFactor: 1.32, LaunchAngle_deg: 12.4, Backspin_rpm: 3391, CarryDistance_yds: 139, TotalDistance_yds: 161, SpinAxis_deg: -2.9, Timestamp: "2025-08-08T12:05:00Z" },
-      { SessionId: id, Club: "5 Hybrid (5 Iron)", ClubSpeed_mph: 78.7, BallSpeed_mph: 99.3, SmashFactor: 1.26, LaunchAngle_deg: 11.8, Backspin_rpm: 3932, CarryDistance_yds: 120, TotalDistance_yds: 143, SpinAxis_deg: -7.7, Timestamp: "2025-08-08T12:08:00Z" },
       { SessionId: id, Club: "6 Iron", ClubSpeed_mph: 74.3, BallSpeed_mph: 94.8, SmashFactor: 1.27, LaunchAngle_deg: 14.6, Backspin_rpm: 3771, CarryDistance_yds: 115, TotalDistance_yds: 133, SpinAxis_deg: -0.2, Timestamp: "2025-08-08T12:11:00Z" },
       { SessionId: id, Club: "7 Iron", ClubSpeed_mph: 72.5, BallSpeed_mph: 90.0, SmashFactor: 1.24, LaunchAngle_deg: 13.9, Backspin_rpm: 4463, CarryDistance_yds: 103, TotalDistance_yds: 121, SpinAxis_deg: 1.1, Timestamp: "2025-08-08T12:14:00Z" },
-      { SessionId: id, Club: "8 Iron", ClubSpeed_mph: 70.7, BallSpeed_mph: 85.3, SmashFactor: 1.20, LaunchAngle_deg: 17.5, Backspin_rpm: 4426, CarryDistance_yds: 100, TotalDistance_yds: 114, SpinAxis_deg: 0.1, Timestamp: "2025-08-08T12:17:00Z" },
-      { SessionId: id, Club: "9 Iron", ClubSpeed_mph: 68.9, BallSpeed_mph: 83.8, SmashFactor: 1.22, LaunchAngle_deg: 19.8, Backspin_rpm: 4446, CarryDistance_yds: 93,  TotalDistance_yds: 110, SpinAxis_deg: 0.7, Timestamp: "2025-08-08T12:20:00Z" },
       { SessionId: id, Club: "Pitching Wedge", ClubSpeed_mph: 69.5, BallSpeed_mph: 84.1, SmashFactor: 1.21, LaunchAngle_deg: 20.1, Backspin_rpm: 5760, CarryDistance_yds: 99,  TotalDistance_yds: 109, SpinAxis_deg: 0.3, Timestamp: "2025-08-08T12:23:00Z" },
-      { SessionId: id, Club: "60 (LW)", ClubSpeed_mph: 64.1, BallSpeed_mph: 63.4, SmashFactor: 0.99, LaunchAngle_deg: 27.6, Backspin_rpm: 5975, CarryDistance_yds: 60,  TotalDistance_yds: 70,  SpinAxis_deg: 4.9, Timestamp: "2025-08-08T12:26:00Z" },
     ].map(applyDerived);
   };
 
-  // ===== Import core =====
-  const processWorkbook = (wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) => {
+  /* ---------- Import core ---------- */
+  function applyDerived(s: Shot): Shot {
+    const s2 = { ...s };
+    const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
+    if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+    if (F2P !== undefined) s2.FaceToPath_deg = F2P;
+    return s2;
+  }
+  function processWorkbook(wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) {
     const firstSheet = wb.SheetNames.find(n => {
-      const ws = wb.Sheets[n];
-      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+      const ws = wb.Sheets[n]; const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
       return rr && rr.flat().some(v => v !== null && v !== "");
     }) || wb.SheetNames[0];
-
     const ws = wb.Sheets[firstSheet];
     const rowsRaw: any[][] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[][];
     if (!rowsRaw.length) { pushMsg("The sheet seems empty.", "warn"); return; }
@@ -581,10 +497,9 @@ export default function App() {
     const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
     const normIndex: (keyof Shot | undefined)[] = hdrNorms.map((key) => headerMap[key]);
 
-    // Find/guess Club column
     let clubIdx = normIndex.findIndex((k) => k === "Club");
     if (clubIdx === -1) {
-      const clubHeaderSyns = ["club", "club name", "club type", "club model", "club used", "club selection", "club id", "club #", "club number"];
+      const clubHeaderSyns = ["club", "club name", "club type", "club model", "club used", "club #", "club id"];
       clubIdx = hdrNorms.findIndex((h) => clubHeaderSyns.includes(h));
       if (clubIdx !== -1) normIndex[clubIdx] = "Club";
     }
@@ -597,157 +512,91 @@ export default function App() {
     if (clubIdx !== -1) {
       for (const rowArr of dataRows) {
         if (!rowArr || rowArr.every((v: any) => v === null || String(v).trim() === "")) continue;
-
         const obj: any = {};
-        rowArr.forEach((cell: any, i: number) => {
-          const mk = normIndex[i];
-          if (!mk) return;
-          obj[mk] = cell;
-        });
+        rowArr.forEach((cell: any, i: number) => { const mk = normIndex[i]; if (mk) obj[mk] = cell; });
         if (!obj.Club) continue;
 
         const shot: any = {};
         Object.keys(obj).forEach((k) => {
-          const mk = k as keyof Shot;
-          const v = obj[mk];
+          const mk = k as keyof Shot; const v = obj[mk];
           if (mk === "Timestamp") shot[mk] = isoDate(v);
-          else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") {
-            const val = String(v ?? "").trim(); if (val) shot[mk] = val;
-          } else if (mk === "Swings") {
-            const val = n(v); if (val !== undefined) shot[mk] = Math.round(val);
-          } else {
-            const val = n(v); if (val !== undefined) shot[mk] = val;
-          }
+          else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") { const val = String(v ?? "").trim(); if (val) shot[mk] = val; }
+          else if (mk === "Swings") { const val = n(v); if (val !== undefined) shot[mk] = Math.round(val); }
+          else { const val = n(v); if (val !== undefined) shot[mk] = val; }
         });
-
         if (!shot.SessionId) shot.SessionId = fallbackId;
         mapped.push(applyDerived(shot as Shot));
       }
     }
 
-    const matchedCols = normIndex.filter(Boolean).length;
-    const carryCountNormal = mapped.filter(s => s.CarryDistance_yds != null).length;
-    const weakMapping = matchedCols < 6 || carryCountNormal < Math.max(3, Math.floor(mapped.length * 0.25));
-
-    // Fallback parser if needed
+    // fallback
     let finalShots: Shot[] = mapped;
     let usedFallback = false;
-
-    if (textFromCSV && (weakMapping || mapped.length === 0)) {
+    if (textFromCSV && mapped.length === 0) {
       const weird = parseWeirdLaunchCSV(textFromCSV);
       if (weird) {
         const ws2 = weirdRowsToShots(weird.header, weird.dataRows as any, fallbackId).map(applyDerived);
-        const carryCountWeird = ws2.filter(s => s.CarryDistance_yds != null).length;
-        const preferFallback = carryCountWeird > carryCountNormal || (ws2.length && mapped.length === 0);
-        if (preferFallback) {
-          finalShots = ws2;
-          usedFallback = true;
-        }
+        if (ws2.length) { finalShots = ws2; usedFallback = true; }
       }
     }
 
-    // De-dupe
+    // de-dupe
     const existing = new Set(shots.map(fpOf));
     const seen = new Set<string>();
     const deduped: Shot[] = [];
     let dupCount = 0;
-
     for (const s of finalShots) {
       const key = fpOf(s);
       if (existing.has(key) || seen.has(key)) { dupCount++; continue; }
-      seen.add(key);
-      deduped.push(s);
+      seen.add(key); deduped.push(s);
     }
-
     if (deduped.length) setShots(prev => [...prev, ...deduped]);
 
-    if (usedFallback) {
-      pushMsg(
-        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}" via fallback parser. ${dupCount} duplicates skipped.`,
-        "success"
-      );
-    } else if (finalShots.length) {
-      pushMsg(
-        `Imported ${deduped.length}/${finalShots.length} rows from "${filename}". Matched ${matchedCols} columns${best.usedTwoRows ? " (two-row header detected)" : ""}. ${dupCount} duplicates skipped.`,
-        "success"
-      );
-    } else {
-      pushMsg(`I couldn’t find usable rows. Include "ClubType/Club Name" and "Carry"/"Carry Distance" in the export.`, "warn");
-    }
-  };
-
-  // File input handler
+    pushMsg(
+      `${usedFallback ? "Imported via fallback" : "Imported"} ${deduped.length}/${finalShots.length} rows from "${filename}". ${dupCount} duplicates skipped.`,
+      deduped.length ? "success" : "warn"
+    );
+  }
   const onFile = async (file: File) => {
-    let wb: XLSX.WorkBook | null = null;
-    let textFromCSV: string | null = null;
-
     try {
-      const isCSV =
-        /\.csv$/i.test(file.name) ||
-        file.type === "text/csv" ||
-        file.type === "application/vnd.ms-excel";
-
+      const isCSV = /\.csv$/i.test(file.name) || file.type === "text/csv" || file.type === "application/vnd.ms-excel";
       if (isCSV) {
-        textFromCSV = await file.text();
-        const firstLine = (textFromCSV.split(/\r?\n/)[0] || "");
-        const count = (ch: string) => (firstLine.match(new RegExp(ch, "g")) || []).length;
+        const text = await file.text();
+        const first = (text.split(/\r?\n/)[0] || "");
+        const count = (ch: string) => (first.match(new RegExp(ch, "g")) || []).length;
         const FS = count("\t") >= count(";") && count("\t") >= count(",") ? "\t" : (count(";") > count(",") ? ";" : ",");
-        wb = XLSX.read(textFromCSV, { type: "string", FS });
+        const wb = XLSX.read(text, { type: "string", FS });
+        processWorkbook(wb, text, file.name);
       } else {
         const buf = await file.arrayBuffer();
-        wb = XLSX.read(buf, { type: "array" });
+        const wb = XLSX.read(buf, { type: "array" });
+        processWorkbook(wb, null, file.name);
       }
-    } catch (err) {
-      console.error(err);
-      pushMsg("Sorry, I couldn't read that file. Is it a CSV/XLSX/XLS export?", "error");
-      return;
-    }
-
-    processWorkbook(wb!, textFromCSV, file.name);
+    } catch { pushMsg("Sorry, I couldn't read that file. Is it CSV/XLSX?", "error"); }
   };
-
-  // Load sample from /public/sampledata.csv, else fallback
   const loadSample = async () => {
     try {
       const resp = await fetch("./sampledata.csv", { cache: "no-store" });
-      if (!resp.ok) throw new Error("sampledata.csv not found");
+      if (!resp.ok) throw new Error();
       const text = await resp.text();
       const wb = XLSX.read(text, { type: "string" });
       processWorkbook(wb, text, "sampledata.csv");
     } catch {
       const sample = builtinSample();
       const existing = new Set(shots.map(fpOf));
-      const deduped = sample.filter(s => !existing.has(fpOf(s)));
-      setShots(prev => [...prev, ...deduped]);
-      pushMsg(`Loaded built-in sample (${deduped.length}/${sample.length} new; ${sample.length - deduped.length} duplicates skipped).`, "success");
+      const add = sample.filter(s => !existing.has(fpOf(s)));
+      setShots(prev => [...prev, ...add]);
+      pushMsg(`Loaded built-in sample (${add.length}/${sample.length} new).`, "success");
     }
   };
 
-  /** Derived/cleanup on import */
-  function applyDerived(s: Shot): Shot {
-    const s2 = { ...s };
-    const Sm = coalesceSmash(s2);
-    const F2P = coalesceFaceToPath(s2);
-    if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
-    if (F2P !== undefined) s2.FaceToPath_deg = F2P;
-    return s2;
-  }
-
-  /** Filters (with/without club) */
+  /* ---------- Filters ---------- */
   const baseFilter = (source: Shot[], skipClub = false) => {
     let pool = source;
-
-    if (sessionFilter !== "ALL") {
-      pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
-    }
-
-    if (!skipClub) {
-      pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
-    }
-
+    if (sessionFilter !== "ALL") pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
+    if (!skipClub) pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
     if (dateFrom || dateTo) {
-      const from = dateFrom ? new Date(dateFrom) : null;
-      const to = dateTo ? new Date(dateTo) : null;
+      const from = dateFrom ? new Date(dateFrom) : null; const to = dateTo ? new Date(dateTo) : null;
       if (to) to.setDate(to.getDate() + 1);
       pool = pool.filter(s => {
         if (!s.Timestamp) return true;
@@ -758,7 +607,6 @@ export default function App() {
         return true;
       });
     }
-
     const minC = carryMin ? Number(carryMin) : undefined;
     const maxC = carryMax ? Number(carryMax) : undefined;
     if (minC !== undefined || maxC !== undefined) {
@@ -769,52 +617,33 @@ export default function App() {
         return true;
       });
     }
-
     return pool;
   };
-
   const filtered = useMemo(() => baseFilter(shots, false), [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
   const filteredNoClub = useMemo(() => baseFilter(shots, true), [shots, sessionFilter, dateFrom, dateTo, carryMin, carryMax]);
 
-  /** Outlier filter */
   const withOutliers = (pool: Shot[]) => {
     if (!excludeOutliers) return pool;
-
-    const getSmash = (s: Shot) =>
-      s.SmashFactor ?? (s.ClubSpeed_mph && s.BallSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
-
     const carryVals = pool.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-    const smashVals = pool.map(getSmash).filter((x): x is number => x != null);
-
-    const haveCarryStats = carryVals.length >= 5;
-    const haveSmashStats = smashVals.length >= 5;
-
-    const cm = haveCarryStats ? mean(carryVals) : 0;
-    const cs = haveCarryStats ? stddev(carryVals) : 0;
-    const sm = haveSmashStats ? mean(smashVals) : 0;
-    const ss = haveSmashStats ? stddev(smashVals) : 0;
-
+    const smashVals = pool.map(s => s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined)).filter((x): x is number => x != null);
+    const haveC = carryVals.length >= 5, haveS = smashVals.length >= 5;
+    const cm = haveC ? mean(carryVals) : 0, cs = haveC ? stddev(carryVals) : 0;
+    const sm = haveS ? mean(smashVals) : 0, ss = haveS ? stddev(smashVals) : 0;
     return pool.filter(s => {
       let ok = true;
-      if (haveCarryStats && s.CarryDistance_yds != null) {
-        ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
-      }
-      if (haveSmashStats) {
-        const sv = getSmash(s);
-        if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss;
-      }
+      if (haveC && s.CarryDistance_yds != null) ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
+      if (haveS) { const sv = s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined); if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss; }
       return ok;
     });
   };
-
   const filteredOutliers = useMemo(() => withOutliers(filtered), [filtered, excludeOutliers]);
   const filteredNoClubOutliers = useMemo(() => withOutliers(filteredNoClub), [filteredNoClub, excludeOutliers]);
 
-  /** KPIs & Shot Shape (based on current club selection) */
-  const kpis = useMemo(() => {
-    const grab = (sel: (s: Shot) => number | undefined) =>
-      filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
+  const hasData = filteredOutliers.length > 0;
 
+  /* ---------- KPIs ---------- */
+  const kpis = useMemo(() => {
+    const grab = (sel: (s: Shot) => number | undefined) => filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
     const carry = grab(s => s.CarryDistance_yds);
     const total = grab(s => s.TotalDistance_yds);
     const smash = grab(s => s.SmashFactor);
@@ -831,7 +660,6 @@ export default function App() {
     return {
       avgCarry: carry.length ? mean(carry) : undefined,
       avgTotal: total.length ? mean(total) : undefined,
-      sdCarry: carry.length ? stddev(carry) : undefined,
       avgSmash: smash.length ? mean(smash) : undefined,
       avgSpin: spin.length ? mean(spin) : undefined,
       avgCS: cs.length ? mean(cs) : undefined,
@@ -846,97 +674,94 @@ export default function App() {
     };
   }, [filteredOutliers]);
 
-  /** Aggregates per club (based on current club selection) */
+  /* ---------- Aggregates (Club Averages table) ---------- */
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
-    filteredOutliers.forEach(s => {
-      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-      byClub.get(s.Club)!.push(s);
-    });
+    filteredOutliers.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
     const rows: ClubRow[] = [];
     for (const [club, arr] of byClub.entries()) {
-      const grab = (sel: (s: Shot) => number | undefined) =>
-        arr.map(sel).filter((x): x is number => x !== undefined);
+      const grab = (sel: (s: Shot) => number | undefined) => arr.map(sel).filter((x): x is number => x !== undefined);
       const carry = grab(s => s.CarryDistance_yds);
       rows.push({
         club,
         count: arr.length,
         avgCarry: carry.length ? mean(carry) : 0,
         avgTotal: (grab(s => s.TotalDistance_yds).length ? mean(grab(s => s.TotalDistance_yds)) : 0),
-        sdCarry: carry.length ? stddev(carry) : 0,
         avgSmash: (grab(s => s.SmashFactor).length ? mean(grab(s => s.SmashFactor)) : 0),
         avgSpin: (grab(s => s.SpinRate_rpm).length ? mean(grab(s => s.SpinRate_rpm)) : 0),
         avgCS: (grab(s => s.ClubSpeed_mph).length ? mean(grab(s => s.ClubSpeed_mph)) : 0),
         avgBS: (grab(s => s.BallSpeed_mph).length ? mean(grab(s => s.BallSpeed_mph)) : 0),
         avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
+        avgF2P: (grab(s => coalesceFaceToPath(s)).length ? mean(grab(s => coalesceFaceToPath(s))) : 0),
       });
     }
     return rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
   }, [filteredOutliers]);
 
-  const hasData = filteredOutliers.length > 0;
-
-  /** Delete a session / all */
+  /* ---------- Delete ---------- */
   const deleteSession = () => {
     if (sessionFilter === "ALL") return;
-    const name = sessionFilter;
-    const count = shots.filter(s => (s.SessionId ?? "Unknown Session") === name).length;
-    if (!count) { pushMsg(`No shots found for session "${name}".`, "warn"); return; }
-    const ok = window.confirm(`Delete session "${name}" and its ${count} shots? This cannot be undone.`);
-    if (!ok) return;
-    setShots(prev => prev.filter(s => (s.SessionId ?? "Unknown Session") !== name));
-    setSelectedClubs([]);
-    setSessionFilter("ALL");
-    pushMsg(`Deleted session "${name}" (${count} shots).`, "success");
+    const count = shots.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter).length;
+    if (!count) { pushMsg(`No shots for session "${sessionFilter}".`, "warn"); return; }
+    if (!window.confirm(`Delete session "${sessionFilter}" (${count} shots)?`)) return;
+    setShots(prev => prev.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter));
+    setSelectedClubs([]); setSessionFilter("ALL");
+    pushMsg(`Deleted session "${sessionFilter}".`, "success");
   };
   const deleteAll = () => {
-    const ok = window.confirm("Delete ALL imported data? This cannot be undone.");
-    if (!ok) return;
-    setShots([]);
-    setSelectedClubs([]);
-    setSessionFilter("ALL");
+    if (!window.confirm("Delete ALL imported data?")) return;
+    setShots([]); setSelectedClubs([]); setSessionFilter("ALL");
     try { localStorage.removeItem("launch-tracker:shots"); } catch {}
     pushMsg("All data deleted.", "success");
   };
 
-  // DnD helpers
-  const onDragStart = (key: string) => (e: React.DragEvent) => { dragKeyRef.current = key; e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver = (key: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const onDrop = (key: string) => (e: React.DragEvent) => {
+  // DnD
+  const onDragStart = (k: string) => (e: React.DragEvent) => { dragKeyRef.current = k; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOver  = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDrop      = (k: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const from = dragKeyRef.current; dragKeyRef.current = null;
-    if (!from || from === key) return;
-    setCardOrder((prev) => {
-      const arr = prev.slice();
-      const i = arr.indexOf(from), j = arr.indexOf(key);
-      if (i === -1 || j === -1) return prev;
-      arr.splice(j, 0, ...arr.splice(i, 1));
-      return arr;
-    });
+    if (!from || from === k) return;
+    setCardOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; });
   };
-
-  // Insights DnD
   const onDragStartInsight = (k: string) => (e: React.DragEvent) => { dragKeyRef.current = k; e.dataTransfer.effectAllowed = "move"; };
   const onDragOverInsight  = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   const onDropInsight      = (k: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const from = dragKeyRef.current; dragKeyRef.current = null;
     if (!from || from === k) return;
-    setInsightsOrder((prev) => {
-      const arr = prev.slice();
-      const i = arr.indexOf(from), j = arr.indexOf(k);
-      if (i === -1 || j === -1) return prev;
-      arr.splice(j, 0, ...arr.splice(i, 1));
-      return arr;
-    });
+    setInsightsOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; });
   };
 
-  // Session notes helpers
-  const selectedSessionKey = sessionFilter === "ALL" ? "" : (sessionFilter || "Unknown Session");
-  const sessionNote = selectedSessionKey ? (sessionNotes[selectedSessionKey] || "") : "";
-  const saveSessionNote = (val: string) => {
-    if (!selectedSessionKey) return;
-    setSessionNotes(prev => ({ ...prev, [selectedSessionKey]: val }));
+  // Print Club Averages
+  const printClubAverages = () => {
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) return;
+    const rows = tableRows;
+    win.document.write(`
+      <html><head><title>Club Averages</title>
+      <style>
+        body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;}
+        h1{margin:0 0 12px;color:${T.brand}}
+        table{border-collapse:collapse;width:100%;font-size:13px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:left}
+        th{background:#f8fafc}
+      </style></head><body>
+      <h1>Launch Tracker — Club Averages</h1>
+      <table>
+        <tr>
+          <th>Club</th><th>Shots</th><th>Avg Carry</th><th>Avg Total</th>
+          <th>Avg Smash</th><th>Avg Spin</th><th>Avg Club Spd</th><th>Avg Ball Spd</th><th>Avg Launch</th><th>Face-to-Path</th>
+        </tr>
+        ${rows.map(r => `<tr>
+          <td>${r.club}</td><td>${r.count}</td><td>${r.avgCarry.toFixed(1)}</td><td>${r.avgTotal.toFixed(1)}</td>
+          <td>${r.avgSmash.toFixed(3)}</td><td>${Math.round(r.avgSpin)}</td><td>${r.avgCS.toFixed(1)}</td><td>${r.avgBS.toFixed(1)}</td><td>${r.avgLA.toFixed(1)}</td><td>${r.avgF2P.toFixed(2)}°</td>
+        </tr>`).join("")}
+      </table>
+      <script>window.onload=()=>window.print()</script>
+      </body></html>
+    `);
+    win.document.close();
   };
 
   return (
@@ -945,19 +770,11 @@ export default function App() {
       <header className="px-6 py-4" style={{ background: T.brand, color: "#fff" }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold tracking-wide">Launch Tracker</h1>
-
           <div className="flex items-center gap-2">
             <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
             <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
             <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
-
-            {/* Theme toggle (icon) */}
-            <button
-              onClick={() => setDark(!dark)}
-              className="ml-3 p-2 rounded-lg border"
-              style={{ background: "#ffffff10", borderColor: "#ffffff55" }}
-              title={dark ? "Switch to light mode" : "Switch to dark mode"}
-            >
+            <button onClick={() => setDark(!dark)} className="ml-3 p-2 rounded-lg border" style={{ background: "#ffffff10", borderColor: "#ffffff55" }} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
               {dark ? <IconSun /> : <IconMoon />}
             </button>
           </div>
@@ -972,9 +789,7 @@ export default function App() {
               <div key={m.id} className="rounded-lg px-4 py-3 text-sm flex items-start justify-between"
                    style={{ background: m.type === "error" ? "#FDECEC" : m.type === "success" ? T.greenSoft : m.type === "warn" ? T.orangeSoft : T.blueSoft, color: T.text, border: `1px solid ${T.border}` }}>
                 <div style={{ whiteSpace: "pre-line" }}>{m.text}</div>
-                <button onClick={() => closeMsg(m.id)} className="ml-4 px-2 py-1 text-xs rounded border" style={{ borderColor: T.border, color: T.textDim }}>
-                  ×
-                </button>
+                <button onClick={() => closeMsg(m.id)} className="ml-4 px-2 py-1 text-xs rounded border" style={{ borderColor: T.border, color: T.textDim }}>×</button>
               </div>
             ))}
           </div>
@@ -983,57 +798,30 @@ export default function App() {
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
-        {/* LEFT: Filters + Session Notes */}
+        {/* LEFT: Filters */}
         <aside className="col-span-12 lg:col-span-3 space-y-8">
-          {/* Filters */}
           <div ref={filtersRef}>
             <Card theme={T} title="Filters">
               {/* Import */}
               <div className="mb-4">
                 <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Import</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onFile(f);
-                    e.currentTarget.value = "";
-                  }}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full px-3 py-2 rounded-lg text-sm"
-                  style={{ background: T.brand, color: "#fff", border: `1px solid ${T.brand}` }}
-                >
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.currentTarget.value = ""; }}
+                  className="hidden" />
+                <button onClick={() => fileInputRef.current?.click()} className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: T.brand, color: "#fff", border: `1px solid ${T.brand}` }}>
                   Import file
                 </button>
               </div>
 
-              {/* Session selector */}
+              {/* Session */}
               <div className="mb-3">
                 <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Session</label>
                 <div className="flex gap-2">
-                  <select
-                    value={sessionFilter}
-                    onChange={(e) => setSessionFilter(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border text-sm"
-                    style={{ borderColor: T.border, background: T.panel, color: T.text }}
-                  >
-                    {sessions.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                  <select value={sessionFilter} onChange={(e) => setSessionFilter(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }}>
+                    {sessions.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
-                  <button
-                    className="px-3 py-2 rounded-lg text-sm border"
-                    style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
-                    onClick={deleteSession}
-                    disabled={sessionFilter === "ALL"}
-                    title="Delete selected session"
-                  >
-                    Delete
-                  </button>
+                  <button className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }} onClick={deleteSession} disabled={sessionFilter === "ALL"} title="Delete selected session">Delete</button>
                 </div>
               </div>
 
@@ -1042,12 +830,8 @@ export default function App() {
                 <label className="text-sm font-medium block mb-2" style={{ color: T.text }}>Clubs</label>
                 <ClubList theme={T} options={clubs} selected={selectedClubs} onChange={setSelectedClubs} palette={clubPalette} />
                 <div className="mt-3 flex gap-2">
-                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.brand, background: T.panel }} onClick={() => setSelectedClubs(clubs)} disabled={!clubs.length}>
-                    Select all
-                  </button>
-                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => setSelectedClubs([])} disabled={!selectedClubs.length}>
-                    Clear
-                  </button>
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.brand, background: T.panel }} onClick={() => setSelectedClubs(clubs)} disabled={!clubs.length}>Select all</button>
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => setSelectedClubs([])} disabled={!selectedClubs.length}>Clear</button>
                 </div>
               </div>
 
@@ -1059,9 +843,7 @@ export default function App() {
                   <input type="number" placeholder={carryBounds.max ? String(carryBounds.max) : "max"} value={carryMax} onChange={(e) => setCarryMax(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={{ borderColor: T.border, background: T.panel, color: T.text }} />
                 </div>
                 <div className="mt-2">
-                  <button onClick={() => { setCarryMin(""); setCarryMax(""); }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
-                    Reset range
-                  </button>
+                  <button onClick={() => { setCarryMin(""); setCarryMax(""); }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>Reset range</button>
                 </div>
               </div>
 
@@ -1070,7 +852,6 @@ export default function App() {
                 <label className="text-sm font-medium" style={{ color: T.text }}>Exclude outliers (2.5σ)</label>
                 <input type="checkbox" checked={excludeOutliers} onChange={(e) => setExcludeOutliers(e.target.checked)} />
               </div>
-
               <div className="mb-6">
                 <label className="text-sm font-medium block" style={{ color: T.text }}>Date range</label>
                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1086,60 +867,37 @@ export default function App() {
                     <button key={label} className="px-2 py-1 text-xs rounded-md border"
                             style={{ borderColor: T.border, color: T.brand, background: T.panel }}
                             onClick={() => {
-                              const to = new Date();
-                              const from = new Date();
-                              from.setDate(to.getDate() - days + 1);
-                              setDateFrom(from.toISOString().slice(0, 10));
-                              setDateTo(to.toISOString().slice(0, 10));
+                              const to = new Date(); const from = new Date(); from.setDate(to.getDate() - days + 1);
+                              setDateFrom(from.toISOString().slice(0, 10)); setDateTo(to.toISOString().slice(0, 10));
                             }}>
                       {label}
                     </button>
                   ))}
-                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => { setDateFrom(""); setDateTo(""); }}>
-                    Reset
-                  </button>
+                  <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={() => { setDateFrom(""); setDateTo(""); }}>Reset</button>
                 </div>
               </div>
 
               {/* Sample / Export */}
               <div className="mb-4 flex flex-wrap gap-2">
-                <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
-                  Load sample
-                </button>
-                <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
-                  Export CSV
+                <button onClick={loadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>Load sample</button>
+                <button onClick={() => exportCSV(filteredOutliers)} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>Export CSV</button>
+              </div>
+
+              {/* Print club averages */}
+              <div className="mb-4">
+                <button onClick={printClubAverages} className="w-full px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
+                  Print Club Averages
                 </button>
               </div>
 
               {/* Delete all */}
               <div className="pt-4 border-t" style={{ borderColor: T.border }}>
-                <button className="px-3 py-2 rounded-lg text-sm border w-full"
-                        style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }}
-                        onClick={deleteAll}>
+                <button className="px-3 py-2 rounded-lg text-sm border w-full" style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }} onClick={deleteAll}>
                   Delete all data
                 </button>
               </div>
             </Card>
           </div>
-
-          {/* Session Notes */}
-          <Card theme={T} title="Session Notes">
-            {sessionFilter === "ALL" ? (
-              <div className="text-sm" style={{ color: T.textDim }}>Select a session to add notes.</div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="text-xs" style={{ color: T.textDim }}>Notes for: <b style={{ color: T.text }}>{sessionFilter}</b></div>
-                <textarea
-                  rows={6}
-                  value={sessionNote}
-                  onChange={(e) => saveSessionNote(e.target.value)}
-                  placeholder="Add notes about drills, swing thoughts, weather, range balls, etc."
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: T.border, background: T.panel, color: T.text }}
-                />
-              </div>
-            )}
-          </Card>
         </aside>
 
         {/* RIGHT */}
@@ -1190,32 +948,22 @@ export default function App() {
       </main>
 
       <footer className="px-6 py-8 text-xs text-center" style={{ color: T.textDim }}>
-        Gap chart: Carry = blue, Total = green. Shot shape: Draw &lt; -2°, Straight ±2°, Fade &gt; 2°. Data is saved locally in your browser.
+        Gap chart: Carry = blue, Total = green. Shot shape: Draw &lt; -2°, Straight ±2°, Fade &gt; 2°. Data is saved locally.
       </footer>
     </div>
   );
 }
 
-/** ================= DASHBOARD CARDS ================= */
+/* ================= DASHBOARD ================= */
 function DashboardCards(props: {
-  theme: Theme;
-  cardOrder: string[];
-  setCardOrder: (v: string[]) => void;
+  theme: Theme; cardOrder: string[]; setCardOrder: (v: string[]) => void;
   onDragStart: (k: string) => (e: React.DragEvent) => void;
   onDragOver: (k: string) => (e: React.DragEvent) => void;
   onDrop: (k: string) => (e: React.DragEvent) => void;
-  hasData: boolean;
-  kpis: any;
-  filteredOutliers: Shot[];
-  filtered: Shot[];
-  shots: Shot[];
-  tableRows: ClubRow[];
-  clubs: string[];
+  hasData: boolean; kpis: any; filteredOutliers: Shot[]; filtered: Shot[]; shots: Shot[];
+  tableRows: ClubRow[]; clubs: string[];
 }) {
-  const {
-    theme: T, cardOrder, onDragStart, onDragOver, onDrop,
-    hasData, kpis, filteredOutliers, filtered, shots, tableRows, clubs
-  } = props;
+  const { theme: T, cardOrder, onDragStart, onDragOver, onDrop, hasData, kpis, filteredOutliers, filtered, shots, tableRows, clubs } = props;
 
   const CARDS: Record<string, { title: string; render: () => JSX.Element }> = {
     kpis: {
@@ -1225,10 +973,10 @@ function DashboardCards(props: {
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <KPI theme={T} label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={T.brand} />
             <KPI theme={T} label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={T.brandTint} />
-            <KPI theme={T} label="Carry Consistency" value={fmtNum(kpis.sdCarry, 1, " sd")} color={T.brand} />
-            <KPI theme={T} label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={T.brandTint} />
+            <KPI theme={T} label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={T.brand} />
             <KPI theme={T} label="Avg Spin" value={fmtNum(kpis.avgSpin, 0, " rpm")} color={T.brand} />
-            <KPI theme={T} label="Shots" value={String(kpis.shots ?? 0)} color={T.text} />
+            <KPI theme={T} label="Avg Club Spd" value={fmtNum(kpis.avgCS, 1, " mph")} color={T.text} />
+            <KPI theme={T} label="Avg Ball Spd" value={fmtNum(kpis.avgBS, 1, " mph")} color={T.text} />
           </div>
           <div className="text-xs mt-2" style={{ color: T.textDim }}>
             Using <b>{filteredOutliers.length}</b> shots after filters (of {filtered.length} filtered, {shots.length} imported).
@@ -1238,9 +986,7 @@ function DashboardCards(props: {
     },
     shape: {
       title: "Shot Shape Distribution",
-      render: () => (!hasData ? <EmptyChart theme={T} /> : (
-        <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />
-      ))
+      render: () => (!hasData ? <EmptyChart theme={T} /> : <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />)
     },
     dispersion: {
       title: "Dispersion — Driving Range View (50y to max)",
@@ -1262,7 +1008,7 @@ function DashboardCards(props: {
               <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
               <Legend wrapperStyle={{ color: T.text }} />
               <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
-              <Bar dataKey="avgTotal" name="Total (avg)" fill={T.brand} />
+              <Bar dataKey="avgTotal" name="Total (avg)" fill={TOTAL_BAR} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1320,28 +1066,24 @@ function DashboardCards(props: {
           <table className="min-w-full text-sm" style={{ color: T.text }}>
             <thead>
               <tr className="text-left" style={{ color: T.textDim }}>
-                <Th theme={T}>Club</Th><Th theme={T}>Shots</Th><Th theme={T}>Avg Carry</Th><Th theme={T}>Avg Total</Th><Th theme={T}>Carry SD</Th>
-                <Th theme={T}>Avg Smash</Th><Th theme={T}>Avg Spin</Th><Th theme={T}>Avg Club Spd</Th><Th theme={T}>Avg Ball Spd</Th><Th theme={T}>Avg Launch</Th>
+                <Th theme={T}>Club</Th><Th theme={T}>Shots</Th><Th theme={T}>Avg Carry</Th><Th theme={T}>Avg Total</Th>
+                <Th theme={T}>Avg Smash</Th><Th theme={T}>Avg Spin</Th><Th theme={T}>Avg Club Spd</Th><Th theme={T}>Avg Ball Spd</Th>
+                <Th theme={T}>Avg Launch</Th><Th theme={T}>Face-to-Path</Th>
               </tr>
             </thead>
             <tbody>
               {tableRows.map((r) => (
                 <tr key={r.club} className="border-t" style={{ borderColor: T.border }}>
-                  <Td>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-3 h-3 inline-block rounded-full" style={{ background: colorForClub(r.club, clubs, clubPalette) }} />
-                      {r.club}
-                    </span>
-                  </Td>
+                  <Td><span className="inline-flex items-center gap-2"><span className="w-3 h-3 inline-block rounded-full" style={{ background: colorForClub(r.club, clubs, clubPalette) }} />{r.club}</span></Td>
                   <Td>{r.count}</Td>
                   <Td>{r.avgCarry.toFixed(1)}</Td>
                   <Td>{r.avgTotal.toFixed(1)}</Td>
-                  <Td>{r.sdCarry.toFixed(1)}</Td>
                   <Td>{r.avgSmash.toFixed(3)}</Td>
                   <Td>{Math.round(r.avgSpin)}</Td>
                   <Td>{r.avgCS.toFixed(1)}</Td>
                   <Td>{r.avgBS.toFixed(1)}</Td>
                   <Td>{r.avgLA.toFixed(1)}</Td>
+                  <Td>{r.avgF2P.toFixed(2)}°</Td>
                 </tr>
               ))}
             </tbody>
@@ -1354,18 +1096,10 @@ function DashboardCards(props: {
   return (
     <div className="grid grid-cols-1 gap-8">
       {cardOrder.map((key) => {
-        const card = CARDS[key];
-        if (!card) return null;
+        const card = CARDS[key]; if (!card) return null;
         return (
-          <div key={key}
-               draggable
-               onDragStart={onDragStart(key)}
-               onDragOver={onDragOver(key)}
-               onDrop={onDrop(key)}
-               style={{ cursor: "grab" }}>
-            <Card theme={T} title={card.title} dragHandle>
-              {card.render()}
-            </Card>
+          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)} style={{ cursor: "grab" }}>
+            <Card theme={T} title={card.title} dragHandle>{card.render()}</Card>
           </div>
         );
       })}
@@ -1373,24 +1107,21 @@ function DashboardCards(props: {
   );
 }
 
-/** ================= INSIGHTS (reorderable) ================= */
+/* ================= INSIGHTS ================= */
 function InsightsView({
   theme, tableRows, filteredOutliers, filteredNoClubOutliers, allClubs,
   insightsOrder, onDragStart, onDragOver, onDrop
 }: {
-  theme: Theme;
-  tableRows: ClubRow[];
-  filteredOutliers: Shot[];              // respects club selection
-  filteredNoClubOutliers: Shot[];        // ignores club selection (for global insights)
-  allClubs: string[];
-  insightsOrder: string[];
+  theme: Theme; tableRows: ClubRow[];
+  filteredOutliers: Shot[]; filteredNoClubOutliers: Shot[];
+  allClubs: string[]; insightsOrder: string[];
   onDragStart: (k: string) => (e: React.DragEvent) => void;
   onDragOver: (k: string) => (e: React.DragEvent) => void;
   onDrop: (k: string) => (e: React.DragEvent) => void;
 }) {
   const T = theme;
 
-  // ---- GLOBAL metrics (ignore club selection; still respect date/session/outliers/range)
+  // Global metrics (ignore club selection)
   const longest = filteredNoClubOutliers.reduce<{ club: string; carry: number } | null>((acc, s) => {
     const c = s.CarryDistance_yds ?? -Infinity;
     if (c <= 0) return acc;
@@ -1400,32 +1131,17 @@ function InsightsView({
 
   const perClubGlobal = useMemo(() => {
     const by = new Map<string, Shot[]>();
-    filteredNoClubOutliers.forEach(s => {
-      if (!by.has(s.Club)) by.set(s.Club, []);
-      by.get(s.Club)!.push(s);
-    });
-    const rows = [...by.entries()].map(([club, arr]) => {
+    filteredNoClubOutliers.forEach(s => { if (!by.has(s.Club)) by.set(s.Club, []); by.get(s.Club)!.push(s); });
+    return [...by.entries()].map(([club, arr]) => {
       const carry = arr.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
-      const smash = arr.map(s => s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined))
-                       .filter((x): x is number => x != null);
+      const smash = arr.map(s => s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined)).filter((x): x is number => x != null);
       const lateral = arr.map(s => {
         if (s.CarryDeviationDistance_yds != null) return s.CarryDeviationDistance_yds;
-        if (s.LaunchDirection_deg != null && s.CarryDistance_yds != null) {
-          const rad = (s.LaunchDirection_deg * Math.PI) / 180;
-          return s.CarryDistance_yds * Math.sin(rad);
-        }
+        if (s.LaunchDirection_deg != null && s.CarryDistance_yds != null) return s.CarryDistance_yds * Math.sin((s.LaunchDirection_deg * Math.PI) / 180);
         return undefined;
       }).filter((x): x is number => x != null);
-      return {
-        club,
-        n: arr.length,
-        sdCarry: carry.length ? stddev(carry) : Infinity,
-        meanSmash: smash.length ? mean(smash) : 0,
-        sdLateral: lateral.length ? stddev(lateral) : 0,
-        meanLateral: lateral.length ? mean(lateral) : 0,
-      };
+      return { club, n: arr.length, sdCarry: carry.length ? stddev(carry) : Infinity, meanSmash: smash.length ? mean(smash) : 0, sdLateral: lateral.length ? stddev(lateral) : 0, meanLateral: lateral.length ? mean(lateral) : 0 };
     });
-    return rows;
   }, [filteredNoClubOutliers]);
 
   const consistent = useMemo(() => {
@@ -1434,7 +1150,6 @@ function InsightsView({
     return eligible.reduce((a, b) => (a.sdCarry <= b.sdCarry ? a : b));
   }, [perClubGlobal]);
 
-  // Efficiency score (0–100). Normalize smash factor to 1.50 “ideal” across clubs.
   const efficiencyScore = useMemo(() => {
     const perShot = filteredNoClubOutliers.map((s) => {
       const sf = s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined);
@@ -1445,13 +1160,9 @@ function InsightsView({
     return perShot.length ? Math.round(mean(perShot)) : 0;
   }, [filteredNoClubOutliers]);
 
-  // Tight gapping count (global)
   const gappingWarnings = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
-    filteredNoClubOutliers.forEach((s) => {
-      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-      byClub.get(s.Club)!.push(s);
-    });
+    filteredNoClubOutliers.forEach((s) => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
     const rows = [...byClub.entries()].map(([club, arr]) => {
       const carry = arr.map(s => s.CarryDistance_yds!).filter((x): x is number => x != null);
       return { club, avgCarry: carry.length ? mean(carry) : 0 };
@@ -1464,18 +1175,12 @@ function InsightsView({
     return bad;
   }, [filteredNoClubOutliers]);
 
-  // ---- PERSONAL BESTS (depends on current selection)
-  const personalBests = useMemo(() => {
-    const pool = filteredOutliers;
-    if (!pool.length) return null;
-    const pbCarry = pool.reduce((acc, s) =>
-      (s.CarryDistance_yds != null && (!acc || (s.CarryDistance_yds > acc.val)))
-        ? { val: s.CarryDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
-    const pbTotal = pool.reduce((acc, s) =>
-      (s.TotalDistance_yds != null && (!acc || (s.TotalDistance_yds > acc.val)))
-        ? { val: s.TotalDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
-
-    // Average shot direction in degrees (prefer LaunchDirection; fallback to derived)
+  // Personal Records (depends on current selection)
+  const personal = useMemo(() => {
+    const pool = filteredOutliers; if (!pool.length) return null;
+    const pbCarry = pool.reduce((acc, s) => (s.CarryDistance_yds != null && (!acc || (s.CarryDistance_yds > acc.val))) ? { val: s.CarryDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
+    const pbTotal = pool.reduce((acc, s) => (s.TotalDistance_yds != null && (!acc || (s.TotalDistance_yds > acc.val))) ? { val: s.TotalDistance_yds, club: s.Club } : acc, null as null | { val: number; club: string });
+    // avg direction
     const dirs = pool.map((s) => {
       if (s.LaunchDirection_deg != null) return s.LaunchDirection_deg;
       if (s.CarryDeviationDistance_yds != null && s.CarryDistance_yds != null && s.CarryDistance_yds > 0) {
@@ -1485,127 +1190,175 @@ function InsightsView({
       return undefined;
     }).filter((x): x is number => x != null);
     const avgDir = dirs.length ? mean(dirs) : 0;
-
     return { pbCarry, pbTotal, avgDir };
   }, [filteredOutliers]);
 
+  // Proficiency tiers from the image (Total yds)
+  const DIST_TIERS: Record<string, { beginner: number; average: number; good: number; advanced: number; tour: number }> = {
+    "Driver": { beginner:180, average:220, good:250, advanced:280, tour:296 },
+    "3 Wood": { beginner:170, average:210, good:225, advanced:235, tour:262 },
+    "5 Wood": { beginner:150, average:195, good:205, advanced:220, tour:248 },
+    "Hybrid": { beginner:145, average:180, good:190, advanced:210, tour:242 },
+    "2 Iron": { beginner:100, average:180, good:190, advanced:215, tour:236 },
+    "3 Iron": { beginner:100, average:170, good:180, advanced:205, tour:228 },
+    "4 Iron": { beginner:100, average:160, good:170, advanced:195, tour:219 },
+    "5 Iron": { beginner:125, average:155, good:165, advanced:185, tour:209 },
+    "6 Iron": { beginner:120, average:145, good:160, advanced:175, tour:197 },
+    "7 Iron": { beginner:110, average:140, good:150, advanced:165, tour:185 },
+    "8 Iron": { beginner:100, average:130, good:140, advanced:155, tour:172 },
+    "9 Iron": { beginner:90, average:115, good:125, advanced:145, tour:159 },
+    "Pitching Wedge": { beginner:80, average:100, good:110, advanced:135, tour:146 },
+    "Gap Wedge": { beginner:60, average:90, good:100, advanced:125, tour:135 },
+    "Sand Wedge": { beginner:55, average:80, good:95, advanced:115, tour:124 },
+    "Lob Wedge": { beginner:40, average:60, good:80, advanced:105, tour:113 },
+    "60 (LW)": { beginner:40, average:60, good:80, advanced:105, tour:113 },
+  };
+  function proficiencyForClub(club: string, avgTotal: number) {
+    const key = Object.keys(DIST_TIERS).find(k => k.toLowerCase() === club.toLowerCase());
+    if (!key) return "—";
+    const t = DIST_TIERS[key];
+    if (avgTotal >= t.tour) return "PGA Tour";
+    if (avgTotal >= t.advanced) return "Advanced";
+    if (avgTotal >= t.good) return "Good";
+    if (avgTotal >= t.average) return "Average";
+    return "Beginner";
+  }
+
   const [metric, setMetric] = useState<"total" | "carry">("total");
 
-  const CARDS: Record<string, { title: string; body: JSX.Element }> = {
-    distanceBox: {
-      title: `Distance Distribution by Club — ${metric === "total" ? "Total" : "Carry"} (yds)`,
-      body: (
-        <>
+  // Progress data (selected club only)
+  const selectedClubOnly = useMemo(() => {
+    const setSel = new Set(filteredOutliers.map(s => s.Club));
+    return setSel.size === 1 ? [...setSel][0] : null;
+  }, [filteredOutliers]);
+
+  const progressData = useMemo(() => {
+    if (!selectedClubOnly) return [];
+    const arr = filteredOutliers.filter(s => s.Club === selectedClubOnly && s.Timestamp && (metric === "total" ? s.TotalDistance_yds != null : s.CarryDistance_yds != null))
+      .map(s => ({ date: new Date(s.Timestamp!), value: metric === "total" ? s.TotalDistance_yds! : s.CarryDistance_yds! }))
+      .sort((a, b) => +a.date - +b.date);
+    return arr.map(d => ({ date: d.date.toISOString().slice(0,10), value: d.value }));
+  }, [filteredOutliers, selectedClubOnly, metric]);
+
+  // Grid: two columns on md+, specific spans
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {/* Distance Distribution (full width) */}
+      <div className="md:col-span-2" draggable onDragStart={onDragStart("distanceBox")} onDragOver={onDragOver("distanceBox")} onDrop={onDrop("distanceBox")} style={{ cursor: "grab" }}>
+        <Card theme={T} title={`Distance Distribution by Club — ${metric === "total" ? "Total" : "Carry"} (yds)`} dragHandle>
           <div className="mb-3">
-            <button
-              onClick={() => setMetric(metric === "total" ? "carry" : "total")}
-              className="px-2 py-1 text-xs rounded-md border"
-              style={{ borderColor: T.border, color: T.brand, background: T.panel }}
-            >
+            <button onClick={() => setMetric(metric === "total" ? "carry" : "total")} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>
               Switch to {metric === "total" ? "Carry" : "Total"}
             </button>
           </div>
-          {/* colored per club; tooltip shows BOTH metrics */}
-          <DistanceBoxChart theme={T} shots={filteredOutliers} clubs={allClubs} metric={metric} />
-        </>
-      )
-    },
-    highlights: {
-      title: "Highlights (All Clubs)",
-      body: (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds (${longest.club})` : "-"} color={T.brand} />
-          <KPI theme={T} label="Most Consistent (club)" value={consistent ? `${consistent.club} (${consistent.sdCarry.toFixed(1)} sd)` : "-"} color={T.brandTint} />
-          <KPI theme={T} label="Efficiency Score" value={`${efficiencyScore}/100`} color={T.text} />
-        </div>
-      )
-    },
-    warnings: {
-      title: `Gapping Warnings (Carry Δ < 12 yds) — ${gappingWarnings.length} issue${gappingWarnings.length === 1 ? "" : "s"}`,
-      body: gappingWarnings.length === 0 ? (
-        <div style={{ color: T.textDim }}>No issues detected.</div>
-      ) : (
-        <ul className="list-disc pl-6" style={{ color: T.text }}>
-          {gappingWarnings.map((g, i) => (
-            <li key={i}><b>{g.a}</b> ↔ <b>{g.b}</b> : {g.gap.toFixed(1)} yds</li>
-          ))}
-        </ul>
-      )
-    },
-    personalBests: {
-      title: "Personal Bests (current selection)",
-      body: !personalBests ? (
-        <div style={{ color: T.textDim }}>No shots in selection.</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <KPI theme={T} label="PB Carry" value={personalBests.pbCarry ? `${personalBests.pbCarry.val.toFixed(1)} yds (${personalBests.pbCarry.club})` : "-"} color={T.brand} />
-            <KPI theme={T} label="PB Total" value={personalBests.pbTotal ? `${personalBests.pbTotal.val.toFixed(1)} yds (${personalBests.pbTotal.club})` : "-"} color={T.brandTint} />
-            <KPI theme={T} label="Avg Shot Direction" value={`${personalBests.avgDir.toFixed(1)}°`} color={T.text} />
+          <div style={{ background: T.brandSoft, borderRadius: 12, padding: 8 }}>
+            <DistanceBoxChart theme={T} shots={filteredOutliers} clubs={allClubs} metric={metric} />
           </div>
-          <DirectionGauge theme={T} degrees={personalBests.avgDir} />
-        </>
-      )
-    },
-    weaknesses: {
-      title: "Biggest Weaknesses (All Clubs)",
-      body: (() => {
-        if (!perClubGlobal.length) return <div style={{ color: T.textDim }}>Not enough data.</div>;
-        const eligible = perClubGlobal.filter(r => r.n >= 5);
-        if (!eligible.length) return <div style={{ color: T.textDim }}>Need at least 5 shots per club.</div>;
-        const right = eligible.reduce((a, b) => (a.meanLateral >= b.meanLateral ? a : b));
-        const left  = eligible.reduce((a, b) => (a.meanLateral <= b.meanLateral ? a : b));
-        const leastCons = eligible.reduce((a, b) => (a.sdCarry >= b.sdCarry ? a : b));
-        const worstEff  = eligible.reduce((a, b) => (a.meanSmash <= b.meanSmash ? a : b));
-        return (
-          <ul className="list-disc pl-6" style={{ color: T.text }}>
-            <li><b>Most right-biased:</b> {right.club} (avg lateral +{right.meanLateral.toFixed(1)} yds)</li>
-            <li><b>Most left-biased:</b> {left.club} (avg lateral {left.meanLateral.toFixed(1)} yds)</li>
-            <li><b>Least consistent carry:</b> {leastCons.club} (SD {leastCons.sdCarry.toFixed(1)} yds)</li>
-            <li><b>Lowest efficiency:</b> {worstEff.club} (avg smash {worstEff.meanSmash.toFixed(3)})</li>
-          </ul>
-        );
-      })()
-    }
-  };
+        </Card>
+      </div>
 
-  return (
-    <div className="grid grid-cols-1 gap-8">
-      {insightsOrder.map((key) => {
-        const c = CARDS[key];
-        if (!c) return null;
-        return (
-          <div key={key}
-               draggable
-               onDragStart={onDragStart(key)}
-               onDragOver={onDragOver(key)}
-               onDrop={onDrop(key)}
-               style={{ cursor: "grab" }}>
-            <Card theme={T} title={c.title} dragHandle>
-              {c.body}
-            </Card>
+      {/* Highlights (full width) */}
+      <div className="md:col-span-2" draggable onDragStart={onDragStart("highlights")} onDragOver={onDragOver("highlights")} onDrop={onDrop("highlights")} style={{ cursor: "grab" }}>
+        <Card theme={T} title="Highlights (All Clubs)" dragHandle>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KPI theme={T} label="Longest Carry (shot)" value={longest ? `${longest.carry.toFixed(1)} yds (${longest.club})` : "-"} color={T.brand} />
+            <KPI theme={T} label="Most Consistent (club)" value={consistent ? `${consistent.club} (${consistent.sdCarry.toFixed(1)} sd)` : "-"} color={T.brandTint} />
+            <KPI theme={T} label="Efficiency Score" value={`${efficiencyScore}/100`} color={T.text}
+                 tooltip="Efficiency Score is based on Smash Factor (Ball Speed / Club Speed), normalized to an ideal of ~1.50. Each shot scores 0–100; the card shows the average across filtered data (ignoring club selection)." />
           </div>
-        );
-      })}
+        </Card>
+      </div>
+
+      {/* Personal Records + Progress (each full width on small, split rows below) */}
+      <div className="md:col-span-2" draggable onDragStart={onDragStart("personalRecords")} onDragOver={onDragOver("personalRecords")} onDrop={onDrop("personalRecords")} style={{ cursor: "grab" }}>
+        <Card theme={T} title="Personal Records (PR) — current selection" dragHandle>
+          {!personal ? <div style={{ color: T.textDim }}>No shots in selection.</div> : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <KPI theme={T} label="PR Carry" value={personal.pbCarry ? `${personal.pbCarry.val.toFixed(1)} yds (${personal.pbCarry.club})` : "-"} color={DRAW_BLUE} />
+                <KPI theme={T} label="PR Total" value={personal.pbTotal ? `${personal.pbTotal.val.toFixed(1)} yds (${personal.pbTotal.club})` : "-"} color={STRAIGHT_GREEN} />
+                {/* Proficiency Level (requires a single club selection) */}
+                <KPI theme={T}
+                     label="Proficiency Level"
+                     value={(() => {
+                       const setSel = new Set(filteredOutliers.map(s => s.Club));
+                       if (setSel.size !== 1) return "— (select one club)";
+                       const club = [...setSel][0];
+                       const totals = filteredOutliers.filter(s => s.Club === club).map(s => s.TotalDistance_yds).filter((v): v is number => v != null);
+                       if (!totals.length) return "—";
+                       return proficiencyForClub(club, mean(totals));
+                     })()}
+                     color={FADE_ORANGE}
+                     tooltip="Level is determined by your average TOTAL distance for the selected club vs. published tiers (Beginner, Average, Good, Advanced, PGA Tour)." />
+              </div>
+              {/* Direction Gauge (needle shortened) */}
+              <DirectionGauge theme={T} degrees={personal.avgDir} />
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* Club Progress (under PR) */}
+      <div className="md:col-span-2" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")} style={{ cursor: "grab" }}>
+        <Card theme={T} title={`Club Progress — ${selectedClubOnly ?? "select one club"} (${metric === "total" ? "Total" : "Carry"})`} dragHandle>
+          {!selectedClubOnly ? <div style={{ color: T.textDim }}>Select exactly one club in Filters to view progress.</div> : (
+            <div style={{ width: "100%", height: 300 }}>
+              <ResponsiveContainer>
+                <LineChart data={progressData}>
+                  <CartesianGrid stroke={T.border} />
+                  <XAxis dataKey="date" stroke={T.textDim} />
+                  <YAxis stroke={T.textDim} />
+                  <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
+                  <Line type="monotone" dataKey="value" stroke={T.brand} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Gapping Warnings (left) */}
+      <div draggable onDragStart={onDragStart("warnings")} onDragOver={onDragOver("warnings")} onDrop={onDrop("warnings")} style={{ cursor: "grab" }}>
+        <Card theme={T} title={`Gapping Warnings (Carry Δ < 12 yds) — ${gappingWarnings.length}`} dragHandle>
+          {gappingWarnings.length === 0 ? <div style={{ color: T.textDim }}>No issues detected.</div> : (
+            <ul className="list-disc pl-6" style={{ color: T.text }}>
+              {gappingWarnings.map((g, i) => <li key={i}><b>{g.a}</b> ↔ <b>{g.b}</b> : {g.gap.toFixed(1)} yds</li>)}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* Biggest Weaknesses (right) */}
+      <div draggable onDragStart={onDragStart("weaknesses")} onDragOver={onDragOver("weaknesses")} onDrop={onDrop("weaknesses")} style={{ cursor: "grab" }}>
+        <Card theme={T} title="Biggest Weaknesses (All Clubs)" dragHandle>
+          {(() => {
+            const eligible = perClubGlobal.filter(r => r.n >= 5);
+            if (!eligible.length) return <div style={{ color: T.textDim }}>Need at least 5 shots per club.</div>;
+            const right = eligible.reduce((a, b) => (a.meanLateral >= b.meanLateral ? a : b));
+            const left  = eligible.reduce((a, b) => (a.meanLateral <= b.meanLateral ? a : b));
+            const leastCons = eligible.reduce((a, b) => (a.sdCarry >= b.sdCarry ? a : b));
+            const worstEff  = eligible.reduce((a, b) => (a.meanSmash <= b.meanSmash ? a : b));
+            return (
+              <ul className="list-disc pl-6" style={{ color: T.text }}>
+                <li><b>Most right-biased:</b> {right.club} (avg lateral +{right.meanLateral.toFixed(1)} yds)</li>
+                <li><b>Most left-biased:</b> {left.club} (avg lateral {left.meanLateral.toFixed(1)} yds)</li>
+                <li><b>Least consistent carry:</b> {leastCons.club} (SD {leastCons.sdCarry.toFixed(1)} yds)</li>
+                <li><b>Lowest efficiency:</b> {worstEff.club} (avg smash {worstEff.meanSmash.toFixed(3)})</li>
+              </ul>
+            );
+          })()}
+        </Card>
+      </div>
     </div>
   );
 }
 
-/** ================= JOURNAL VIEW ================= */
-function JournalView({
-  theme, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx
-}: {
-  theme: Theme;
-  editorRef: React.RefObject<HTMLDivElement>;
-  value: string;
-  onInputHTML: (html: string) => void;
-  sessionLabel: string;
-  defaultHeightPx?: number;
+/* ================= JOURNAL ================= */
+function JournalView({ theme, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx }:{
+  theme: Theme; editorRef: React.RefObject<HTMLDivElement>; value: string; onInputHTML: (html: string)=>void; sessionLabel: string; defaultHeightPx?: number;
 }) {
   const T = theme;
-
-  const HELP_TEXT =
-    "Use the Journal to capture longer-form notes from your sessions: swing thoughts and feels vs. reals, drills and rep counts, shot patterns and misses, goals and next steps, equipment tweaks, course notes, and conditions (wind/lie/balls). Entries auto-save per session—switch sessions to keep separate journals.";
+  const HELP_TEXT = "Use the Journal to capture longer-form notes from your sessions: swing thoughts and feels vs. reals, drills and rep counts, shot patterns and misses, goals and next steps, equipment tweaks, course notes, and conditions. Entries auto-save per session.";
 
   const exec = (cmd: string, arg?: string) => {
     document.execCommand(cmd, false, arg);
@@ -1613,45 +1366,29 @@ function JournalView({
   };
   const onKeyUp = () => onInputHTML(editorRef.current?.innerHTML || "");
   const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text);
-    onInputHTML(editorRef.current?.innerHTML || "");
+    e.preventDefault(); const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text); onInputHTML(editorRef.current?.innerHTML || "");
   };
-
-  useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || "";
-    }
-  }, [value, editorRef]);
-
-  // Reserve room for help + toolbar
-  const RESERVED = 160;
-  const minEditorH = Math.max(420, Math.floor((defaultHeightPx || 420) - RESERVED));
+  useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || ""; }, [value, editorRef]);
+  const RESERVED = 160; const minEditorH = Math.max(420, Math.floor((defaultHeightPx || 420) - RESERVED));
 
   return (
     <div className="grid grid-cols-1 gap-8">
       <Card theme={T} title={`Journal — ${sessionLabel}`}>
-        <div className="mb-4 text-sm rounded-lg px-4 py-3"
-             style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}>
+        <div className="mb-4 text-sm rounded-lg px-4 py-3" style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}>
           {HELP_TEXT}
         </div>
-
         <div className="flex flex-wrap gap-2 mb-3">
           <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
           <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
           <ToolbarBtn theme={T} label={<u>U</u>} onClick={() => exec("underline")} />
-          <ToolbarBtn theme={T} label="H2" onClick={() => exec("formatBlock", "<h2>")} />
-          <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "<h3>")} />
+          <ToolbarBtn theme={T} label="H2" onClick={() => exec("formatBlock", "H2")} />
+          <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "H3")} />
           <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
           <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
-          <ToolbarBtn theme={T} label="Link" onClick={() => {
-            const url = window.prompt("Enter URL");
-            if (url) exec("createLink", url);
-          }} />
+          <ToolbarBtn theme={T} label="Link" onClick={() => { const url = window.prompt("Enter URL"); if (url) exec("createLink", url); }} />
           <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
         </div>
-
         <div
           ref={editorRef}
           contentEditable
@@ -1661,114 +1398,71 @@ function JournalView({
           onPaste={onPaste}
           aria-label="Practice journal editor"
           className="rounded-lg p-4 text-sm overflow-auto resize-y"
-          style={{
-            background: T.panel,
-            border: `1px solid ${T.border}`,
-            color: T.text,
-            minHeight: `${minEditorH}px`,
-            resize: "vertical",
-          }}
+          style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text, minHeight: `${minEditorH}px`, resize: "vertical" }}
           data-placeholder="Start typing your journal here…"
         />
-        {!value && (
-          <div className="mt-2 text-xs" style={{ color: T.textDim }}>
-            Tip: your journal auto-saves per session. Use the toolbar to format.
-          </div>
-        )}
+        {!value && <div className="mt-2 text-xs" style={{ color: T.textDim }}>Tip: your journal auto-saves per session. Use the toolbar to format.</div>}
       </Card>
     </div>
   );
 }
 
-/** ================= Range-style dispersion (SVG) ================= */
-function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
+/* ================= Range Dispersion (SVG) ================= */
+function RangeDispersion({ theme, shots, clubs, palette }:{ theme: Theme; shots: Shot[]; clubs: string[]; palette: string[] }) {
   const T = theme;
-
   const lateralDev = (s: Shot): number | undefined => {
     if (s.CarryDeviationDistance_yds !== undefined) return s.CarryDeviationDistance_yds;
-    if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) {
-      const rad = (s.LaunchDirection_deg * Math.PI) / 180;
-      return s.CarryDistance_yds * Math.sin(rad);
-    }
+    if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) return s.CarryDistance_yds * Math.sin((s.LaunchDirection_deg * Math.PI) / 180);
     return undefined;
   };
-
-  const pts = shots.map((s) => ({ club: s.Club, x: lateralDev(s), y: s.CarryDistance_yds }))
-                   .filter((p) => p.x !== undefined && p.y !== undefined) as { club: string; x: number; y: number }[];
-
+  const pts = shots.map((s) => ({ club: s.Club, x: lateralDev(s), y: s.CarryDistance_yds })).filter((p) => p.x !== undefined && p.y !== undefined) as { club: string; x: number; y: number }[];
   const YMIN = 50;
   const yMaxData = pts.length ? Math.max(...pts.map((p) => p.y)) : 150;
   const nice = (v: number, step: number) => Math.ceil((v + step * 0.1) / step) * step;
   const YMAX = Math.max(100, nice(Math.max(YMIN, yMaxData), 25));
-
   const xMaxData = pts.length ? Math.max(...pts.map((p) => Math.abs(p.x))) : 25;
   const XMAX = Math.max(25, nice(xMaxData, 5));
 
-  // Layout with left legend
-  const LEGEND_W = 160;
-  const W = 900, H = 420, PAD_T = 40, PAD_R = 40, PAD_B = 40, PAD_L = 40 + LEGEND_W;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
-
+  // Layout with added left offset so legend never overlaps flags/line
+  const LEGEND_W = 170;
+  const W = 900, H = 420, PAD_T = 46, PAD_R = 40, PAD_B = 40, PAD_L = 40 + LEGEND_W;
+  const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
   const xScale = (x: number) => PAD_L + ((x + XMAX) / (2 * XMAX)) * innerW;
-  const yScale = (y: number) => {
-    const clamped = Math.max(YMIN, Math.min(YMAX, y));
-    return H - PAD_B - ((clamped - YMIN) / (YMAX - YMIN)) * innerH;
-  };
+  const yScale = (y: number) => { const clamped = Math.max(YMIN, Math.min(YMAX, y)); return H - PAD_B - ((clamped - YMIN) / (YMAX - YMIN)) * innerH; };
 
-  const byClub = new Map<string, { x: number; y: number }[]>();
-  pts.forEach((p) => {
-    if (!byClub.has(p.club)) byClub.set(p.club, []);
-    byClub.get(p.club)!.push({ x: p.x, y: p.y });
-  });
+  const byClub = new Map<string, { x: number; y: number }[]>(); pts.forEach((p) => { if (!byClub.has(p.club)) byClub.set(p.club, []); byClub.get(p.club)!.push({ x: p.x, y: p.y }); });
 
-  const stripes = Array.from({ length: 12 }, (_, i) => i);
-  const distTicks: number[] = [];
-  for (let d = 50; d <= YMAX; d += 50) distTicks.push(d);
+  const distTicks: number[] = []; for (let d = 50; d <= YMAX; d += 50) distTicks.push(d);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" style={{ background: T.brandSoft, borderRadius: 12, border: `1px solid ${T.border}` }}>
-      {/* Stripes */}
-      {stripes.map((i) => (
-        <rect key={i} x={PAD_L} y={PAD_T + (innerH / stripes.length) * i} width={innerW} height={innerH / stripes.length}
-              fill={i % 2 === 0 ? T.gridStripeA : T.gridStripeB} opacity={0.9} />
+      {/* stripes */}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <rect key={i} x={PAD_L} y={PAD_T + (innerH / 12) * i} width={innerW} height={innerH / 12} fill={i % 2 === 0 ? T.gridStripeA : T.gridStripeB} opacity={0.9} />
       ))}
-
       {/* Target line */}
-      <line x1={xScale(0)} y1={PAD_T - 10} x2={xScale(0)} y2={H - PAD_B + 10} stroke={T.brand} strokeDasharray="6 6" strokeWidth={2} />
-
-      {/* Distance ticks + flags */}
+      <line x1={xScale(0)} y1={PAD_T - 6} x2={xScale(0)} y2={H - PAD_B + 6} stroke={T.brand} strokeDasharray="6 6" strokeWidth={2} />
+      <text x={xScale(0) + 10} y={PAD_T - 12} fontSize={12} fill={T.textDim}>Target line</text>
+      {/* Distance flags */}
       {distTicks.map((d, idx) => (
         <g key={d}>
           <line x1={PAD_L} x2={W - PAD_R} y1={yScale(d)} y2={yScale(d)} stroke={T.border} strokeDasharray="4 8" />
           <Flag theme={T} x={xScale(0)} y={yScale(d)} color={palette[idx % palette.length]} label={`${d}y`} />
         </g>
       ))}
-
-      {/* Axis labels */}
-      <text x={xScale(0) + 8} y={PAD_T - 16} fontSize={12} fill={T.textDim}>Target line</text>
-      <text x={PAD_L} y={H - 8} fontSize={11} fill={T.textDim}>Left ←  Deviation (yds)  → Right</text>
-      <text x={W - PAD_R - 120} y={PAD_T - 16} fontSize={11} fill={T.textDim}>Range: {YMIN}–{YMAX} yds</text>
-
-      {/* Points by club (stable colors) */}
+      {/* Points */}
       {[...byClub.keys()].map((club) => {
         const color = colorForClub(club, clubs, palette);
         const ptsC = byClub.get(club)!;
-        return (
-          <g key={club}>
-            {ptsC.map((p, i) => (
-              <circle key={i} cx={xScale(p.x)} cy={yScale(p.y)} r={4} fill={color} stroke={T.white} strokeWidth={1} opacity={0.95} />
-            ))}
-          </g>
-        );
+        return <g key={club}>{ptsC.map((p, i) => <circle key={i} cx={xScale(p.x)} cy={yScale(p.y)} r={4} fill={color} stroke={T.white} strokeWidth={1} opacity={0.95} />)}</g>;
       })}
 
-      {/* LEFT legend */}
-      <g transform={`translate(40, ${PAD_T})`}>
-        <rect x={0} y={-8} width={LEGEND_W - 20} height={Math.min(innerH, clubs.length * 22)} rx={8} ry={8}
-              fill={T.white} opacity={0.9} stroke={T.border} />
+      {/* Legend (left, slightly higher to avoid flags) */}
+      <g transform={`translate(10, ${PAD_T - 30})`}>
+        <rect x={0} y={0} width={LEGEND_W - 20} height={Math.min(innerH, clubs.length * 22) + 16} rx={8} ry={8} fill={T.white} opacity={0.92} stroke={T.border} />
+        <text x={10} y={16} fontSize={12} fill={T.textDim}>Clubs</text>
         {clubs.map((c, i) => (
-          <g key={c} transform={`translate(10, ${i * 22})`}>
+          <g key={c} transform={`translate(10, ${i * 22 + 28})`}>
             <rect width="10" height="10" fill={colorForClub(c, clubs, palette)} rx="2" ry="2" />
             <text x={14} y={9} fontSize="12" fill={T.textDim}>{c}</text>
           </g>
@@ -1777,10 +1471,8 @@ function RangeDispersion({ theme, shots, clubs, palette }: { theme: Theme; shots
     </svg>
   );
 }
-
-function Flag({ theme, x, y, color, label }: { theme: Theme; x: number; y: number; color: string; label: string }) {
-  const T = theme;
-  const poleH = 22, flagW = 16, flagH = 10;
+function Flag({ theme, x, y, color, label }:{ theme: Theme; x: number; y: number; color: string; label: string }) {
+  const T = theme; const poleH = 22, flagW = 16, flagH = 10;
   return (
     <g>
       <line x1={x} y1={y} x2={x} y2={y - poleH} stroke={T.textDim} strokeWidth={2} />
@@ -1790,12 +1482,10 @@ function Flag({ theme, x, y, color, label }: { theme: Theme; x: number; y: numbe
   );
 }
 
-/** ================= Shot Shape ================= */
-function ShotShape({
-  theme, draw, straight, fade
-}: { theme: Theme; draw: { n: number; pct: number }; straight: { n: number; pct: number }; fade: { n: number; pct: number } }) {
+/* ================= Shot Shape ================= */
+function ShotShape({ theme, draw, straight, fade }:{ theme: Theme; draw:{n:number;pct:number}; straight:{n:number;pct:number}; fade:{n:number;pct:number} }) {
   const T = theme;
-  const Box = ({ title, pct, n, bg, color }: { title: string; pct: number; n: number; bg: string; color: string }) => (
+  const Box = ({ title, pct, n, bg, color }:{ title:string; pct:number; n:number; bg:string; color:string }) => (
     <div className="rounded-2xl px-6 py-6" style={{ background: bg, border: `1px solid ${T.border}` }}>
       <div className="text-2xl font-semibold" style={{ color }}>{pct.toFixed(1)}%</div>
       <div className="mt-1 text-sm" style={{ color: T.text }}>{title}</div>
@@ -1804,103 +1494,43 @@ function ShotShape({
   );
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Box title="Draw" pct={draw.pct} n={draw.n} bg={T.blueSoft} color="#4EA3FF" />
-      <Box title="Straight" pct={straight.pct} n={straight.n} bg={T.greenSoft} color={T.brand} />
-      <Box title="Fade" pct={fade.pct} n={fade.n} bg={T.orangeSoft} color="#F59E0B" />
+      <Box title="Draw" pct={draw.pct} n={draw.n} bg={T.blueSoft} color={DRAW_BLUE} />
+      <Box title="Straight" pct={straight.pct} n={straight.n} bg={T.greenSoft} color={STRAIGHT_GREEN} />
+      <Box title="Fade" pct={fade.pct} n={fade.n} bg={T.orangeSoft} color={FADE_ORANGE} />
     </div>
   );
 }
 
-/** ================= DistanceBoxChart (Insights) ================= */
-function DistanceBoxChart({
-  theme,
-  shots,
-  clubs,
-  metric = "total"
-}: {
-  theme: Theme;
-  shots: Shot[];
-  clubs: string[];
-  metric?: "total" | "carry";
-}) {
-  const T = theme;
-  const getCarry = (s: Shot) => s.CarryDistance_yds;
-  const getTotal = (s: Shot) => s.TotalDistance_yds;
+/* ================= Distance Box (per-club colored) ================= */
+function DistanceBoxChart({ theme, shots, clubs, metric = "total" }:{ theme: Theme; shots: Shot[]; clubs: string[]; metric?: "total" | "carry"; }) {
+  const T = theme; const getCarry = (s: Shot) => s.CarryDistance_yds; const getTotal = (s: Shot) => s.TotalDistance_yds;
   const get = (s: Shot) => (metric === "total" ? getTotal(s) : getCarry(s));
 
-  // Build stats per club ONLY for clubs that have data, then sort by your logical order
-  const rows = clubs
-    .map((club) => {
-      const pool = shots.filter(s => s.Club === club);
-      const vals = pool.map(get).filter((v): v is number => v != null);
-      if (!vals.length) return null;
+  const rows = clubs.map((club) => {
+    const pool = shots.filter(s => s.Club === club);
+    const vals = pool.map(get).filter((v): v is number => v != null);
+    if (!vals.length) return null;
+    const min = Math.min(...vals), max = Math.max(...vals), q1 = quantile(vals, 0.25), q3 = quantile(vals, 0.75), med = quantile(vals, 0.5), avg = mean(vals);
+    const cVals = pool.map(getCarry).filter((v): v is number => v != null);
+    const tVals = pool.map(getTotal).filter((v): v is number => v != null);
+    const sumObj = (arr: number[]) => ({ min: Math.min(...arr), q1: quantile(arr, 0.25), median: quantile(arr, 0.5), mean: mean(arr), q3: quantile(arr, 0.75), max: Math.max(...arr), n: arr.length });
+    return { club, min, max, q1, q3, median: med, mean: avg, rangeStart: min, rangeWidth: Math.max(0, max - min), iqrStart: q1, iqrWidth: Math.max(0, q3 - q1), carryStats: cVals.length ? sumObj(cVals) : null, totalStats: tVals.length ? sumObj(tVals) : null };
+  }).filter(Boolean).sort((a: any, b: any) => orderIndex(a.club) - orderIndex(b.club)) as any[];
 
-      // stats for current metric
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      const q1 = quantile(vals, 0.25);
-      const q3 = quantile(vals, 0.75);
-      const med = quantile(vals, 0.5);
-      const avg = mean(vals);
+  if (!rows.length) return <div style={{ padding: 16, color: T.textDim }}>No shots for this selection.</div>;
 
-      // also compute BOTH carry & total summaries for tooltip
-      const cVals = pool.map(getCarry).filter((v): v is number => v != null);
-      const tVals = pool.map(getTotal).filter((v): v is number => v != null);
-      const sumObj = (arr: number[]) => ({
-        min: Math.min(...arr),
-        q1: quantile(arr, 0.25),
-        median: quantile(arr, 0.5),
-        mean: mean(arr),
-        q3: quantile(arr, 0.75),
-        max: Math.max(...arr),
-        n: arr.length
-      });
-
-      return {
-        club,
-        min, max, q1, q3, median: med, mean: avg,
-        rangeStart: min,
-        rangeWidth: Math.max(0, max - min),
-        iqrStart: q1,
-        iqrWidth: Math.max(0, q3 - q1),
-
-        carryStats: cVals.length ? sumObj(cVals) : null,
-        totalStats: tVals.length ? sumObj(tVals) : null,
-      };
-    })
-    .filter(Boolean)
-    .sort((a: any, b: any) => orderIndex(a.club) - orderIndex(b.club)) as any[];
-
-  if (!rows.length) {
-    return <div style={{ padding: 16, color: T.textDim }}>No shots for this selection.</div>;
-  }
-
-  // Compute a nice x-domain
-  const xMin = Math.min(...rows.map(r => r.min));
-  const xMax = Math.max(...rows.map(r => r.max));
-  const pad  = Math.max(5, Math.round((xMax - xMin) * 0.05));
+  const xMin = Math.min(...rows.map(r => r.min)), xMax = Math.max(...rows.map(r => r.max));
+  const pad = Math.max(5, Math.round((xMax - xMin) * 0.05));
   const domain: [number, number] = [Math.max(0, xMin - pad), xMax + pad];
-
-  // per-row colors
   const getColor = (club: string) => colorForClub(club, clubs, clubPalette);
-
-  // Custom tooltip shows BOTH metrics
   const Tip = ({ active, payload }: any) => {
     if (!active || !payload || !payload.length) return null;
-    const r = payload[0].payload;
-    const c = r.carryStats, t = r.totalStats;
-    const line = (label: string, s: any) =>
-      s ? <div><b>{label}:</b> min {s.min.toFixed(1)} • Q1 {s.q1.toFixed(1)} • Med {s.median.toFixed(1)} • Mean {s.mean.toFixed(1)} • Q3 {s.q3.toFixed(1)} • max {s.max.toFixed(1)} (n={s.n})</div>
-        : <div><b>{label}:</b> —</div>;
-    return (
-      <div style={{ background: T.panel, border:`1px solid ${T.border}`, color: T.text, padding: 10, borderRadius: 8, maxWidth: 420 }}>
-        <div style={{ marginBottom: 6 }}><b>{r.club}</b></div>
-        {line("Carry", c)}
-        {line("Total", t)}
-      </div>
-    );
+    const r = payload[0].payload; const c = r.carryStats, t = r.totalStats;
+    const line = (label: string, s: any) => s ? <div><b>{label}:</b> min {s.min.toFixed(1)} • Q1 {s.q1.toFixed(1)} • Med {s.median.toFixed(1)} • Mean {s.mean.toFixed(1)} • Q3 {s.q3.toFixed(1)} • max {s.max.toFixed(1)} (n={s.n})</div> : <div><b>{label}:</b> —</div>;
+    return <div style={{ background: T.panel, border:`1px solid ${T.border}`, color: T.text, padding: 10, borderRadius: 8, maxWidth: 420 }}>
+      <div style={{ marginBottom: 6 }}><b>{r.club}</b></div>{line("Carry", c)}{line("Total", t)}
+    </div>;
   };
-
   const tickHalfW = 7;
 
   return (
@@ -1910,89 +1540,54 @@ function DistanceBoxChart({
         <XAxis type="number" domain={domain} stroke={T.textDim} />
         <YAxis type="category" dataKey="club" interval={0} width={120} stroke={T.textDim} />
         <Tooltip content={<Tip />} />
-
-        {/* Min→Max (whisker) with per-row color at low alpha */}
         <Bar dataKey="rangeStart" stackId="range" fill="transparent" isAnimationActive={false} />
         <Bar dataKey="rangeWidth" stackId="range" barSize={6} radius={[4,4,4,4]}>
           {rows.map((r: any) => <Cell key={`w-${r.club}`} fill={alpha(getColor(r.club), 0.25)} />)}
         </Bar>
-
-        {/* Q1→Q3 box per-row in solid club color */}
         <Bar dataKey="iqrStart" stackId="iqr" fill="transparent" isAnimationActive={false} />
         <Bar dataKey="iqrWidth" stackId="iqr" barSize={14} radius={[6,6,6,6]} opacity={0.95}>
           {rows.map((r: any) => <Cell key={`b-${r.club}`} fill={getColor(r.club)} />)}
         </Bar>
-
-        {/* Median & Mean ticks aligned to the category row */}
         {rows.map((r) => (
-          <ReferenceLine
-            key={`med-${r.club}`}
-            segment={[{ x: r.median - tickHalfW, y: r.club }, { x: r.median + tickHalfW, y: r.club }]}
-            stroke={T.brandTint}
-            strokeWidth={3}
-            ifOverflow="extendDomain"
-          />
+          <ReferenceLine key={`med-${r.club}`} segment={[{ x: r.median - tickHalfW, y: r.club }, { x: r.median + tickHalfW, y: r.club }]} stroke={T.brandTint} strokeWidth={3} ifOverflow="extendDomain" />
         ))}
         {rows.map((r) => (
-          <ReferenceLine
-            key={`mean-${r.club}`}
-            segment={[{ x: r.mean - tickHalfW, y: r.club }, { x: r.mean + tickHalfW, y: r.club }]}
-            stroke={T.white}
-            strokeWidth={3}
-            ifOverflow="extendDomain"
-          />
+          <ReferenceLine key={`mean-${r.club}`} segment={[{ x: r.mean - tickHalfW, y: r.club }, { x: r.mean + tickHalfW, y: r.club }]} stroke={T.white} strokeWidth={3} ifOverflow="extendDomain" />
         ))}
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
 
-/** ============ Personal bests: direction gauge ============ */
-function DirectionGauge({ theme, degrees }: { theme: Theme; degrees: number }) {
+/* ================= Direction Gauge (shorter needle) ================= */
+function DirectionGauge({ theme, degrees }:{ theme: Theme; degrees: number }) {
   const T = theme;
-  // Clamp gauge to ±10°
-  const min = -10, max = 10;
-  const val = Math.max(min, Math.min(max, degrees));
-  const pct = (val - min) / (max - min);
-
-  const W = 360, H = 160;
-  const cx = W / 2, cy = H - 10, r = 140;
-
-  const angle = Math.PI * (1 - pct); // left = π, right = 0
-  const x = cx + r * Math.cos(angle);
-  const y = cy - r * Math.sin(angle);
-
+  const min = -10, max = 10, val = Math.max(min, Math.min(max, degrees)), pct = (val - min) / (max - min);
+  const W = 360, H = 160, cx = W / 2, cy = H - 10, r = 140, needleR = r * 0.75; // shorter needle
+  const angle = Math.PI * (1 - pct); const x = cx + needleR * Math.cos(angle); const y = cy - needleR * Math.sin(angle);
   const arc = (start: number, end: number) => {
-    const sx = cx + r * Math.cos(start);
-    const sy = cy - r * Math.sin(start);
-    const ex = cx + r * Math.cos(end);
-    const ey = cy - r * Math.sin(end);
-    const large = end - start <= Math.PI ? 0 : 1;
-    return `M ${sx} ${sy} A ${r} ${r} 0 ${large} 0 ${ex} ${ey}`;
+    const sx = cx + r * Math.cos(start), sy = cy - r * Math.sin(start);
+    const ex = cx + r * Math.cos(end), ey = cy - r * Math.sin(end);
+    const large = end - start <= Math.PI ? 0 : 1; return `M ${sx} ${sy} A ${r} ${r} 0 ${large} 0 ${ex} ${ey}`;
   };
-
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="160"
-         style={{ background: theme.brandSoft, borderRadius: 12, border: `1px solid ${theme.border}` }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="160" style={{ background: theme.brandSoft, borderRadius: 12, border: `1px solid ${theme.border}` }}>
       <path d={arc(Math.PI, 0)} fill="none" stroke={theme.border} strokeWidth={12} />
       <line x1={cx} y1={cy} x2={x} y2={y} stroke={theme.brand} strokeWidth={6} />
-      {/* tick labels */}
       <text x={20} y={cy - 8} fontSize={12} fill={theme.textDim}>Left -10°</text>
       <text x={W - 70} y={cy - 8} fontSize={12} fill={theme.textDim}>Right +10°</text>
-      <text x={cx - 30} y={20} fontSize={13} fill={theme.textDim}>Avg Dir {degrees.toFixed(1)}°</text>
+      <text x={cx - 40} y={20} fontSize={13} fill={theme.textDim}>Avg Dir {degrees.toFixed(1)}°</text>
     </svg>
   );
 }
 
-/** ================= UI PRIMITIVES ================= */
-function Card({ theme, title, children, dragHandle }: { theme: Theme; title: string; children: React.ReactNode; dragHandle?: boolean }) {
+/* ================= UI PRIMITIVES ================= */
+function Card({ theme, title, children, dragHandle }:{ theme: Theme; title: string; children: React.ReactNode; dragHandle?: boolean }) {
   const T = theme;
   return (
     <div className="rounded-2xl p-5 shadow" style={{ background: T.panel, border: `1px solid ${T.border}` }}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold tracking-wide" style={{ color: T.brand }}>
-          {title}
-        </h2>
+        <h2 className="text-sm font-semibold tracking-wide" style={{ color: T.brand }}>{title}</h2>
         <div className="flex items-center gap-3">
           {dragHandle && <span title="Drag to reorder" style={{ color: T.textDim, cursor: "grab" }}>⋮⋮</span>}
           <div className="h-1 rounded-full w-24" style={{ background: `linear-gradient(90deg, ${T.brand}, ${T.brandTint})` }} />
@@ -2002,16 +1597,18 @@ function Card({ theme, title, children, dragHandle }: { theme: Theme; title: str
     </div>
   );
 }
-function KPI({ theme, label, value, color }: { theme: Theme; label: string; value: string; color: string }) {
+function KPI({ theme, label, value, color, tooltip }:{ theme: Theme; label: string; value: string; color: string; tooltip?: string }) {
   const T = theme;
   return (
     <div className="rounded-2xl p-3 text-sm" style={{ background: T.panel, border: `1px solid ${T.kpiBorder}`, color: T.text }}>
-      <div style={{ color: T.textDim }}>{label}</div>
+      <div style={{ color: T.textDim }}>
+        {label} {tooltip && <span title={tooltip} style={{ marginLeft: 6, cursor: "help", color: T.brand }}>ⓘ</span>}
+      </div>
       <div className="mt-1 text-lg font-semibold" style={{ color }}>{value || "-"}</div>
     </div>
   );
 }
-function ClubList({ theme, options, selected, onChange, palette }: { theme: Theme; options: string[]; selected: string[]; onChange: (v: string[]) => void; palette: string[] }) {
+function ClubList({ theme, options, selected, onChange, palette }:{ theme: Theme; options: string[]; selected: string[]; onChange:(v:string[])=>void; palette:string[] }) {
   const T = theme;
   return (
     <div className="flex flex-col gap-2">
@@ -2032,81 +1629,36 @@ function ClubList({ theme, options, selected, onChange, palette }: { theme: Them
     </div>
   );
 }
-function EmptyChart({ theme }: { theme: Theme }) { return <div style={{ padding: 16, color: theme.textDim }}>No shots in this range.</div>; }
-function Th({ children, theme }: { children: React.ReactNode; theme: Theme }) { return <th className="py-2 pr-4" style={{ color: theme.textDim }}>{children}</th>; }
-function Td({ children }: { children: React.ReactNode }) { return <td className="py-2 pr-4">{children}</td>; }
-function TopTab({ theme, label, active, onClick }: { theme: Theme; label: string; active: boolean; onClick: () => void }) {
+function EmptyChart({ theme }:{ theme: Theme }) { return <div style={{ padding: 16, color: theme.textDim }}>No shots in this range.</div>; }
+function Th({ children, theme }:{ children: React.ReactNode; theme: Theme }) { return <th className="py-2 pr-4" style={{ color: theme.textDim }}>{children}</th>; }
+function Td({ children }:{ children: React.ReactNode }) { return <td className="py-2 pr-4">{children}</td>; }
+function TopTab({ theme, label, active, onClick }:{ theme: Theme; label: string; active: boolean; onClick: () => void }) {
   const T = theme;
   return (
-    <button
-      onClick={onClick}
-      className="px-3 py-2 rounded-lg text-sm border"
-      style={{
-        background: active ? "#ffffff" : "#ffffff22",
-        borderColor: "#ffffff55",
-        color: active ? T.brand : "#fff",
-        fontWeight: active ? 600 : 500
-      }}
-    >
+    <button onClick={onClick} className="px-3 py-2 rounded-lg text-sm border"
+      style={{ background: active ? "#ffffff" : "#ffffff22", borderColor: "#ffffff55", color: active ? T.brand : "#fff", fontWeight: active ? 600 : 500 }}>
       {label}
     </button>
   );
 }
-function ToolbarBtn({ theme, label, onClick }: { theme: Theme; label: React.ReactNode; onClick: () => void }) {
+function ToolbarBtn({ theme, label, onClick }:{ theme: Theme; label: React.ReactNode; onClick: ()=>void }) {
   const T = theme;
-  return (
-    <button onClick={onClick} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
-      {label}
-    </button>
-  );
+  return <button onClick={onClick} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>{label}</button>;
 }
-function IconSun() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFD166" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="12" cy="12" r="4" fill="#FFD166" />
-      <g stroke="#fff" strokeLinecap="round">
-        <line x1="12" y1="2" x2="12" y2="4" />
-        <line x1="12" y1="20" x2="12" y2="22" />
-        <line x1="2" y1="12" x2="4" y2="12" />
-        <line x1="20" y1="12" x2="22" y2="12" />
-        <line x1="4.93" y1="4.93" x2="6.34" y2="6.34" />
-        <line x1="17.66" y1="17.66" x2="19.07" y2="19.07" />
-        <line x1="4.93" y1="19.07" x2="6.34" y2="17.66" />
-        <line x1="17.66" y1="6.34" x2="19.07" y2="4.93" />
-      </g>
-    </svg>
-  );
-}
-function IconMoon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="currentColor" strokeWidth="1.5">
-      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-    </svg>
-  );
-}
+function IconSun(){return(<svg width="18" height="18" viewBox="0 0 24 24" fill="#FFD166" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="4" fill="#FFD166"/><g stroke="#fff" strokeLinecap="round"><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></g></svg>);}
+function IconMoon(){return(<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="currentColor" strokeWidth="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>);}
 
-/** ================= UTIL: numbers & CSV ================= */
-function fmtNum(v: number | undefined, fixed: number, suffix: string) {
-  return v === undefined ? "-" : `${v.toFixed(fixed)}${suffix}`;
-}
+/* ================= UTIL: CSV ================= */
+function fmtNum(v: number | undefined, fixed: number, suffix: string) { return v === undefined ? "-" : `${v.toFixed(fixed)}${suffix}`; }
 function toCSV(rows: Record<string, any>[]) {
   if (!rows.length) return "";
   const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r))));
-  const escape = (v: any) => {
-    if (v == null) return "";
-    const s = String(v).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
+  const escape = (v: any) => { if (v == null) return ""; const s = String(v).replace(/"/g, '""'); return /[",\n]/.test(s) ? `"${s}"` : s; };
   const lines = [headers.join(","), ...rows.map(r => headers.map(h => escape(r[h])).join(","))];
   return lines.join("\n");
 }
 function exportCSV(rows: Record<string, any>[]) {
-  const csv = toCSV(rows);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "launch-tracker_filtered.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob); const a = document.createElement("a");
+  a.href = url; a.download = "launch-tracker_filtered.csv"; a.click(); URL.revokeObjectURL(url);
 }
