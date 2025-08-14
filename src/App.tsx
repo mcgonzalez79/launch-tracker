@@ -438,20 +438,21 @@ export default function App() {
           )}
 
           {view === "insights" && (
-          <InsightsView
-            theme={T}
-            tableRows={tableRows}
-            filteredOutliers={filteredOutliers}
-            filteredNoClubOutliers={filteredNoClubOutliers}
-            filteredNoClubRaw={filteredNoClub}     // to compute PRs including outliers
-            allClubs={clubs}
-            selectedClubs={selectedClubs}          // <-- NEW
-            insightsOrder={insightsOrder}
-            onDragStart={onDragStart}
-            onDragOver={onDragOver}
-            onDrop={onDropInsight}
-          />
-        )}
+            <InsightsView
+              theme={T}
+              tableRows={tableRows}
+              filteredOutliers={filteredOutliers}
+              filteredNoClubOutliers={filteredNoClubOutliers}
+              filteredNoClubRaw={filteredNoClub}    // raw pool so PRs include outliers
+              allClubs={clubs}
+              selectedClubs={selectedClubs}         // <-- add this line
+              insightsOrder={insightsOrder}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDrop={onDropInsight}
+            />
+          )}
+
 
           {view === "journal" && (
             <JournalView
