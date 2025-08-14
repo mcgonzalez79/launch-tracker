@@ -1,24 +1,7 @@
 import * as XLSX from "xlsx";
+import { orderIndex } from "./theme";
 
-/* ===== Club ordering (single source of truth) ===== */
-export const CLUB_ORDER = [
-  "Driver",
-  "3 Wood",
-  "4 Hybrid",
-  "5 Hybrid (5 Iron)",
-  "6 Iron",
-  "7 Iron",
-  "8 Iron",
-  "9 Iron",
-  "Pitching Wedge",
-  "60 (LW)",
-];
-export function orderIndex(club: string): number {
-  const i = CLUB_ORDER.indexOf(club);
-  return i === -1 ? CLUB_ORDER.length + (club?.toLowerCase().charCodeAt(0) || 0) : i;
-}
-
-/* ===== Types ===== */
+/* Types */
 export type Shot = {
   SessionId?: string; Timestamp?: string; Club: string; Swings?: number;
   ClubSpeed_mph?: number; AttackAngle_deg?: number; ClubPath_deg?: number; ClubFace_deg?: number; FaceToPath_deg?: number;
@@ -35,7 +18,7 @@ export type ClubRow = {
 export type Msg = { id: number; text: string; type?: "info" | "success" | "warn" | "error" };
 export type ViewKey = "dashboard" | "insights" | "journal";
 
-/* ===== Stats + helpers ===== */
+/* Stats + helpers */
 export const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/(arr.length||1);
 export const stddev = (arr: number[]) => { if (arr.length<2) return 0; const m=mean(arr); return Math.sqrt(mean(arr.map(x=>(x-m)**2))); };
 export const quantile = (arr:number[], p:number) => { if(!arr.length) return NaN; const a=[...arr].sort((x,y)=>x-y); const i=(a.length-1)*p; const lo=Math.floor(i), hi=Math.ceil(i); if(lo===hi) return a[lo]; const h=i-lo; return a[lo]*(1-h)+a[hi]*h; };
@@ -46,15 +29,13 @@ export const coalesceSmash = (s:Shot)=> s.SmashFactor ?? (s.ClubSpeed_mph && s.B
 export const coalesceFaceToPath = (s:Shot)=> s.FaceToPath_deg ?? (s.ClubFace_deg!==undefined && s.ClubPath_deg!==undefined ? s.ClubFace_deg - s.ClubPath_deg : undefined);
 export const fmtNum = (v:number|undefined, fixed:number, suffix:string)=> v==null? "-" : `${v.toFixed(fixed)}${suffix}`;
 
-/* ===== Header normalization + map ===== */
+/* Header normalization + map */
 export const normalizeHeader = (raw:string) => {
-  let s=String(raw||"").trim();
-  s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
+  let s=String(raw||"").trim(); s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
   s=s.replace(/\[[^\]]*\]/g,"").replace(/\([^\)]*\)/g,"").replace(/[_\-]+/g," ").replace(/\s+/g," ").trim().replace(/:$/,"");
   s=s.replace(/\bsmash\s*factor\b/,"smash factor");
   return s;
 };
-
 export const headerMap: Record<string, keyof Shot> = {
   "club":"Club","club type":"Club","clubname":"Club","club name":"Club","swings":"Swings",
   "club speed":"ClubSpeed_mph","attack angle":"AttackAngle_deg","club path":"ClubPath_deg","club face":"ClubFace_deg","face to path":"FaceToPath_deg",
@@ -68,22 +49,18 @@ export const headerMap: Record<string, keyof Shot> = {
   "total deviation angle":"TotalDeviationAngle_deg","total deviation distance":"TotalDeviationDistance_yds",
   "sessionid":"SessionId","session id":"SessionId","timestamp":"Timestamp","date":"Timestamp","datetime":"Timestamp",
 };
-
 export function findBestHeader(rowsRaw:any[][]){
   const MAX=Math.min(20,rowsRaw.length);
   let best={idx:0,map:[] as (keyof Shot|undefined)[],score:0,usedTwoRows:false};
   const score=(hdr:any[])=>{ const mapped=hdr.map(h=>headerMap[normalizeHeader(String(h??""))]); const sc=mapped.filter(Boolean).length+(mapped.includes("Club" as keyof Shot)?2:0); return {mapped,sc}; };
   for(let i=0;i<MAX;i++){
     const r=rowsRaw[i]||[]; const s1=score(r); if(s1.sc>best.score) best={idx:i,map:s1.mapped,score:s1.sc,usedTwoRows:false};
-    if(i+1<rowsRaw.length){
-      const r2=rowsRaw[i+1]||[]; const combined=r.map((v:any,c:number)=>[v,r2[c]].filter(Boolean).join(" "));
-      const s2=score(combined); if(s2.sc>best.score) best={idx:i,map:s2.mapped,score:s2.sc,usedTwoRows:true};
-    }
+    if(i+1<rowsRaw.length){ const r2=rowsRaw[i+1]||[]; const combined=r.map((v:any,c:number)=>[v,r2[c]].filter(Boolean).join(" ")); const s2=score(combined); if(s2.sc>best.score) best={idx:i,map:s2.mapped,score:s2.sc,usedTwoRows:true}; }
   }
   return best;
 }
 
-/* ===== Fallback CSV parser (loose) ===== */
+/* Weird CSV fallback parser */
 export function parseWeirdLaunchCSV(text:string){
   const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0);
   if(!lines.length) return null;
@@ -96,7 +73,6 @@ export function parseWeirdLaunchCSV(text:string){
   if(!hasClub) return null;
   return { header, dataRows };
 }
-
 export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessionId:string){
   const norm=(s:string)=>normalizeHeader(s);
   const find=(aliases:string[])=>{ const wants=aliases.map(norm); for(let i=0;i<header.length;i++) if(wants.includes(norm(header[i]||""))) return i; return -1; };
@@ -128,7 +104,6 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
   };
   const num=(v:any)=>{ if(v==null) return undefined; const s=String(v).trim(); if(!s||s.toUpperCase()==="#DIV/0!"||s.toUpperCase()==="NAN") return undefined; const x=Number(s.replace(/,/g,"")); return isNaN(x)?undefined:x; };
   const ts=(v:string|undefined)=>{ if(!v) return undefined; const d=new Date(v); return isNaN(d.getTime())?undefined:d.toISOString(); };
-
   const shots:Shot[]=[];
   for(const row of rows){
     const rawType=id.ClubType>=0?row[id.ClubType]:"";
@@ -136,7 +111,6 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
     let club=(rawType||"").trim(); const nm=(rawName||"").trim();
     if(!club && nm) club=nm; else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
     if(!club) continue;
-
     const s:Shot={
       SessionId:fallbackSessionId,
       Club:club,
@@ -168,14 +142,14 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
   return shots;
 }
 
-/* ===== Dedup fingerprint ===== */
+/* Dedup fingerprint */
 export const fpOf = (s:Shot) => {
   const r=(x?:number,d=2)=> (x==null?"":Number(x).toFixed(d));
   const t=s.Timestamp?new Date(s.Timestamp).getTime():"";
   return [s.Club?.toLowerCase().trim(), r(s.CarryDistance_yds,1), r(s.TotalDistance_yds,1), r(s.BallSpeed_mph,1), r(s.ClubSpeed_mph,1), r(s.LaunchAngle_deg,1), r(s.SpinRate_rpm,0), r(s.LaunchDirection_deg,1), r(s.ApexHeight_yds,1), t].join("|");
 };
 
-/* ===== CSV export ===== */
+/* CSV export */
 export const toCSV = (rows: Record<string, any>[]) => {
   if(!rows.length) return "";
   const headers = Array.from(new Set(rows.flatMap(r => Object.keys(r))));
@@ -188,5 +162,5 @@ export const exportCSV = (rows: Record<string, any>[]) => {
   a.href = url; a.download = "launch-tracker_filtered.csv"; a.click(); URL.revokeObjectURL(url);
 };
 
-/* XLSX for App.tsx */
-export { XLSX };
+/* XLSX helpers exposed where needed */
+export { XLSX, orderIndex };
