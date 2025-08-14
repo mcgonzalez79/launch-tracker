@@ -5,7 +5,7 @@ import {
   Shot, ClubRow, orderIndex, mean
 } from "./utils";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, LabelList,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
   ComposedChart, ErrorBar, Line
 } from "recharts";
 
@@ -210,18 +210,16 @@ export default function InsightsView({
     return { bestClub, bestSd, avgCarry };
   }, [filteredNoClubOutliers]);
 
-  const globalProf = useMemo(() => proficiencyScore(filteredNoClubOutliers, null), [filteredNoClubOutliers]);
-
   /* ======= Distance Distribution (box & whisker) ======= */
-  // Build per-club five-number summaries for Carry and Total (respects club selection)
+  // Clubs on Y, Distances on X (no medians shown)
   const clubsOrdered = useMemo(
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
   );
   type BoxRow = {
     club: string;
-    Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number]; medianCarry: number;
-    Q1Total: number; iqrTotal: number; whiskerTotal: [number, number]; medianTotal: number;
+    Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number];
+    Q1Total: number; iqrTotal: number; whiskerTotal: [number, number];
   };
   const boxRows: BoxRow[] = useMemo(() => {
     const rows: BoxRow[] = [];
@@ -235,15 +233,13 @@ export default function InsightsView({
 
       rows.push({
         club,
-        Q1Carry: isFinite(c.q1) ? c.q1 : 0,
-        iqrCarry: (isFinite(c.q3) && isFinite(c.q1)) ? (c.q3 - c.q1) : 0,
-        whiskerCarry: [isFinite(c.min) ? c.min : 0, isFinite(c.max) ? c.max : 0],
-        medianCarry: isFinite(c.med) ? c.med : 0,
+        Q1Carry: Number.isFinite(c.q1) ? c.q1 : 0,
+        iqrCarry: (Number.isFinite(c.q3) && Number.isFinite(c.q1)) ? (c.q3 - c.q1) : 0,
+        whiskerCarry: [Number.isFinite(c.min) ? c.min : 0, Number.isFinite(c.max) ? c.max : 0],
 
-        Q1Total: isFinite(t.q1) ? t.q1 : 0,
-        iqrTotal: (isFinite(t.q3) && isFinite(t.q1)) ? (t.q3 - t.q1) : 0,
-        whiskerTotal: [isFinite(t.min) ? t.min : 0, isFinite(t.max) ? t.max : 0],
-        medianTotal: isFinite(t.med) ? t.med : 0,
+        Q1Total: Number.isFinite(t.q1) ? t.q1 : 0,
+        iqrTotal: (Number.isFinite(t.q3) && Number.isFinite(t.q1)) ? (t.q3 - t.q1) : 0,
+        whiskerTotal: [Number.isFinite(t.min) ? t.min : 0, Number.isFinite(t.max) ? t.max : 0],
       });
     });
     return rows;
@@ -260,20 +256,26 @@ export default function InsightsView({
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club) ======= */
-  const progressRows = useMemo(() => {
-    // expect one club selected; otherwise we still compile but it's noisier
-    const pool = filteredOutliers.slice().filter(s => s.CarryDistance_yds != null);
-    // Prefer timestamp; fallback to shot index
-    const withTime = pool.map((s, i) => ({
-      t: s.Timestamp ? new Date(s.Timestamp).getTime() : i,
-      label: s.Timestamp ? new Date(s.Timestamp).toLocaleString() : `Shot ${i + 1}`,
-      carry: s.CarryDistance_yds as number,
-      club: s.Club
-    }));
-    // If multiple clubs in pool, keep only the first club if exactly one is selected elsewhere
-    return withTime.sort((a, b) => a.t - b.t);
+  /* ======= Progress chart (single club only; short height otherwise) ======= */
+  const selectedClubName = useMemo(() => {
+    const set = new Set(filteredOutliers.map(s => s.Club));
+    return set.size === 1 ? Array.from(set)[0] : null;
   }, [filteredOutliers]);
+
+  const progressRows = useMemo(() => {
+    if (!selectedClubName) return [];
+    const pool = filteredOutliers
+      .filter(s => s.Club === selectedClubName && s.CarryDistance_yds != null)
+      .map((s, i) => ({
+        t: s.Timestamp ? new Date(s.Timestamp).getTime() : i,
+        label: s.Timestamp ? new Date(s.Timestamp).toLocaleString() : `Shot ${i + 1}`,
+        carry: s.CarryDistance_yds as number,
+      }))
+      .sort((a, b) => a.t - b.t);
+    return pool;
+  }, [filteredOutliers, selectedClubName]);
+
+  const progressHeight = (selectedClubName && progressRows.length > 1) ? 360 : 200;
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -281,18 +283,23 @@ export default function InsightsView({
         if (key === "distanceBox") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)">
-              <div style={{ width: "100%", height: 420 }}>
+              <div style={{ width: "100%", height: 480 }}>
                 <ResponsiveContainer>
-                  <ComposedChart data={boxRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
+                  <ComposedChart
+                    layout="vertical"
+                    data={boxRows}
+                    margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="club" />
-                    <YAxis />
+                    <XAxis type="number" />
+                    <YAxis dataKey="club" type="category" />
                     <Tooltip
                       formatter={(_, __, p: any) => {
                         const d = p && p.payload ? p.payload : {};
                         const lines = [
-                          `Carry min/Q1/med/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${d.medianCarry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
-                          `Total min/Q1/med/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${d.medianTotal?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
+                          // Removed medians
+                          `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
+                          `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
                         ];
                         return [lines.join("\n"), "Stats"];
                       }}
@@ -300,21 +307,17 @@ export default function InsightsView({
                     />
                     <Legend />
 
-                    {/* Carry box */}
+                    {/* Carry box (horizontal) */}
                     <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
                     <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
-                      <ErrorBar dataKey="whiskerCarry" direction="y" width={8} stroke="#1e40af" />
+                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
                     </Bar>
 
-                    {/* Total box */}
+                    {/* Total box (horizontal) */}
                     <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
                     <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
-                      <ErrorBar dataKey="whiskerTotal" direction="y" width={8} stroke="#166534" />
+                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
                     </Bar>
-
-                    {/* Optional: median ticks as a thin line via a practically invisible line chart */}
-                    <Line type="monotone" dataKey="medianCarry" dot={false} stroke="#1e40af" strokeWidth={0} />
-                    <Line type="monotone" dataKey="medianTotal" dot={false} stroke="#166534" strokeWidth={0} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -350,7 +353,7 @@ export default function InsightsView({
                   <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
-                {/* Most Consistent */}
+                {/* Most Consistent (global) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">Most Consistent Club</div>
                   {globalConsistency.bestClub
@@ -362,15 +365,6 @@ export default function InsightsView({
                       </>)
                     : (<div className="mt-1 text-slate-600 text-sm">More shots needed to measure consistency.</div>)
                   }
-                  <div className="mt-3">
-                    <button
-                      onClick={() => setShowBench(true)}
-                      className="px-3 py-2 text-sm rounded-md"
-                      style={{ background: theme.brand, color: "#fff" }}
-                    >
-                      View benchmark chart
-                    </button>
-                  </div>
                 </div>
               </div>
             </Card>
@@ -420,7 +414,7 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Respects current filters & outlier toggle.</div>
+                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
                 {/* PR Total (selected) */}
@@ -432,10 +426,10 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Respects current filters & outlier toggle.</div>
+                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
-                {/* Proficiency (selected) */}
+                {/* Proficiency (selected) + button to open modal */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">Proficiency Level</div>
                   <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
@@ -443,6 +437,13 @@ export default function InsightsView({
                     Score: {selectedProf.score.toFixed(0)} / 100
                     <span title="Compares your average total distance to reference ranges for each club you’ve selected, normalized to 0–100." style={{ marginLeft: 8, cursor: "help", fontSize: 12, color: "#64748b" }}>ⓘ</span>
                   </div>
+                  <button
+                    onClick={() => setShowBench(true)}
+                    className="mt-3 px-3 py-2 text-sm rounded-md"
+                    style={{ background: theme.brand, color: "#fff" }}
+                  >
+                    View benchmark chart
+                  </button>
                 </div>
               </div>
             </Card>
@@ -452,8 +453,8 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              <div style={{ width: "100%", height: 360 }}>
-                {progressRows.length ? (
+              <div style={{ width: "100%", height: progressHeight }}>
+                {selectedClubName && progressRows.length > 1 ? (
                   <ResponsiveContainer>
                     <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -470,7 +471,7 @@ export default function InsightsView({
                   </ResponsiveContainer>
                 ) : (
                   <div className="text-sm text-slate-500">
-                    Select a club and ensure your shots have timestamps (or at least multiple entries) to see trend over time.
+                    Select a single club in Filters to view progress over time (needs multiple shots).
                   </div>
                 )}
               </div>
