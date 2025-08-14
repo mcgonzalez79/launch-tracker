@@ -33,6 +33,7 @@ type Props = {
 const carryKey: keyof ClubRow = "avgCarry";
 const totalKey: keyof ClubRow = "avgTotal";
 
+/** Build club rows from arbitrary shots (used for global aggregates). */
 function byClubRowsFromShots(shots: Shot[]): ClubRow[] {
   const by = new Map<string, Shot[]>();
   shots.forEach(s => {
@@ -50,13 +51,12 @@ function byClubRowsFromShots(shots: Shot[]): ClubRow[] {
       count: arr.length,
       avgCarry: carry.length ? mean(carry) : 0,
       avgTotal: (grab(s => s.TotalDistance_yds).length ? mean(grab(s => s.TotalDistance_yds)) : 0),
-      sdCarry: carry.length ? stddev(carry) : 0,
       avgSmash: (grab(s => s.SmashFactor).length ? mean(grab(s => s.SmashFactor)) : 0),
       avgSpin: (grab(s => s.SpinRate_rpm).length ? mean(grab(s => s.SpinRate_rpm)) : 0),
       avgCS: (grab(s => s.ClubSpeed_mph).length ? mean(grab(s => s.ClubSpeed_mph)) : 0),
       avgBS: (grab(s => s.BallSpeed_mph).length ? mean(grab(s => s.BallSpeed_mph)) : 0),
       avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
-      // Face-to-Path for info panels if needed
+      // avgF2P is optional in some builds; include it if your ClubRow type supports it.
       avgF2P: (grab(s => (s.ClubFace_deg != null && s.ClubPath_deg != null)
         ? (s.ClubFace_deg - s.ClubPath_deg)
         : undefined).length
@@ -64,7 +64,7 @@ function byClubRowsFromShots(shots: Shot[]): ClubRow[] {
             ? (s.ClubFace_deg - s.ClubPath_deg)
             : undefined))
         : 0),
-    });
+    } as ClubRow);
   }
   // driver -> wedges
   return rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
@@ -94,6 +94,23 @@ function efficiencyScore0to100(shots: Shot[]): number {
   return Math.round(norm * 100);
 }
 
+/** Compute most consistent club directly from shots (min SD of carry, >= 5 shots). */
+function mostConsistentClub(shots: Shot[]): { club: string; sd: number; n: number } | null {
+  const by = new Map<string, number[]>();
+  shots.forEach(s => {
+    if (!s.Club || s.CarryDistance_yds == null) return;
+    if (!by.has(s.Club)) by.set(s.Club, []);
+    by.get(s.Club)!.push(s.CarryDistance_yds);
+  });
+  let best: { club: string; sd: number; n: number } | null = null;
+  for (const [club, carries] of by.entries()) {
+    if (carries.length < 5) continue;
+    const sd = stddev(carries);
+    if (!best || sd < best.sd) best = { club, sd, n: carries.length };
+  }
+  return best;
+}
+
 /* ========= Component ========= */
 export default function InsightsView({
   theme,
@@ -107,17 +124,15 @@ export default function InsightsView({
   onDrop,
 }: Props) {
   /* ---------- Colors ---------- */
-  // Two-series bars (gap chart-style) — keep stable, matches dashboard convention
-  const CARRY_BAR = theme.insightsCarry ?? "#3A86FF"; // blue default
-  const TOTAL_BAR = theme.insightsTotal ?? "#2ECC71";  // green default
+  // Two-series bars (gap chart-style), stable
+  const CARRY_BAR = "#3A86FF"; // blue
+  const TOTAL_BAR = "#2ECC71"; // green
 
-  // Per-club coloring (same order as Filters)
+  // Per-club palette (stable indexing by allClubs)
+  const palette =
+    ["#006747","#3A86FF","#FFB703","#EF476F","#8E44AD","#2ECC71","#E67E22","#00B8D9","#F94144","#577590"];
   const clubColor = (club: string) => {
     const idx = allClubs.findIndex(c => c === club);
-    // fallbacks if theme doesn't provide a club palette helper
-    const palette =
-      theme.clubPalette ||
-      ["#006747","#3A86FF","#FFB703","#EF476F","#8E44AD","#2ECC71","#E67E22","#00B8D9","#F94144","#577590"];
     return palette[(idx >= 0 ? idx : 0) % palette.length];
   };
 
@@ -132,7 +147,6 @@ export default function InsightsView({
   );
 
   // B) Distance Distribution bars (respect current selection)
-  //    Use the incoming tableRows as-is; just ensure consistent ordering.
   const distRows = useMemo(
     () => (tableRows || []).slice().sort((a, b) => orderIndex(a.club) - orderIndex(b.club)),
     [tableRows]
@@ -158,17 +172,10 @@ export default function InsightsView({
     [filteredNoClubOutliers]
   );
 
-  const mostConsistent = useMemo(() => {
-    // pick club with lowest carry SD (min 5 shots)
-    let best: { club: string; sd: number; n: number } | null = null;
-    for (const r of globalRows) {
-      if (r.count < 5) continue;
-      if (best == null || r.sdCarry < best.sd) {
-        best = { club: r.club, sd: r.sdCarry, n: r.count };
-      }
-    }
-    return best;
-  }, [globalRows]);
+  const mostConsistent = useMemo(
+    () => mostConsistentClub(filteredNoClubOutliers),
+    [filteredNoClubOutliers]
+  );
 
   const efficiencyScore = useMemo(
     () => efficiencyScore0to100(filteredNoClubOutliers),
@@ -182,7 +189,7 @@ export default function InsightsView({
     for (let i = 1; i < rows.length; i++) {
       const a = rows[i - 1], b = rows[i];
       if (!a.avgCarry || !b.avgCarry) continue;
-      const diff = b.avgCarry - a.avgCarry; // since rows are sorted driver -> wedges, b is the "shorter" club
+      const diff = b.avgCarry - a.avgCarry; // since rows are sorted driver -> wedges, b is the shorter club
       if (diff < 0) {
         warnings.overlap.push(`${a.club} / ${b.club}`);
       } else if (diff < 12) {
@@ -209,7 +216,7 @@ export default function InsightsView({
 
   /* ---------- Cards ---------- */
   const renderDistanceDistribution = () => (
-    <Card title="Distance Distribution (by Club)">
+    <Card theme={theme} title="Distance Distribution (by Club)">
       <div style={{ width: "100%", height: 360 }}>
         <ResponsiveContainer>
           <BarChart data={distRows}>
@@ -217,7 +224,12 @@ export default function InsightsView({
             <XAxis dataKey="club" />
             <YAxis />
             <Tooltip
-              formatter={(v: any, n: any) => [typeof v === "number" ? v.toFixed(n === "avgSmash" ? 3 : 1) : v, n === "avgCarry" ? "Carry (avg)" : n === "avgTotal" ? "Total (avg)" : n]}
+              formatter={(v: any, n: any) => [
+                typeof v === "number"
+                  ? v.toFixed(n === "avgSmash" ? 3 : 1)
+                  : v,
+                n === "avgCarry" ? "Carry (avg)" : n === "avgTotal" ? "Total (avg)" : n
+              ]}
             />
             <Legend />
             {/* Carry — per-club color */}
@@ -235,7 +247,7 @@ export default function InsightsView({
   );
 
   const renderHighlights = () => (
-    <Card title="Highlights (All Clubs)">
+    <Card theme={theme} title="Highlights (All Clubs)">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div>
           <div className="text-slate-500">Longest Carry</div>
@@ -261,7 +273,7 @@ export default function InsightsView({
   );
 
   const renderWarnings = () => (
-    <Card title="Gapping Warnings (All Clubs)">
+    <Card theme={theme} title="Gapping Warnings (All Clubs)">
       <div className="text-sm space-y-2">
         <div>
           <div className="font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
@@ -288,7 +300,7 @@ export default function InsightsView({
   );
 
   const renderPersonalRecords = () => (
-    <Card title={`Personal Records${singleSelectedClub ? ` — ${singleSelectedClub}` : ""}`}>
+    <Card theme={theme} title={`Personal Records${singleSelectedClub ? ` — ${singleSelectedClub}` : ""}`}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
         <div>
           <div className="text-slate-500">PR Carry</div>
@@ -329,10 +341,10 @@ export default function InsightsView({
     let highSpin: ClubRow | undefined;
     for (const r of rows) {
       if (!lowSmash || r.avgSmash < lowSmash.avgSmash) lowSmash = r;
-      if (!highSpin || r.avgSpin > highSpin.avgSpin) highSpin = r;
+      if (!highSpin || r.avgSpin > highSpin) highSpin = r;
     }
     return (
-      <Card title="Biggest Weakness (All Clubs — heuristic)">
+      <Card theme={theme} title="Biggest Weakness (All Clubs — heuristic)">
         <div className="text-sm space-y-2">
           <div>
             <span className="font-semibold">Low Smash:</span>{" "}
