@@ -223,7 +223,7 @@ export default function InsightsView(props: InsightsProps) {
     switch (key) {
       case "distanceBox":
         return (
-          <Card key={key} title="Distance Distribution (Avg Carry vs Total)">
+          <Card theme={theme} key={key} title="Distance Distribution (Avg Carry vs Total)">
             <div style={{ width: "100%", height: 340 }}>
               <ResponsiveContainer>
                 <BarChart data={distanceRows} layout="vertical" margin={{ left: 20, right: 20 }}>
@@ -242,7 +242,7 @@ export default function InsightsView(props: InsightsProps) {
 
       case "highlights":
         return (
-          <Card key={key} title="Highlights (All Data)">
+          <Card theme={theme} key={key} title="Highlights (All Data)">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
               <div>
                 <div className="text-slate-500">Longest Carry</div>
@@ -271,7 +271,7 @@ export default function InsightsView(props: InsightsProps) {
       case "personalRecords": {
         // Uses GLOBAL pool filtered to the active (single) club, so it matches Highlights logic.
         return (
-          <Card key={key} title="Personal Records (per Selected Club)">
+          <Card theme={theme} key={key} title="Personal Records (per Selected Club)">
             {activeClub ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                 <div>
@@ -304,7 +304,7 @@ export default function InsightsView(props: InsightsProps) {
 
       case "warnings":
         return (
-          <Card key={key} title="Gapping Warnings">
+          <Card theme={theme} key={key} title="Gapping Warnings">
             <ul className="list-disc pl-5 text-sm space-y-1">
               {gapWarnings.warnings.length ? gapWarnings.warnings.map((w, i) => <li key={i}>{w}</li>) : <li>No gapping warnings.</li>}
             </ul>
@@ -318,7 +318,7 @@ export default function InsightsView(props: InsightsProps) {
 
       case "progress":
         return (
-          <Card key={key} title="Club Progress (Avg Carry over Time)">
+          <Card theme={theme} key={key} title="Club Progress (Avg Carry over Time)">
             <div style={{ width: "100%", height: 280 }}>
               <ResponsiveContainer>
                 <LineChart data={progressData} margin={{ left: 10, right: 20 }}>
@@ -355,7 +355,7 @@ export default function InsightsView(props: InsightsProps) {
           if (Math.abs(avgBias) > Math.abs(biasVal)) { biasVal = avgBias; biasClub = club; }
         }
         return (
-          <Card key={key} title="Biggest Weakness (Heuristic)">
+          <Card theme={theme} key={key} title="Biggest Weakness (Heuristic)">
             <div className="text-sm space-y-2">
               <div>Highest avg spin: <strong>{highSpinClub ?? "—"}</strong> ({isFinite(highSpinVal) ? Math.round(highSpinVal) : "—"} rpm)</div>
               <div>Largest directional bias: <strong>{biasClub ?? "—"}</strong> ({isFinite(biasVal) ? biasVal.toFixed(1) : "—"} yds)</div>
