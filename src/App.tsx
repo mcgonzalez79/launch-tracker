@@ -438,18 +438,20 @@ export default function App() {
           )}
 
           {view === "insights" && (
-            <InsightsView
-              theme={T}
-              tableRows={tableRows}
-              filteredOutliers={filteredOutliers}
-              filteredNoClubOutliers={filteredNoClubOutliers}
-              allClubs={clubs}
-              insightsOrder={insightsOrder}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDrop={onDropInsight}
-            />
-          )}
+          <InsightsView
+            theme={T}
+            tableRows={tableRows}
+            filteredOutliers={filteredOutliers}
+            filteredNoClubOutliers={filteredNoClubOutliers}
+            filteredNoClubRaw={filteredNoClub}    // <-- add this line
+            allClubs={clubs}
+            insightsOrder={insightsOrder}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDropInsight}
+          />
+        )}
+
 
           {view === "journal" && (
             <JournalView
