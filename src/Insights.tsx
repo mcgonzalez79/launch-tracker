@@ -6,7 +6,7 @@ import {
 } from "./utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
-  ComposedChart, ErrorBar, Line
+  ComposedChart, ErrorBar, Line, Cell
 } from "recharts";
 
 /* ================== Benchmarks for proficiency ================== */
@@ -181,11 +181,14 @@ type Props = {
   onDragStart: (k: string) => (e: React.DragEvent) => void;
   onDragOver: (k: string) => (e: React.DragEvent) => void;
   onDrop: (k: string) => (e: React.DragEvent) => void;
+
+  /** Optional: supply your app’s club color mapper so colors match Filters exactly */
+  clubColorOf?: (club: string) => string;
 };
 
 export default function InsightsView({
   theme, tableRows, filteredOutliers, filteredNoClubOutliers, filteredNoClubRaw, allClubs,
-  insightsOrder, onDragStart, onDragOver, onDrop
+  insightsOrder, onDragStart, onDragOver, onDrop, clubColorOf
 }: Props) {
 
   /* ======= Global (independent of selection) ======= */
@@ -216,6 +219,21 @@ export default function InsightsView({
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
   );
+
+  // Build a color map that matches Filters if clubColorOf provided; else stable fallback
+  const fallbackPalette = [
+    "#3A86FF", "#FF7F0E", "#2ECC71", "#EF476F", "#8E44AD",
+    "#00B8D9", "#F94144", "#577590", "#E67E22", "#F72585"
+  ];
+  const fallbackColorMap = useMemo(() => {
+    const ordered = [...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b));
+    const m = new Map<string, string>();
+    ordered.forEach((c, i) => m.set(c, fallbackPalette[i % fallbackPalette.length]));
+    return m;
+  }, [allClubs]);
+
+  const colorFor = (club: string) => (clubColorOf ? clubColorOf(club) : (fallbackColorMap.get(club) || fallbackPalette[0]));
+
   type BoxRow = {
     club: string;
     Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number];
@@ -256,7 +274,7 @@ export default function InsightsView({
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club only; short height otherwise) ======= */
+  /* ======= Progress chart (single club only; no fixed height when no chart) ======= */
   const selectedClubName = useMemo(() => {
     const set = new Set(filteredOutliers.map(s => s.Club));
     return set.size === 1 ? Array.from(set)[0] : null;
@@ -274,8 +292,6 @@ export default function InsightsView({
       .sort((a, b) => a.t - b.t);
     return pool;
   }, [filteredOutliers, selectedClubName]);
-
-  const progressHeight = (selectedClubName && progressRows.length > 1) ? 360 : 200;
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -297,7 +313,6 @@ export default function InsightsView({
                       formatter={(_, __, p: any) => {
                         const d = p && p.payload ? p.payload : {};
                         const lines = [
-                          // Removed medians
                           `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
                           `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
                         ];
@@ -307,16 +322,22 @@ export default function InsightsView({
                     />
                     <Legend />
 
-                    {/* Carry box (horizontal) */}
+                    {/* Carry box (horizontal) — colored per club */}
                     <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
-                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
+                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fillOpacity={0.9}>
+                      {boxRows.map((row, i) => (
+                        <Cell key={`carry-${i}`} fill={colorFor(row.club)} />
+                      ))}
+                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e293b" />
                     </Bar>
 
-                    {/* Total box (horizontal) */}
+                    {/* Total box (horizontal) — same color, lighter opacity */}
                     <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
-                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
+                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fillOpacity={0.45}>
+                      {boxRows.map((row, i) => (
+                        <Cell key={`total-${i}`} fill={colorFor(row.club)} />
+                      ))}
+                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#475569" />
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -453,8 +474,9 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              <div style={{ width: "100%", height: progressHeight }}>
-                {selectedClubName && progressRows.length > 1 ? (
+              {/* No fixed height wrapper unless we actually render a chart */}
+              {selectedClubName && progressRows.length > 1 ? (
+                <div style={{ width: "100%", height: 360 }}>
                   <ResponsiveContainer>
                     <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -469,12 +491,12 @@ export default function InsightsView({
                       <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="text-sm text-slate-500">
-                    Select a single club in Filters to view progress over time (needs multiple shots).
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500">
+                  Select a single club in Filters to view progress over time (needs multiple shots).
+                </div>
+              )}
             </Card>
           </div>
         );
