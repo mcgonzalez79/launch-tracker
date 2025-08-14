@@ -5,7 +5,7 @@ import {
   Shot, ClubRow, orderIndex, mean
 } from "./utils";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, LabelList,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
   ComposedChart, ErrorBar, Line
 } from "recharts";
 
@@ -211,15 +211,15 @@ export default function InsightsView({
   }, [filteredNoClubOutliers]);
 
   /* ======= Distance Distribution (box & whisker) ======= */
-  // Clubs on Y, Distances on X
+  // Clubs on Y, Distances on X (no medians shown)
   const clubsOrdered = useMemo(
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
   );
   type BoxRow = {
     club: string;
-    Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number]; medianCarry: number;
-    Q1Total: number; iqrTotal: number; whiskerTotal: [number, number]; medianTotal: number;
+    Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number];
+    Q1Total: number; iqrTotal: number; whiskerTotal: [number, number];
   };
   const boxRows: BoxRow[] = useMemo(() => {
     const rows: BoxRow[] = [];
@@ -236,12 +236,10 @@ export default function InsightsView({
         Q1Carry: Number.isFinite(c.q1) ? c.q1 : 0,
         iqrCarry: (Number.isFinite(c.q3) && Number.isFinite(c.q1)) ? (c.q3 - c.q1) : 0,
         whiskerCarry: [Number.isFinite(c.min) ? c.min : 0, Number.isFinite(c.max) ? c.max : 0],
-        medianCarry: Number.isFinite(c.med) ? c.med : 0,
 
         Q1Total: Number.isFinite(t.q1) ? t.q1 : 0,
         iqrTotal: (Number.isFinite(t.q3) && Number.isFinite(t.q1)) ? (t.q3 - t.q1) : 0,
         whiskerTotal: [Number.isFinite(t.min) ? t.min : 0, Number.isFinite(t.max) ? t.max : 0],
-        medianTotal: Number.isFinite(t.med) ? t.med : 0,
       });
     });
     return rows;
@@ -258,7 +256,7 @@ export default function InsightsView({
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club only) ======= */
+  /* ======= Progress chart (single club only; short height otherwise) ======= */
   const selectedClubName = useMemo(() => {
     const set = new Set(filteredOutliers.map(s => s.Club));
     return set.size === 1 ? Array.from(set)[0] : null;
@@ -276,6 +274,8 @@ export default function InsightsView({
       .sort((a, b) => a.t - b.t);
     return pool;
   }, [filteredOutliers, selectedClubName]);
+
+  const progressHeight = (selectedClubName && progressRows.length > 1) ? 360 : 200;
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -297,8 +297,9 @@ export default function InsightsView({
                       formatter={(_, __, p: any) => {
                         const d = p && p.payload ? p.payload : {};
                         const lines = [
-                          `Carry min/Q1/med/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${d.medianCarry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
-                          `Total min/Q1/med/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${d.medianTotal?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
+                          // Removed medians
+                          `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
+                          `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
                         ];
                         return [lines.join("\n"), "Stats"];
                       }}
@@ -317,10 +318,6 @@ export default function InsightsView({
                     <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
                       <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
                     </Bar>
-
-                    {/* (Optional) median guides (invisible stroke; tooltips expose values) */}
-                    <Line type="monotone" dataKey="medianCarry" dot={false} stroke="#1e40af" strokeWidth={0} />
-                    <Line type="monotone" dataKey="medianTotal" dot={false} stroke="#166534" strokeWidth={0} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -417,7 +414,7 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Respects current filters & outlier toggle.</div>
+                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
                 {/* PR Total (selected) */}
@@ -429,7 +426,7 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Respects current filters & outlier toggle.</div>
+                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
                 {/* Proficiency (selected) + button to open modal */}
@@ -456,7 +453,7 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              <div style={{ width: "100%", height: 360 }}>
+              <div style={{ width: "100%", height: progressHeight }}>
                 {selectedClubName && progressRows.length > 1 ? (
                   <ResponsiveContainer>
                     <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
