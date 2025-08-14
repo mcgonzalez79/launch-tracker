@@ -1,4 +1,4 @@
-// Theme + palette + helpers that Dashboard/Insights expect
+// Theme + palette + helpers used across App, Dashboard, and Insights
 
 export type Theme = {
   brand: string;
@@ -6,33 +6,42 @@ export type Theme = {
 
   text: string;
   textSoft: string;
+  textDim: string;   // <- used by Dashboard
 
-  white: string;   // used by App.tsx
+  white: string;     // <- used by App
   bg: string;
 
   card: string;
   cardBorder: string;
-  border: string;  // alias used by some components
+  border: string;    // alias some components use
   kpi: string;
 
   tooltipBg: string;
   tooltipText: string;
 
-  // backgrounds used for charts (e.g., dispersion / insights distance bg)
+  // chart backgrounds / stripes (dispersion, insights distance)
   dispBg: string;
+  gridStripeA: string; // <- used by Dashboard
+  gridStripeB: string; // <- used by Dashboard
+
+  // soft accent swatches some charts/cards reference
+  blueSoft: string;
+  greenSoft: string;
+  orangeSoft: string;
 };
 
 /** Bar colors used across charts (Dashboard expects these) */
 export const CARRY_BAR = "#2563EB"; // blue
-export const TOTAL_BAR = "#16A34A"; // green (as requested)
+export const TOTAL_BAR = "#16A34A"; // green
 
-/** Semi-transparent helper (used in Dashboard) */
+/** Semi-transparent helper (Dashboard imports) */
 export function alpha(hex: string, a: number): string {
   const h = hex.replace("#", "");
-  const bigint = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
@@ -54,13 +63,14 @@ export function colorForClub(club: string): string {
   return CLUB_COLORS[club] || "#64748B"; // slate fallback
 }
 
-/** Light/Dark themes */
+/** Light/Dark themes with all required fields */
 export const LIGHT: Theme = {
   brand: "#0B7A3B",
   brandSoft: "#E7F5EC",
 
   text: "#0f172a",
   textSoft: "#475569",
+  textDim: "#64748B",
 
   white: "#ffffff",
   bg: "#F8FAFC",
@@ -74,6 +84,12 @@ export const LIGHT: Theme = {
   tooltipText: "#ffffff",
 
   dispBg: "#F2F9F5",
+  gridStripeA: "#F8FAF9",
+  gridStripeB: "#ECF6F0",
+
+  blueSoft: "#DBEAFE",
+  greenSoft: "#DCFCE7",
+  orangeSoft: "#FFEDD5",
 };
 
 export const DARK: Theme = {
@@ -82,6 +98,7 @@ export const DARK: Theme = {
 
   text: "#E5E7EB",
   textSoft: "#94A3B8",
+  textDim: "#9CA3AF",
 
   white: "#0B1220",
   bg: "#0B1220",
@@ -95,4 +112,10 @@ export const DARK: Theme = {
   tooltipText: "#F1F5F9",
 
   dispBg: "#0F1A15",
+  gridStripeA: "#0C1612",
+  gridStripeB: "#0D1A14",
+
+  blueSoft: "#1E293B",
+  greenSoft: "#0F1F18",
+  orangeSoft: "#1A130B",
 };
