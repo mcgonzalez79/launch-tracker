@@ -164,3 +164,21 @@ export const exportCSV = (rows: Record<string, any>[]) => {
 
 /* XLSX helpers exposed where needed */
 export { XLSX, orderIndex };
+
+/* === Club color helper === */
+const CLUB_COLORS: Record<string, string> = {
+  "Driver": "#2563EB",
+  "3 Wood": "#10B981",
+  "4 Hybrid": "#F59E0B",
+  "5 Hybrid (5 Iron)": "#EF4444",
+  "6 Iron": "#8B5CF6",
+  "7 Iron": "#0EA5E9",
+  "8 Iron": "#14B8A6",
+  "9 Iron": "#F97316",
+  "Pitching Wedge": "#22C55E",
+  "60 (LW)": "#E11D48",
+};
+export function clubColor(club: string): string {
+  return CLUB_COLORS[club] || "#64748B";
+}
+
