@@ -341,7 +341,7 @@ export default function InsightsView({
     let highSpin: ClubRow | undefined;
     for (const r of rows) {
       if (!lowSmash || r.avgSmash < lowSmash.avgSmash) lowSmash = r;
-      if (!highSpin || r.avgSpin > highSpin) highSpin = r;
+      if (!highSpin || r.avgSpin > (highSpin ? highSpin.avgSpin : -Infinity)) highSpin = r;
     }
     return (
       <Card theme={theme} title="Biggest Weakness (All Clubs — heuristic)">
