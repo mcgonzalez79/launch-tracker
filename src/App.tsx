@@ -443,9 +443,8 @@ export default function App() {
               tableRows={tableRows}
               filteredOutliers={filteredOutliers}
               filteredNoClubOutliers={filteredNoClubOutliers}
-              filteredNoClubRaw={filteredNoClub}    // raw pool so PRs include outliers
+              filteredNoClubRaw={filteredNoClub}    // <-- add this line
               allClubs={clubs}
-              selectedClubs={selectedClubs}         // <-- add this line
               insightsOrder={insightsOrder}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
