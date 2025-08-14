@@ -443,15 +443,15 @@ export default function App() {
             tableRows={tableRows}
             filteredOutliers={filteredOutliers}
             filteredNoClubOutliers={filteredNoClubOutliers}
-            filteredNoClubRaw={filteredNoClub}    // <-- add this line
+            filteredNoClubRaw={filteredNoClub}     // to compute PRs including outliers
             allClubs={clubs}
+            selectedClubs={selectedClubs}          // <-- NEW
             insightsOrder={insightsOrder}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDrop={onDropInsight}
           />
         )}
-
 
           {view === "journal" && (
             <JournalView
