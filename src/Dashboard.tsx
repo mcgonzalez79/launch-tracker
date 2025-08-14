@@ -18,7 +18,6 @@ export default function DashboardView({
   theme, clubs, tableRows, filteredOutliers, clubColorOf
 }: Props) {
 
-  /* ================= KPIs ================= */
   const kpis = useMemo(() => {
     const grab = (sel: (s: Shot) => number | undefined) =>
       filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
@@ -58,7 +57,6 @@ export default function DashboardView({
     };
   }, [filteredOutliers]);
 
-  /* ============== Layout ============== */
   return (
     <div className="grid grid-cols-12 gap-6">
       {/* KPIs */}
@@ -94,7 +92,7 @@ export default function DashboardView({
         </div>
       </Card>
 
-      {/* Efficiency scatter: Club vs Ball speed */}
+      {/* Efficiency scatter */}
       <Card title="Efficiency — Club Speed vs Ball Speed (per club)" theme={theme} className="col-span-12">
         <div style={{ width: "100%", height: 340 }}>
           <ResponsiveContainer>
@@ -106,7 +104,7 @@ export default function DashboardView({
               <YAxis type="number" dataKey="BallSpeed_mph" name="Ball Speed" unit=" mph">
                 <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" />
               </YAxis>
-              <Tooltip formatter={(v: any, n: any, p: any) => [v, n]} />
+              <Tooltip formatter={(v: any, n: any) => [v, n]} />
               <Legend />
               {clubs.map((c) => (
                 <Scatter key={c} name={c} data={filteredOutliers.filter(s => s.Club === c)} fill={clubColorOf(c)} />
@@ -152,7 +150,7 @@ export default function DashboardView({
                 <Label value="Carry (yds)" angle={-90} position="insideLeft" />
               </YAxis>
 
-              {/* Flags every 50 yds */}
+              {/* Flags / 50-yd bands */}
               <ReferenceLine y={50} stroke={theme.grid} />
               <ReferenceLine y={100} stroke={theme.grid} />
               <ReferenceLine y={150} stroke={theme.grid} />
@@ -176,7 +174,7 @@ export default function DashboardView({
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: theme.textDim }}>
+              <tr className="text-left" style={{ color: "#64748b" }}>
                 <Th>Club</Th>
                 <Th>Shots</Th>
                 <Th>Avg Carry</Th>
@@ -192,7 +190,8 @@ export default function DashboardView({
             </thead>
             <tbody>
               {tableRows.map((r, idx) => {
-                const warnGap = idx > 0 && Math.abs(r.avgCarry - tableRows[idx - 1].avgCarry) < 12;
+                const prev = idx > 0 ? tableRows[idx - 1] : undefined;
+                const warnGap = prev ? Math.abs(r.avgCarry - prev.avgCarry) < 12 : false;
                 return (
                   <tr key={r.club} className="border-t" style={{ borderColor: theme.border }}>
                     <Td>
@@ -202,9 +201,9 @@ export default function DashboardView({
                       </span>
                     </Td>
                     <Td>{r.count}</Td>
-                    <Td style={{ color: warnGap ? "#EF476F" : undefined }}>{r.avgCarry.toFixed(1)}</Td>
+                    <Td style={{ color: warnGap ? "#EF476F" as const : undefined }}>{r.avgCarry.toFixed(1)}</Td>
                     <Td>{r.avgTotal.toFixed(1)}</Td>
-                    <Td>{r.sdCarry.toFixed(1)}</Td>
+                    <Td>{((r as any).sdCarry ?? 0).toFixed ? (r as any).sdCarry.toFixed(1) : (r as any).sdCarry || "0.0"}</Td>
                     <Td>{r.avgSmash.toFixed(3)}</Td>
                     <Td>{Math.round(r.avgSpin)}</Td>
                     <Td>{r.avgCS.toFixed(1)}</Td>
@@ -222,7 +221,7 @@ export default function DashboardView({
   );
 }
 
-/* ================ UI bits ================ */
+/* ---------- UI bits ---------- */
 function Card({
   theme, title, className, children
 }: { theme: Theme; title: string; className?: string; children: React.ReactNode }) {
@@ -246,11 +245,11 @@ function KPI({ label, value, color }: { label: string; value: string; color: str
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="py-2 pr-4">{children}</th>;
+function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <th className="py-2 pr-4" style={style}>{children}</th>;
 }
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="py-2 pr-4">{children}</td>;
+function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <td className="py-2 pr-4" style={style}>{children}</td>;
 }
 
 /* Helpers */
