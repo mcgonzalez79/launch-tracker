@@ -1,9 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Theme } from "./theme";
 import { Card } from "./components/UI";
-import {
-  Shot, ClubRow, orderIndex, mean
-} from "./utils";
+import { Shot, ClubRow, orderIndex, mean } from "./utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
   ComposedChart, ErrorBar, Line
@@ -11,7 +9,6 @@ import {
 
 /* ================== Benchmarks for proficiency ================== */
 type Skill = "Beginner" | "Average" | "Good" | "Advanced" | "PGATour";
-const SKILLS: Skill[] = ["Beginner", "Average", "Good", "Advanced", "PGATour"];
 
 const BENCHMARKS: Record<string, Record<Skill, number>> = {
   "Driver":           { Beginner: 170, Average: 200, Good: 230, Advanced: 260, PGATour: 295 },
@@ -256,7 +253,7 @@ export default function InsightsView({
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club only; short height otherwise) ======= */
+  /* ======= Progress chart (single club only; dynamic height) ======= */
   const selectedClubName = useMemo(() => {
     const set = new Set(filteredOutliers.map(s => s.Club));
     return set.size === 1 ? Array.from(set)[0] : null;
@@ -275,7 +272,12 @@ export default function InsightsView({
     return pool;
   }, [filteredOutliers, selectedClubName]);
 
-  const progressHeight = (selectedClubName && progressRows.length > 1) ? 360 : 200;
+  // Dynamic height: grows with data, collapses when no chart
+  const progressHeight = useMemo(() => {
+    if (!selectedClubName || progressRows.length <= 1) return undefined; // no fixed height -> shrink to content
+    const grow = 240 + (progressRows.length * 6); // scale with points
+    return Math.max(260, Math.min(420, grow));
+  }, [selectedClubName, progressRows.length]);
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -297,7 +299,6 @@ export default function InsightsView({
                       formatter={(_, __, p: any) => {
                         const d = p && p.payload ? p.payload : {};
                         const lines = [
-                          // Removed medians
                           `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
                           `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
                         ];
@@ -306,13 +307,11 @@ export default function InsightsView({
                       labelFormatter={(l) => `Club: ${l}`}
                     />
                     <Legend />
-
                     {/* Carry box (horizontal) */}
                     <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
                     <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
                       <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
                     </Bar>
-
                     {/* Total box (horizontal) */}
                     <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
                     <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
@@ -453,28 +452,25 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              <div style={{ width: "100%", height: progressHeight }}>
-                {selectedClubName && progressRows.length > 1 ? (
+              {/* If no chart, no fixed height -> card shrinks to this content */}
+              {(!selectedClubName || progressRows.length <= 1) ? (
+                <div className="text-sm text-slate-500">
+                  Select a single club in Filters to view progress over time (needs multiple shots).
+                </div>
+              ) : (
+                <div style={{ width: "100%", height: progressHeight }}>
                   <ResponsiveContainer>
                     <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 12 }}
-                        interval="preserveStartEnd"
-                      />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
                       <YAxis />
                       <Tooltip />
                       <Legend />
                       <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="text-sm text-slate-500">
-                    Select a single club in Filters to view progress over time (needs multiple shots).
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </Card>
           </div>
         );
