@@ -9,7 +9,6 @@ import {
   Shot, ClubRow, Msg, ViewKey, mean, stddev, n, isoDate, clamp, coalesceSmash, coalesceFaceToPath,
   normalizeHeader, headerMap, findBestHeader, parseWeirdLaunchCSV, weirdRowsToShots, fpOf, exportCSV, XLSX, orderIndex
 } from "./utils";
-import { clubPalette, colorForClub } from "./theme";
 
 /* ===== App ===== */
 export default function App() {
@@ -244,33 +243,7 @@ export default function App() {
   const filteredNoClubOutliers = useMemo(() => withOutliers(filteredNoClub), [filteredNoClub, excludeOutliers]);
   const hasData = filteredOutliers.length > 0;
 
-  /* KPIs */
-  const kpis = useMemo(() => {
-    const grab = (sel: (s: Shot) => number | undefined) => filteredOutliers.map(sel).filter((x): x is number => x !== undefined);
-    const carry = grab(s => s.CarryDistance_yds);
-    const total = grab(s => s.TotalDistance_yds);
-    const smash = grab(s => s.SmashFactor);
-    const spin = grab(s => s.SpinRate_rpm);
-    const cs = grab(s => s.ClubSpeed_mph);
-    const bs = grab(s => s.BallSpeed_mph);
-    const la = grab(s => s.LaunchAngle_deg);
-    const draw = filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) < -2).length;
-    const fade = filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length;
-    const shotsN = filteredOutliers.length; const straight = Math.max(0, shotsN - draw - fade);
-    return {
-      avgCarry: carry.length ? mean(carry) : undefined,
-      avgTotal: total.length ? mean(total) : undefined,
-      avgSmash: smash.length ? mean(smash) : undefined,
-      avgSpin: spin.length ? mean(spin) : undefined,
-      avgCS: cs.length ? mean(cs) : undefined,
-      avgBS: bs.length ? mean(bs) : undefined,
-      avgLA: la.length ? mean(la) : undefined,
-      shots: shotsN,
-      shape: { draw:{n:draw,pct:shotsN?(draw/shotsN)*100:0}, straight:{n:straight,pct:shotsN?(straight/shotsN)*100:0}, fade:{n:fade,pct:shotsN?(fade/shotsN)*100:0} },
-    };
-  }, [filteredOutliers]);
-
-  /* Club Averages table rows */
+  /* Club Averages table rows (for Insights, print, etc.) */
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>(); filteredOutliers.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
     const rows: ClubRow[] = [];
@@ -288,6 +261,40 @@ export default function App() {
         avgBS: (grab(s => s.BallSpeed_mph).length ? mean(grab(s => s.BallSpeed_mph)) : 0),
         avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
         avgF2P: (grab(s => coalesceFaceToPath(s)).length ? mean(grab(s => coalesceFaceToPath(s))) : 0),
+      });
+    }
+    return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
+  }, [filteredOutliers]);
+
+  /* NEW: tableRows for Dashboard (moved out of JSX to avoid hook-in-prop) */
+  const tableRowsDash: ClubRow[] = useMemo(() => {
+    const byClub = new Map<string, Shot[]>();
+    filteredOutliers.forEach(s => {
+      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
+      byClub.get(s.Club)!.push(s);
+    });
+
+    const rows: ClubRow[] = [];
+    for (const [club, arr] of byClub.entries()) {
+      const grab = (sel: (s: Shot) => number | undefined) =>
+        arr.map(sel).filter((x): x is number => x !== undefined);
+
+      const carry = grab(s => s.CarryDistance_yds);
+
+      const avg = (vals: number[]) => (vals.length ? vals.reduce((a,b)=>a+b,0) / vals.length : 0);
+      const f2pSel = (s: Shot) => (s.ClubFace_deg != null && s.ClubPath_deg != null) ? (s.ClubFace_deg - s.ClubPath_deg) : undefined;
+
+      rows.push({
+        club,
+        count: arr.length,
+        avgCarry: avg(carry),
+        avgTotal: avg(grab(s => s.TotalDistance_yds)),
+        avgSmash: avg(grab(s => s.SmashFactor)),
+        avgSpin: avg(grab(s => s.SpinRate_rpm)),
+        avgCS:   avg(grab(s => s.ClubSpeed_mph)),
+        avgBS:   avg(grab(s => s.BallSpeed_mph)),
+        avgLA:   avg(grab(s => s.LaunchAngle_deg)),
+        avgF2P:  avg(grab(f2pSel)),
       });
     }
     return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
@@ -359,9 +366,9 @@ export default function App() {
           <div className="max-w-7xl mx-auto flex flex-col gap-2">
             {msgs.map(m => (
               <div key={m.id} className="rounded-lg px-4 py-3 text-sm flex items-start justify-between"
-                   style={{ background: m.type === "error" ? "#FDECEC" : m.type === "success" ? T.greenSoft : m.type === "warn" ? T.orangeSoft : T.blueSoft, color: T.text, border: `1px solid ${T.border}` }}>
+                   style={{ background: m.type === "error" ? "#FDECEC" : m.type === "success" ? "#EDFDF3" : m.type === "warn" ? "#FFF6EC" : "#EEF5FF", color: "#111827", border: `1px solid #E5E7EB` }}>
                 <div style={{ whiteSpace: "pre-line" }}>{m.text}</div>
-                <button onClick={() => closeMsg(m.id)} className="ml-4 px-2 py-1 text-xs rounded border" style={{ borderColor: T.border, color: T.textDim }}>×</button>
+                <button onClick={() => closeMsg(m.id)} className="ml-4 px-2 py-1 text-xs rounded border" style={{ borderColor: "#E5E7EB", color: "#475569" }}>×</button>
               </div>
             ))}
           </div>
@@ -425,26 +432,7 @@ export default function App() {
               filteredOutliers={filteredOutliers}
               filtered={filtered}
               shots={shots}
-              tableRows={useMemo(() => {
-                // reuse built rows
-                return Array.from(new Map(filteredOutliers.map(s=>[s.Club,0])).keys()).map(club=>{
-                  const arr = filteredOutliers.filter(s=>s.Club===club);
-                  const grab=(sel:(s:Shot)=>number|undefined)=>arr.map(sel).filter((x):x is number=>x!=null);
-                  const carry=grab(s=>s.CarryDistance_yds);
-                  return {
-                    club,
-                    count: arr.length,
-                    avgCarry: carry.length ? carry.reduce((a,b)=>a+b,0)/carry.length : 0,
-                    avgTotal: (grab(s=>s.TotalDistance_yds).reduce((a,b)=>a+b,0) / (grab(s=>s.TotalDistance_yds).length||1)),
-                    avgSmash: (grab(s=>s.SmashFactor).reduce((a,b)=>a+b,0) / (grab(s=>s.SmashFactor).length||1)),
-                    avgSpin: (grab(s=>s.SpinRate_rpm).reduce((a,b)=>a+b,0) / (grab(s=>s.SpinRate_rpm).length||1)),
-                    avgCS: (grab(s=>s.ClubSpeed_mph).reduce((a,b)=>a+b,0) / (grab(s=>s.ClubSpeed_mph).length||1)),
-                    avgBS: (grab(s=>s.BallSpeed_mph).reduce((a,b)=>a+b,0) / (grab(s=>s.BallSpeed_mph).length||1)),
-                    avgLA: (grab(s=>s.LaunchAngle_deg).reduce((a,b)=>a+b,0) / (grab(s=>s.LaunchAngle_deg).length||1)),
-                    avgF2P: (grab(s=>coalesceFaceToPath(s)).reduce((a,b)=>a+b,0) / (grab(s=>coalesceFaceToPath(s)).length||1)),
-                  };
-                }).sort((a,b)=>orderIndex(a.club)-orderIndex(b.club)) as ClubRow[];
-              }, [filteredOutliers])}
+              tableRows={tableRowsDash}   // <-- using top-level memo now
               clubs={clubs}
             />
           )}
@@ -476,7 +464,7 @@ export default function App() {
         </section>
       </main>
 
-      <footer className="px-6 py-8 text-xs text-center" style={{ color: T.textDim }}>
+      <footer className="px-6 py-8 text-xs text-center" style={{ color: "#475569" }}>
         Gap chart: Carry = blue, Total = green. Shot shape: Draw &lt; -2°, Straight ±2°, Fade &gt; 2°. Data is saved locally.
       </footer>
     </div>
