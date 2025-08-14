@@ -1,55 +1,47 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Theme } from "./theme";
-import { Card, ToolbarBtn } from "./components/UI";
 
-export default function JournalView({ theme, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx }:{
-  theme: Theme; editorRef: React.RefObject<HTMLDivElement>; value: string; onInputHTML: (html: string)=>void; sessionLabel: string; defaultHeightPx?: number;
-}) {
-  const T = theme;
-  const HELP_TEXT = "Use the Journal to capture longer-form notes from your sessions: swing thoughts and feels vs. reals, drills and rep counts, shot patterns and misses, goals and next steps, equipment tweaks, course notes, and conditions. Entries auto-save per session.";
+type Props = { theme: Theme };
 
-  const exec = (cmd: string, arg?: string) => {
-    document.execCommand(cmd, false, arg);
-    onInputHTML(editorRef.current?.innerHTML || "");
-  };
-  const onKeyUp = () => onInputHTML(editorRef.current?.innerHTML || "");
-  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    e.preventDefault(); const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text); onInputHTML(editorRef.current?.innerHTML || "");
-  };
-  useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || ""; }, [value, editorRef]);
-  const RESERVED = 160; const minEditorH = Math.max(420, Math.floor((defaultHeightPx || 420) - RESERVED));
+export default function JournalView({ theme }: Props) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [html, setHtml] = useState<string>(() => localStorage.getItem("launch-tracker:journal") || "");
+
+  useEffect(() => {
+    localStorage.setItem("launch-tracker:journal", html);
+  }, [html]);
+
+  // Auto placeholder handling
+  const placeholder = "Use the journal to capture longer-form notes: range sessions, feels, drills, course notes, and goals. You can use the H2/H3 buttons, lists, and formatting in your toolbar if present.";
 
   return (
-    <div className="grid grid-cols-1 gap-8">
-      <Card theme={T} title={`Journal — ${sessionLabel}`}>
-        <div className="mb-4 text-sm rounded-lg px-4 py-3" style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}>
-          {HELP_TEXT}
+    <div className="grid grid-cols-1 gap-6">
+      <div className="rounded-2xl p-4 shadow" style={{ background: theme.cardBg }}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold tracking-wide" style={{ color: theme.text }}>Journal</h2>
+          <div className="h-1 rounded-full w-24" style={{ background: theme.brand }} />
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
-          <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
-          <ToolbarBtn theme={T} label={<u>U</u>} onClick={() => exec("underline")} />
-          <ToolbarBtn theme={T} label="H2" onClick={() => exec("formatBlock", "H2")} />
-          <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "H3")} />
-          <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
-          <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
-          <ToolbarBtn theme={T} label="Link" onClick={() => { const url = window.prompt("Enter URL"); if (url) exec("createLink", url); }} />
-          <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
-        </div>
+
         <div
           ref={editorRef}
           contentEditable
           suppressContentEditableWarning
-          onKeyUp={onKeyUp}
-          onBlur={onKeyUp}
-          onPaste={onPaste}
-          aria-label="Practice journal editor"
-          className="rounded-lg p-4 text-sm overflow-auto resize-y"
-          style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text, minHeight: `${minEditorH}px`, resize: "vertical" }}
+          onInput={() => setHtml(editorRef.current?.innerHTML || "")}
+          style={{
+            minHeight: 280,
+            outline: "none",
+            border: `1px solid ${theme.border}`,
+            borderRadius: 12,
+            padding: 12,
+            background: "#fff",
+            color: "#111827",
+          }}
+          dangerouslySetInnerHTML={{ __html: html || `<p style="color:#9ca3af">${placeholder}</p>` }}
         />
-        {!value && <div className="mt-2 text-xs" style={{ color: T.textDim }}>Tip: your journal auto-saves per session. Use the toolbar to format.</div>}
-      </Card>
+        <div className="mt-2 text-xs" style={{ color: theme.textDim }}>
+          Content is saved locally in your browser (no cloud storage).
+        </div>
+      </div>
     </div>
   );
 }
