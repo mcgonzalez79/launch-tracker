@@ -150,14 +150,13 @@ export default function DashboardView({
                 <Label value="Carry (yds)" angle={-90} position="insideLeft" />
               </YAxis>
 
-              {/* Flags / 50-yd bands */}
               <ReferenceLine y={50} stroke={theme.grid} />
               <ReferenceLine y={100} stroke={theme.grid} />
               <ReferenceLine y={150} stroke={theme.grid} />
               <ReferenceLine y={200} stroke={theme.grid} />
               <ReferenceLine y={250} stroke={theme.grid} />
               <ReferenceLine y={300} stroke={theme.grid} />
-              <ReferenceLine x={0} stroke={theme.textDim} />
+              <ReferenceLine x={0} stroke={theme.text} />
 
               <Tooltip formatter={(v: any, n: any) => [v, n]} />
               <Legend />
@@ -192,8 +191,10 @@ export default function DashboardView({
               {tableRows.map((r, idx) => {
                 const prev = idx > 0 ? tableRows[idx - 1] : undefined;
                 const warnGap = prev ? Math.abs(r.avgCarry - prev.avgCarry) < 12 : false;
+                const sdCarry = (r as any).sdCarry as number | undefined;
+                const avgF2P = (r as any).avgF2P as number | undefined;
                 return (
-                  <tr key={r.club} className="border-t" style={{ borderColor: theme.border }}>
+                  <tr key={r.club} className="border-t" style={{ borderColor: "#e5e7eb" }}>
                     <Td>
                       <span className="inline-flex items-center gap-2">
                         <span className="w-3 h-3 inline-block rounded-full" style={{ background: clubColorOf(r.club) }} />
@@ -201,15 +202,15 @@ export default function DashboardView({
                       </span>
                     </Td>
                     <Td>{r.count}</Td>
-                    <Td style={{ color: warnGap ? "#EF476F" as const : undefined }}>{r.avgCarry.toFixed(1)}</Td>
+                    <Td style={{ color: warnGap ? "#EF476F" : undefined }}>{r.avgCarry.toFixed(1)}</Td>
                     <Td>{r.avgTotal.toFixed(1)}</Td>
-                    <Td>{((r as any).sdCarry ?? 0).toFixed ? (r as any).sdCarry.toFixed(1) : (r as any).sdCarry || "0.0"}</Td>
+                    <Td>{sdCarry != null ? sdCarry.toFixed(1) : "-"}</Td>
                     <Td>{r.avgSmash.toFixed(3)}</Td>
                     <Td>{Math.round(r.avgSpin)}</Td>
                     <Td>{r.avgCS.toFixed(1)}</Td>
                     <Td>{r.avgBS.toFixed(1)}</Td>
                     <Td>{r.avgLA.toFixed(1)}</Td>
-                    <Td>{(r as any).avgF2P !== undefined ? (r as any).avgF2P.toFixed(2) : "-"}</Td>
+                    <Td>{avgF2P != null ? avgF2P.toFixed(2) : "-"}</Td>
                   </tr>
                 );
               })}
