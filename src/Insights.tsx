@@ -26,8 +26,8 @@ type InsightsProps = {
   onDrop: (key: string) => (e: React.DragEvent) => void;
 };
 
-const CARRY_BAR = "#3A86FF";   // carry color in insights distance box
-const TOTAL_BAR = "#00A36C";   // total color in insights distance box (green family, matches app)
+const CARRY_BAR = "#3A86FF";   // carry color in insights distance box (unchanged "previous" look)
+const TOTAL_BAR = "#00A36C";   // total color in insights distance box (green family)
 const GRID_STROKE = "#E2E8F0";
 
 /** Helper: unique clubs in a pool */
@@ -89,16 +89,16 @@ function usePersonalRecords(
   const selectedClubs = uniqueClubs(selectedPool);
   const activeClub = selectedClubs.length === 1 ? selectedClubs[0] : undefined;
 
-  const clubSubset = useMemo(
+  const clubSubset = React.useMemo(
     () => (activeClub ? globalPool.filter(s => s.Club === activeClub) : []),
     [globalPool, activeClub]
   );
 
-  const prCarryShot = useMemo(
+  const prCarryShot = React.useMemo(
     () => maxBy(clubSubset, s => s.CarryDistance_yds),
     [clubSubset]
   );
-  const prTotalShot = useMemo(
+  const prTotalShot = React.useMemo(
     () => maxBy(clubSubset, s => s.TotalDistance_yds),
     [clubSubset]
   );
@@ -167,6 +167,7 @@ export default function InsightsView(props: InsightsProps) {
 
   /* -----------------------------
      Distance distribution (bars)
+     (kept same look/orientation/colors as before)
   ------------------------------*/
   const distanceRows = useMemo(() => {
     // Keep club order consistent (Driver … LW)
@@ -226,6 +227,7 @@ export default function InsightsView(props: InsightsProps) {
           <Card theme={theme} key={key} title="Distance Distribution (Avg Carry vs Total)">
             <div style={{ width: "100%", height: 340 }}>
               <ResponsiveContainer>
+                {/* (Back to previous look) horizontal bars with clubs on Y, two fixed colors */}
                 <BarChart data={distanceRows} layout="vertical" margin={{ left: 20, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis type="number" />
@@ -372,22 +374,36 @@ export default function InsightsView(props: InsightsProps) {
 
   return (
     <div className="grid grid-cols-12 gap-6">
-      {insightsOrder.map((key) => (
-        <div
-          key={key}
-          draggable
-          onDragStart={onDragStart(key)}
-          onDragOver={onDragOver(key)}
-          onDrop={onDrop(key)}
-          className={
-            key === "distanceBox" || key === "progress"
-              ? "col-span-12"
-              : "col-span-12 md:col-span-6"
-          }
-        >
-          {renderCard(key)}
-        </div>
-      ))}
+      {insightsOrder.map((key) => {
+        // Layout rules per your request:
+        // - distanceBox: full width
+        // - highlights: full width
+        // - personalRecords: full width
+        // - warnings + weaknesses: same row (two columns)
+        // - progress: keep full width
+        const cls =
+          key === "distanceBox" ||
+          key === "highlights" ||
+          key === "personalRecords" ||
+          key === "progress"
+            ? "col-span-12"
+            : (key === "warnings" || key === "weaknesses")
+              ? "col-span-12 md:col-span-6"
+              : "col-span-12";
+
+        return (
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            className={cls}
+          >
+            {renderCard(key)}
+          </div>
+        );
+      })}
     </div>
   );
 }
