@@ -4,7 +4,7 @@ import { Shot, ClubRow, mean, stddev, orderIndex, clubColor } from "./utils";
 import { Card, InfoTooltip, Modal } from "./components/UI";
 import {
   BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip as RTooltip, Legend,
-  ResponsiveContainer, LabelList
+  ResponsiveContainer, LabelList, Cell
 } from "recharts";
 
 /** Benchmarks for proficiency modal (carry, yds). Adjust to your reference */
@@ -21,8 +21,8 @@ const BENCHMARKS: Record<string, { Beginner: number; Average: number; Good: numb
   "60 (LW)": { Beginner: 60, Average: 80, Good: 95, Advanced: 105, PGA: 115 },
 };
 
-/** Palette helpers */
-const lighten = (hex: string, amt = 0.25) => {
+/** Palette helper */
+const lighten = (hex: string, amt = 0.35) => {
   try {
     const n = hex.replace("#", "");
     const num = parseInt(n, 16);
@@ -35,7 +35,7 @@ const lighten = (hex: string, amt = 0.25) => {
 
 type Props = {
   theme: Theme;
-  tableRows: ClubRow[];                   // selection-aware rows (for some charts)
+  tableRows: ClubRow[];                   // selection-aware rows
   filteredOutliers: Shot[];               // selection-aware pool
   filteredNoClubOutliers: Shot[];         // selection-independent pool
   allClubs: string[];
@@ -55,13 +55,12 @@ function buildDistanceRows(rows: ClubRow[]) {
       carry: Number.isFinite(r.avgCarry) ? Number(r.avgCarry.toFixed(1)) : 0,
       total: Number.isFinite(r.avgTotal) ? Number(r.avgTotal.toFixed(1)) : 0,
       color: clubColor(r.club),
-      totalColor: lighten(clubColor(r.club), 0.35),
+      totalColor: lighten(clubColor(r.club)),
     }));
 }
 
 /** Gapping analysis on a pool (independent of the club filter for global warnings) */
 function computeGaps(pool: Shot[]) {
-  // compute per-club avg carry
   const map = new Map<string, number[]>();
   for (const s of pool) {
     if (s.Club && s.CarryDistance_yds != null) {
@@ -84,7 +83,6 @@ function computeGaps(pool: Shot[]) {
 
 /** Efficiency score 0–100 across a pool (selection-independent when called with filteredNoClubOutliers) */
 function efficiencyScore(pool: Shot[]) {
-  // simple composite: normalized smash (target 1.50), spin by club (rough), face-to-path proximity
   if (!pool.length) return 0;
   const smash = pool.map((s) => s.SmashFactor).filter((x): x is number => x != null);
   const f2p = pool
@@ -92,7 +90,7 @@ function efficiencyScore(pool: Shot[]) {
     .filter((x): x is number => x != null);
 
   const smashScore = smash.length ? Math.max(0, Math.min(1, mean(smash) / 1.50)) : 0;
-  const faceScore = f2p.length ? Math.max(0, 1 - Math.min(1, mean(f2p.map((v) => Math.abs(v))) / 5)) : 0; // 0 at 5° avg error
+  const faceScore = f2p.length ? Math.max(0, 1 - Math.min(1, mean(f2p.map((v) => Math.abs(v))) / 5)) : 0;
   const score = Math.round((0.7 * smashScore + 0.3 * faceScore) * 100);
   return score;
 }
@@ -138,7 +136,6 @@ export default function InsightsView({
   }, [filteredNoClubOutliers]);
 
   const mostConsistent = useMemo(() => {
-    // sd of carry; require at least 8 shots per club
     const map = new Map<string, number[]>();
     filteredNoClubOutliers.forEach((s) => {
       if (s.Club && s.CarryDistance_yds != null) {
@@ -169,11 +166,8 @@ export default function InsightsView({
     return { club: first.club, ...p };
   }, [distRows]);
 
-  /* Render map for reorderable cards */
-  const CARDS: Record<
-    string,
-    { title: string; render: () => React.ReactNode }
-  > = {
+  /* Cards map (draggable) */
+  const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
     distanceBox: {
       title: "Distance Distribution (by Club)",
       render: () => (
@@ -186,35 +180,28 @@ export default function InsightsView({
           onDrop={onDrop}
           actions={
             <InfoTooltip theme={theme} label={<span className="text-xs underline decoration-dotted">What am I seeing?</span>}>
-              Each row shows average <b>Carry</b> and <b>Total</b> distance by club (current selection). Bars adopt your
-              club colors; hover to see values.
+              Each row shows average <b>Carry</b> and <b>Total</b> distance by club (current selection).
+              Bars adopt your club colors; hover to see values.
             </InfoTooltip>
           }
         >
           <div style={{ width: "100%", height: 380, background: theme.dispBg }}>
             <ResponsiveContainer>
-              <BarChart
-                data={distRows}
-                margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
-                layout="vertical"
-              >
+              <BarChart data={distRows} margin={{ left: 20, right: 20, top: 10, bottom: 10 }} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis type="category" dataKey="club" width={140} />
-                <RTooltip
-                  formatter={(v: any, n: any) => [`${v} yds`, n]}
-                  labelFormatter={() => ""}
-                />
+                <RTooltip formatter={(v: any, n: any) => [`${v} yds`, n]} labelFormatter={() => ""} />
                 <Legend />
-                <Bar dataKey="carry" name="Carry" isAnimationActive={false} radius={[0, 6, 6, 0]} fillOpacity={0.95} shape={undefined}>
+                <Bar dataKey="carry" name="Carry" isAnimationActive={false} radius={[0, 6, 6, 0]} fillOpacity={0.95}>
                   {distRows.map((d, i) => (
-                    <cell key={`c-${i}`} fill={d.color} />
+                    <Cell key={`c-${i}`} fill={d.color} />
                   ))}
                   <LabelList dataKey="carry" position="insideRight" formatter={(v: any) => `${v}`} />
                 </Bar>
                 <Bar dataKey="total" name="Total" isAnimationActive={false} radius={[0, 6, 6, 0]}>
                   {distRows.map((d, i) => (
-                    <cell key={`t-${i}`} fill={d.totalColor} />
+                    <Cell key={`t-${i}`} fill={d.totalColor} />
                   ))}
                   <LabelList dataKey="total" position="right" formatter={(v: any) => `${v}`} />
                 </Bar>
@@ -238,7 +225,7 @@ export default function InsightsView({
           actions={
             <InfoTooltip theme={theme} label={<span className="text-xs underline decoration-dotted">How is efficiency scored?</span>}>
               The Efficiency Score combines <b>Smash Factor</b> (target ≈ 1.50) and <b>Face-to-Path</b> consistency.
-              A perfect 100 indicates high energy transfer and centered face-path alignment over your data.
+              A perfect 100 indicates high energy transfer and centered face-path alignment over your data (all sessions).
             </InfoTooltip>
           }
         >
@@ -280,7 +267,7 @@ export default function InsightsView({
           onDrop={onDrop}
           actions={
             <InfoTooltip theme={theme} label={<span className="text-xs underline decoration-dotted">What is a tight gap?</span>}>
-              We compute average carry per club using <b>all sessions</b> (ignoring current club filters).
+              We compute average carry per club using <b>all sessions</b>, ignoring current club filters.
               Adjacent clubs with less than <b>12 yards</b> separation are flagged here.
             </InfoTooltip>
           }
@@ -321,17 +308,12 @@ export default function InsightsView({
                 Proficiency compares your <b>Total</b> distance to reference ranges by skill level (Beginner → PGA Tour).
                 Click “View chart” to see the club-by-club benchmarks.
               </InfoTooltip>
-              <button
-                onClick={() => setShowProfModal(true)}
-                className="px-2 py-1 rounded text-xs border"
-                style={{ borderColor: theme.cardBorder }}
-              >
+              <button onClick={() => setShowProfModal(true)} className="px-2 py-1 rounded text-xs border" style={{ borderColor: theme.cardBorder }}>
                 View chart
               </button>
             </div>
           }
         >
-          {/* Simple PRs derived from current selection (distRows) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <div className="text-xs text-slate-500 mb-1">PR Carry</div>
@@ -353,7 +335,6 @@ export default function InsightsView({
             </div>
           </div>
 
-          {/* Proficiency modal */}
           <Modal
             open={showProfModal}
             onClose={() => setShowProfModal(false)}
@@ -387,6 +368,7 @@ export default function InsightsView({
       ),
     },
 
+    // Placeholder row for future progress card
     progress: {
       title: "Club Progress (Distance Over Time)",
       render: () => (
@@ -399,7 +381,7 @@ export default function InsightsView({
           onDrop={onDrop}
         >
           <div className="text-sm text-slate-500">
-            Tip: filter to one club to see a clear distance trend. (This card reuses your existing progress logic.)
+            Tip: filter to one club to see a clear distance trend. (This card will render your line chart when ready.)
           </div>
         </Card>
       ),
@@ -408,7 +390,6 @@ export default function InsightsView({
     weaknesses: {
       title: "Biggest Weakness (All Clubs)",
       render: () => {
-        // Simple heuristic: largest absolute avg Face-to-Path
         const by = new Map<string, number[]>();
         filteredNoClubOutliers.forEach((s) => {
           const f2p =
@@ -456,7 +437,6 @@ export default function InsightsView({
       {insightsOrder.map((key) => {
         const item = CARDS[key];
         if (!item) return null;
-        // each card is draggable via Card wrapper
         return (
           <div key={key} className="col-span-12">
             {item.render()}
