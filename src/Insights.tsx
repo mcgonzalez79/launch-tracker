@@ -205,7 +205,7 @@ export default function InsightsView({
       {insightsOrder.map((key) => {
         if (key === "distanceBox") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card title="Distance Distribution — Avg Carry vs Total">
+            <Card theme={theme} title="Distance Distribution — Avg Carry vs Total">
               <div style={{ width: "100%", height: 360 }}>
                 <ResponsiveContainer>
                   <BarChart data={distRows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
@@ -229,7 +229,7 @@ export default function InsightsView({
 
         if (key === "highlights") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card title="Highlights (independent of club selection)">
+            <Card theme={theme} title="Highlights (independent of club selection)">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">Proficiency Level</div>
@@ -273,7 +273,7 @@ export default function InsightsView({
 
         if (key === "warnings") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card title="Gapping Warnings (all clubs)">
+            <Card theme={theme} title="Gapping Warnings (all clubs)">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
@@ -303,8 +303,8 @@ export default function InsightsView({
 
         if (key === "personalRecords") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            {/* You may already be rendering PR inside Highlights; keep this card if you want a dedicated PR area */}
-            <Card title="Personal Records (PR)">
+            {/* Optional dedicated PR card */}
+            <Card theme={theme} title="Personal Records (PR)">
               <div className="text-sm">
                 PR Carry: <b>{bestCarry?.CarryDistance_yds ? `${bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}</b>
                 {bestCarry?.Club ? ` (${bestCarry.Club})` : ""}
@@ -322,7 +322,7 @@ export default function InsightsView({
 
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card title="Club Progress (distance over time)">
+            <Card theme={theme} title="Club Progress (distance over time)">
               <div className="text-sm text-slate-500">Select a single club in the Filters to see a trend here. (Feature exists in Dashboard charts.)</div>
             </Card>
           </div>
@@ -330,7 +330,7 @@ export default function InsightsView({
 
         if (key === "weaknesses") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card title="Biggest Weakness (across all clubs)">
+            <Card theme={theme} title="Biggest Weakness (across all clubs)">
               <WeaknessCallout pool={filteredNoClubOutliers} />
             </Card>
           </div>
