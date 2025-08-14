@@ -439,17 +439,18 @@ export default function App() {
 
           {view === "insights" && (
             <InsightsView
-              theme={T}
-              tableRows={tableRows}
-              filteredOutliers={filteredOutliers}
-              filteredNoClubOutliers={filteredNoClubOutliers}
-              filteredNoClubRaw={filteredNoClub}    // <-- add this line
-              allClubs={clubs}
-              insightsOrder={insightsOrder}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDrop={onDropInsight}
-            />
+            theme={T}
+            tableRows={tableRows}
+            filteredOutliers={filteredOutliers}
+            filteredNoClubOutliers={filteredNoClubOutliers}
+            filteredNoClubRaw={filteredNoClub}
+            allClubs={clubs}
+            insightsOrder={insightsOrder}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDropInsight}
+            clubColorOf={(club) => clubColorMap.get(club) || '#3A86FF'}  // <— your existing mapping here
+          />
           )}
 
 
