@@ -8,16 +8,10 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer, LabelList,
 } from "recharts";
 
-/* ================== Benchmarks for proficiency ==================
-   Same source used for both proficiency scoring & the modal chart.
-   Distances are illustrative “reference ranges” (yards, Total).
-   Adjust to your preferred tables any time.
-*/
+/* ================== Benchmarks for proficiency ================== */
 type Skill = "Beginner" | "Average" | "Good" | "Advanced" | "PGATour";
-
 const SKILLS: Skill[] = ["Beginner", "Average", "Good", "Advanced", "PGATour"];
 
-// Per-club typical total distances by skill (example values)
 const BENCHMARKS: Record<string, Record<Skill, number>> = {
   "Driver":           { Beginner: 170, Average: 200, Good: 230, Advanced: 260, PGATour: 295 },
   "3 Wood":           { Beginner: 155, Average: 180, Good: 205, Advanced: 230, PGATour: 260 },
@@ -31,7 +25,6 @@ const BENCHMARKS: Record<string, Record<Skill, number>> = {
   "60 (LW)":          { Beginner: 65,  Average: 85,  Good: 100, Advanced: 110, PGATour: 120 },
 };
 
-/* Convert benchmarks to a chart-friendly array */
 function benchmarksToRows(clubsOrdered: string[]) {
   return clubsOrdered
     .filter(c => BENCHMARKS[c])
@@ -41,9 +34,6 @@ function benchmarksToRows(clubsOrdered: string[]) {
     }));
 }
 
-/* Proficiency score out of 100 vs. benchmark table
-   Uses Total Distance (or Carry if Total unavailable) averaged over the current selection (ignores club filter if asked).
-*/
 function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score: number; label: string } {
   const byClub = new Map<string, number[]>();
   pool.forEach(s => {
@@ -55,13 +45,11 @@ function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score
   });
   if (!byClub.size) return { score: 0, label: "Beginner" };
 
-  // Average per club, then compare to benchmarks
   const clubScores: number[] = [];
   byClub.forEach((arr, club) => {
     const avg = arr.reduce((a,b)=>a+b, 0) / arr.length;
     const ref = BENCHMARKS[club];
     if (!ref) return;
-    // Map avg to 0..100 across Beginner..PGATour
     const b = ref.Beginner, p = ref.PGATour;
     const sc = Math.max(0, Math.min(100, ((avg - b) / (p - b)) * 100));
     clubScores.push(sc);
@@ -70,7 +58,6 @@ function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score
   if (!clubScores.length) return { score: 0, label: "Beginner" };
 
   const overall = clubScores.reduce((a,b)=>a+b, 0) / clubScores.length;
-  // Buckets
   const label =
     overall < 20 ? "Beginner" :
     overall < 40 ? "Average"  :
@@ -79,7 +66,6 @@ function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score
   return { score: overall, label };
 }
 
-/* Find PRs (include outliers): best carry & best total across provided pool */
 function personalRecords(poolRawNoClub: Shot[]) {
   let bestCarry: Shot | null = null;
   let bestTotal: Shot | null = null;
@@ -94,9 +80,7 @@ function personalRecords(poolRawNoClub: Shot[]) {
   return { bestCarry, bestTotal };
 }
 
-/* Warnings based on gapping (always ALL clubs, ignore club filter) */
 function gapWarnings(allShotsNoClub: Shot[], thresholdTight = 12, thresholdWide = 30) {
-  // Build avg carry by club (ignore outliers toggle already applied in parent if needed)
   const byClub = new Map<string, number[]>();
   allShotsNoClub.forEach(s => {
     if (s.CarryDistance_yds == null) return;
@@ -160,10 +144,10 @@ function Modal({
 /* ================== Insights View ================== */
 type Props = {
   theme: Theme;
-  tableRows: ClubRow[];                  // built from filteredOutliers
-  filteredOutliers: Shot[];              // respects club filter
-  filteredNoClubOutliers: Shot[];        // ignores club filter
-  filteredNoClubRaw?: Shot[];            // ignores club filter AND includes outliers (for PRs)
+  tableRows: ClubRow[];
+  filteredOutliers: Shot[];
+  filteredNoClubOutliers: Shot[];
+  filteredNoClubRaw?: Shot[];
   allClubs: string[];
   insightsOrder: string[];
   onDragStart: (k: string) => (e: React.DragEvent) => void;
@@ -176,24 +160,19 @@ export default function InsightsView({
   insightsOrder, onDragStart, onDragOver, onDrop
 }: Props) {
 
-  // ===== Personal Records (include outliers) =====
   const { bestCarry, bestTotal } = useMemo(
     () => personalRecords(filteredNoClubRaw && filteredNoClubRaw.length ? filteredNoClubRaw : filteredNoClubOutliers),
     [filteredNoClubRaw, filteredNoClubOutliers]
   );
 
-  // ===== Proficiency (score) — independent of club selection if we want; here we use filteredNoClubOutliers
   const prof = useMemo(() => proficiencyScore(filteredNoClubOutliers, null), [filteredNoClubOutliers]);
   const profTip = "Efficiency score compares your average total distance to reference ranges across clubs, normalized to 0–100.";
 
-  // ===== Gap Warnings — ALWAYS all clubs selected (ignore club filter)
   const gw = useMemo(() => gapWarnings(filteredNoClubOutliers), [filteredNoClubOutliers]);
 
-  // ===== Benchmarks modal =====
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  // ===== Distance Distribution (carry & total) =====
   const distRows = tableRows.map(r => ({
     club: r.club,
     Carry: Number.isFinite(r.avgCarry) ? Number(r.avgCarry.toFixed(1)) : 0,
@@ -215,10 +194,10 @@ export default function InsightsView({
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="Carry" name="Carry (avg)" fill="#3A86FF">
-                      <LabelList dataKey="Carry" position="top" formatter={(v: any) => `${v}`} />
+                      <LabelList dataKey="Carry" position="top" />
                     </Bar>
                     <Bar dataKey="Total" name="Total (avg)" fill="#2ECC71">
-                      <LabelList dataKey="Total" position="top" formatter={(v: any) => `${v}`} />
+                      <LabelList dataKey="Total" position="top" />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -303,7 +282,6 @@ export default function InsightsView({
 
         if (key === "personalRecords") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            {/* Optional dedicated PR card */}
             <Card theme={theme} title="Personal Records (PR)">
               <div className="text-sm">
                 PR Carry: <b>{bestCarry?.CarryDistance_yds ? `${bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}</b>
@@ -353,7 +331,6 @@ export default function InsightsView({
               <YAxis dataKey="club" type="category" />
               <Tooltip />
               <Legend />
-              {/* One series per skill */}
               <Bar dataKey="Beginner" fill="#e5e7eb" name="Beginner" />
               <Bar dataKey="Average"  fill="#60a5fa" name="Average" />
               <Bar dataKey="Good"     fill="#34d399" name="Good" />
@@ -372,7 +349,6 @@ export default function InsightsView({
 
 /* ================== Helpers (Insights-only) ================== */
 function ConsistencyBlurb({ pool }: { pool: Shot[] }) {
-  // Identify club with the lowest carry standard deviation (min 5 shots)
   const byClub = new Map<string, number[]>();
   pool.forEach(s => {
     if (s.CarryDistance_yds == null) return;
@@ -399,7 +375,6 @@ function ConsistencyBlurb({ pool }: { pool: Shot[] }) {
 }
 
 function WeaknessCallout({ pool }: { pool: Shot[] }) {
-  // Basic heuristic: pick the club with lowest smash (or lowest avg carry) among clubs with at least 5 shots
   const byClub = new Map<string, Shot[]>();
   pool.forEach(s => {
     if (!byClub.has(s.Club)) byClub.set(s.Club, []);
@@ -425,7 +400,6 @@ function WeaknessCallout({ pool }: { pool: Shot[] }) {
     return <div className="text-sm text-slate-500">Add more shots to see a weaknesses analysis.</div>;
   }
 
-  // Choose weakest by lowest smash; tiebreaker by lowest avg carry
   rows.sort((a,b)=> (a.avgSmash - b.avgSmash) || (a.avgCarry - b.avgCarry));
   const w = rows[0];
 
