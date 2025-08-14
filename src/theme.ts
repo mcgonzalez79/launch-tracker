@@ -2,29 +2,28 @@
 
 export type Theme = {
   brand: string;
+  brandTint: string;  // <- added
   brandSoft: string;
 
   text: string;
   textSoft: string;
-  textDim: string;   // <- used by Dashboard
+  textDim: string;
 
-  white: string;     // <- used by App
+  white: string;
   bg: string;
 
   card: string;
   cardBorder: string;
-  border: string;    // alias some components use
+  border: string;
   kpi: string;
 
   tooltipBg: string;
   tooltipText: string;
 
-  // chart backgrounds / stripes (dispersion, insights distance)
   dispBg: string;
-  gridStripeA: string; // <- used by Dashboard
-  gridStripeB: string; // <- used by Dashboard
+  gridStripeA: string;
+  gridStripeB: string;
 
-  // soft accent swatches some charts/cards reference
   blueSoft: string;
   greenSoft: string;
   orangeSoft: string;
@@ -47,25 +46,26 @@ export function alpha(hex: string, a: number): string {
 
 /** Club colors & palette (Dashboard imports colorForClub and clubPalette) */
 const CLUB_COLORS: Record<string, string> = {
-  "Driver": "#2563EB",              // blue
-  "3 Wood": "#10B981",              // emerald
-  "4 Hybrid": "#F59E0B",            // amber
-  "5 Hybrid (5 Iron)": "#EF4444",   // red
-  "6 Iron": "#8B5CF6",              // violet
-  "7 Iron": "#0EA5E9",              // sky
-  "8 Iron": "#14B8A6",              // teal
-  "9 Iron": "#F97316",              // orange
-  "Pitching Wedge": "#22C55E",      // green
-  "60 (LW)": "#E11D48",             // rose
+  "Driver": "#2563EB",
+  "3 Wood": "#10B981",
+  "4 Hybrid": "#F59E0B",
+  "5 Hybrid (5 Iron)": "#EF4444",
+  "6 Iron": "#8B5CF6",
+  "7 Iron": "#0EA5E9",
+  "8 Iron": "#14B8A6",
+  "9 Iron": "#F97316",
+  "Pitching Wedge": "#22C55E",
+  "60 (LW)": "#E11D48",
 };
 export const clubPalette = Object.values(CLUB_COLORS);
 export function colorForClub(club: string): string {
-  return CLUB_COLORS[club] || "#64748B"; // slate fallback
+  return CLUB_COLORS[club] || "#64748B";
 }
 
 /** Light/Dark themes with all required fields */
 export const LIGHT: Theme = {
   brand: "#0B7A3B",
+  brandTint: "#2F8C76",     // <- pleasant lighter green for accents
   brandSoft: "#E7F5EC",
 
   text: "#0f172a",
@@ -94,6 +94,7 @@ export const LIGHT: Theme = {
 
 export const DARK: Theme = {
   brand: "#23B26D",
+  brandTint: "#34D399",     // <- lighter green tint for dark mode
   brandSoft: "#14312A",
 
   text: "#E5E7EB",
