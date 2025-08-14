@@ -66,7 +66,7 @@ export function TopTab({
   label,
   active,
   onClick,
-  theme, // unused but accepted to satisfy existing calls
+  theme, // accepted but unused
 }: {
   label: string;
   active?: boolean;
@@ -179,7 +179,17 @@ export function Modal({
 }
 
 /** KPI & table helpers used by Dashboard */
-export function KPI({ label, value, color }: { label: string; value: string; color: string }) {
+export function KPI({
+  label,
+  value,
+  color,
+  theme, // accepted but unused to match Dashboard calls
+}: {
+  label: string;
+  value: string;
+  color: string;
+  theme?: Theme;
+}) {
   return (
     <div className="rounded-2xl p-3 shadow text-sm" style={{ background: "#ffffff" }}>
       <div className="text-slate-500">{label}</div>
@@ -196,7 +206,13 @@ export function Td({ children }: { children: React.ReactNode }) {
 }
 
 /** Empty chart placeholder */
-export function EmptyChart({ label = "No data" }: { label?: string }) {
+export function EmptyChart({
+  label = "No data",
+  theme, // accepted but unused to match Dashboard calls
+}: {
+  label?: string;
+  theme?: Theme;
+}) {
   return (
     <div
       className="flex items-center justify-center h-48 rounded-xl border text-sm"
