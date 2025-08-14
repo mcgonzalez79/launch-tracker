@@ -7,50 +7,37 @@ export type Theme = {
 };
 
 export const LIGHT: Theme = {
-  // New palette
-  brand: "#076652",          // deep teal
-  brandTint: "#60B2C2",      // teal tint
-  brandSoft: "#ECEAED",      // very light soft bg
+  brand: "#006747",
+  brandTint: "#2F8C76",
+  brandSoft: "#ECF8F1",
   white: "#ffffff",
-
-  text: "#19202F",           // navy for primary text
-  textDim: "#518B80",        // muted teal for secondary text
-
-  border: "#E3E5EA",         // subtle light border (derived from #ECEAED)
+  text: "#0f172a",
+  textDim: "#475569",
+  border: "#E5E7EB",
   panel: "#ffffff",
-
-  // Soft utility fills (kept for components that expect them)
-  blueSoft: "#E6F3F6",       // soft tint of #60B2C2
-  greenSoft: "#EAF4F1",      // soft tint of #076652
-  orangeSoft: "#FFF6EC",     // unchanged (used in some UI accents)
-
-  kpiBorder: "#E3E5EA",
-  // Gentle green-ish grid stripes used on some charts
-  gridStripeA: "#EAF5F2",
-  gridStripeB: "#F4FAF8",
+  blueSoft: "#EEF5FF",
+  greenSoft: "#EDFDF3",
+  orangeSoft: "#FFF6EC",
+  kpiBorder: "#E5E7EB",
+  gridStripeA: "#E8F4EE",
+  gridStripeB: "#F4FBF8",
 };
 
 export const DARK: Theme = {
-  // Keep brand visible on dark backgrounds
-  brand: "#60B2C2",          // brighter on dark
-  brandTint: "#076652",      // deep teal as secondary
-  brandSoft: "#142026",      // soft brand-tinted surface
-  white: "#0B0F14",          // app background in dark mode
-
-  text: "#ECEAED",           // light from palette
-  textDim: "#518B80",        // muted teal
-
-  border: "#2A3544",
-  panel: "#19202F",          // navy panel
-
-  blueSoft: "#0E2230",
+  brand: "#25B07C",
+  brandTint: "#43C593",
+  brandSoft: "#0F1B17",
+  white: "#0B0F14",
+  text: "#E6EDF3",
+  textDim: "#93A1B3",
+  border: "#2B3542",
+  panel: "#111827",
+  blueSoft: "#0E223B",
   greenSoft: "#0F2420",
   orangeSoft: "#2A1909",
-
-  kpiBorder: "#2A3544",
-  // Navy-leaning subtle stripes for dark charts
-  gridStripeA: "#121B25",
-  gridStripeB: "#0E1620",
+  kpiBorder: "#2B3542",
+  gridStripeA: "#0E1915",
+  gridStripeB: "#0A1411",
 };
 
 /* Shot-shape colors */
