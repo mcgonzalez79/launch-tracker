@@ -23,7 +23,6 @@ export function Card({
   onDragOver?: (k: string) => (e: React.DragEvent) => void;
   onDrop?: (k: string) => (e: React.DragEvent) => void;
   fullBleed?: boolean;
-  /** some places pass dragHandle for a visual affordance */
   dragHandle?: boolean;
 }) {
   const wrapProps =
@@ -51,12 +50,8 @@ export function Card({
           style={{ borderBottom: `1px solid ${theme?.cardBorder ?? "#e5e7eb"}` }}
         >
           <div className="flex items-center gap-2">
-            {dragHandle && (
-              <span title="Drag to rearrange" style={{ cursor: "grab", opacity: 0.7 }}>⋮⋮</span>
-            )}
-            <h3 className="text-sm font-semibold" style={{ color: theme?.text ?? "#0f172a" }}>
-              {title}
-            </h3>
+            {dragHandle && <span title="Drag to rearrange" style={{ cursor: "grab", opacity: 0.7 }}>⋮⋮</span>}
+            <h3 className="text-sm font-semibold" style={{ color: theme?.text ?? "#0f172a" }}>{title}</h3>
           </div>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
@@ -66,15 +61,17 @@ export function Card({
   );
 }
 
-/** Top tabs */
+/** Top tabs (App.tsx passes theme, keep prop optional) */
 export function TopTab({
   label,
   active,
   onClick,
+  theme, // unused but accepted to satisfy existing calls
 }: {
   label: string;
   active?: boolean;
   onClick?: () => void;
+  theme?: Theme;
 }) {
   return (
     <button
@@ -104,7 +101,7 @@ export const IconMoon = () => (
   </svg>
 );
 
-/** Nice hover tooltip */
+/** Pretty hover tooltip */
 export function InfoTooltip({
   label,
   children,
@@ -181,7 +178,7 @@ export function Modal({
   );
 }
 
-/** KPI (for Dashboard) */
+/** KPI & table helpers used by Dashboard */
 export function KPI({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="rounded-2xl p-3 shadow text-sm" style={{ background: "#ffffff" }}>
@@ -191,7 +188,6 @@ export function KPI({ label, value, color }: { label: string; value: string; col
   );
 }
 
-/** Table helpers */
 export function Th({ children }: { children: React.ReactNode }) {
   return <th className="py-2 pr-4 text-slate-600">{children}</th>;
 }
