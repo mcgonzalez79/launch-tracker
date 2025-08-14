@@ -429,8 +429,7 @@ export default function App() {
         avgCS: m(cs),
         avgBS: m(bs),
         avgLA: m(la),
-        // extra field used by your updated dashboard table
-        // @ts-ignore
+        // @ts-ignore extra field if your dashboard table supports it
         avgF2P: m(f2p),
       } as any);
     });
@@ -546,29 +545,27 @@ export default function App() {
         <aside className="col-span-12 lg:col-span-3">
           <FiltersPanel
             theme={theme}
-            // data context
-            sessions={sessions as any}                 {/* if your Filters expects string[], keep as any */}
+            sessions={sessions as any}
             selectedSessionId={selectedSessionId as any}
             setSelectedSessionId={setSelectedSessionId as any}
             clubs={clubs}
             selectedClubs={selectedClubs}
             setSelectedClubs={setSelectedClubs}
-            // filters
             excludeOutliers={excludeOutliers}
             setExcludeOutliers={setExcludeOutliers}
-            dateFrom={dateFrom} dateTo={dateTo}
-            setDateFrom={setDateFrom} setDateTo={setDateTo}
-            carryMin={carryMinStr as any}             {/* expect string in Filters */}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            setDateFrom={setDateFrom}
+            setDateTo={setDateTo}
+            carryMin={carryMinStr as any}
             carryMax={carryMaxStr as any}
             setCarryMin={setCarryMinFromString as any}
             setCarryMax={setCarryMaxFromString as any}
-            // actions
             onImportFiles={onImportFiles}
             onDeleteSession={deleteSession as any}
             onDeleteAll={clearAll}
             onExportCsv={exportCsv}
             onLoadSample={loadSample}
-            // helpers
             onSelectAllClubs={() => setSelectedClubs(clubs)}
           />
         </aside>
@@ -597,7 +594,7 @@ export default function App() {
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDrop={onDrop}
-              clubColorOf={clubColorOf}   // ensures boxplot matches filter colors
+              clubColorOf={clubColorOf}
             />
           )}
 
