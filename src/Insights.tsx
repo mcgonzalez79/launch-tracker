@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Label,
-  LineChart, Line
+  LineChart, Line, Cell,
 } from "recharts";
 import { Theme } from "./theme";
 import { Card } from "./components/UI";
@@ -12,9 +12,9 @@ type InsightsProps = {
   theme: Theme;
   /** Averages built from the CURRENT club selection (kept for distance box). */
   tableRows: ClubRow[];
-  /** The shots with all filters (dates/session/carry range) AND outlier filter applied BUT WITH club filter applied. */
+  /** Shots with club filter applied (plus session/date/carry-range and outlier filter). */
   filteredOutliers: Shot[];
-  /** The shots with all filters (dates/session/carry range) AND outlier filter applied BUT WITHOUT club filter. */
+  /** Shots WITHOUT the club filter (but same session/date/carry-range and outlier filter). */
   filteredNoClubOutliers: Shot[];
   /** All known clubs (sorted externally). */
   allClubs: string[];
@@ -48,7 +48,9 @@ function makeRowsFromPool(pool: Shot[]): ClubRow[] {
     const cs = grab(s => s.ClubSpeed_mph);
     const bs = grab(s => s.BallSpeed_mph);
     const la = grab(s => s.LaunchAngle_deg);
-    const f2p = grab(s => (s.ClubFace_deg != null && s.ClubPath_deg != null) ? (s.ClubFace_deg - s.ClubPath_deg) : undefined);
+    const f2p = grab(s =>
+      s.ClubFace_deg != null && s.ClubPath_deg != null ? s.ClubFace_deg - s.ClubPath_deg : undefined
+    );
 
     rows.push({
       club,
@@ -77,7 +79,7 @@ function clubColorFor(club: string) {
   return palette[h % palette.length];
 }
 
-/** Efficiency score 0–100 (heuristic, unchanged here) */
+/** Efficiency score 0–100 (heuristic) */
 function efficiencyScore(pool: Shot[]): number {
   const carry = pool.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
   const smash = pool.map(s => s.SmashFactor).filter((x): x is number => x != null);
@@ -85,14 +87,13 @@ function efficiencyScore(pool: Shot[]): number {
   const c = mean(carry);
   const s = mean(smash);
   // normalize to a rough 0..100 scale
-  const normC = Math.min(1, Math.max(0, (c - 60) / 130)); // 60–190 yds typical amatuer range
-  const normS = Math.min(1, Math.max(0, (s - 1.10) / 0.35)); // 1.10–1.45
+  const normC = Math.min(1, Math.max(0, (c - 60) / 130));  // ~60–190 yds
+  const normS = Math.min(1, Math.max(0, (s - 1.10) / 0.35)); // ~1.10–1.45
   return Math.round((0.65 * normC + 0.35 * normS) * 100);
 }
 
-/** Level text from average Total Distance; bins from your reference */
+/** Level text from average Total Distance; tune bins as needed */
 function levelFromTotal(totalAvg: number): string {
-  // Example buckets — tune as you like
   if (totalAvg >= 290) return "PGA Tour";
   if (totalAvg >= 250) return "Advanced";
   if (totalAvg >= 220) return "Good";
@@ -179,7 +180,7 @@ export default function InsightsView({
     })).sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
   }, [tableRows]);
 
-  // Gapping warnings — now computed from ALL clubs (rowsAllClubs), independent of selected club
+  // Gapping warnings — computed from ALL clubs (rowsAllClubs), independent of selected club
   const gapWarnings = useMemo(() => {
     const warnings: string[] = [];
     const sorted = rowsAllClubs.slice().sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
@@ -196,53 +197,41 @@ export default function InsightsView({
   /* ========= Render helpers ========= */
 
   const renderDistanceBox = () => (
-    <Card
-      title="Distance Distribution"
+    <div
       draggable
       onDragStart={onDragStart("distanceBox")}
       onDragOver={onDragOver("distanceBox")}
       onDrop={onDrop("distanceBox")}
     >
-      <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer>
-          <BarChart data={distanceBoxData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="club" />
-            <YAxis />
-            <Tooltip
-              formatter={(val: any, name: any, ctx: any) => {
-                const key = ctx.dataKey as string;
-                if (key === "carry") return [val, "Carry (avg)"];
-                if (key === "total") return [val, "Total (avg)"];
-                return [val, name];
-              }}
-            />
-            <Legend />
-            {/* Color each club's carry bar with its club color */}
-            <Bar dataKey="carry" name="Carry (avg)">
-              {distanceBoxData.map((d, i) => (
-                <rect key={`c-${i}`} /> // placeholder; we need <Cell>, but import-free trick:
-              ))}
-            </Bar>
-            {/* Total bars — fixed green as requested earlier */}
-            <Bar dataKey="total" name="Total (avg)" fill="#2CA02C" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      {/* Recharts requires <Cell>; we inject via dangerouslySetInnerHTML workaround for fewer deps */}
-      <style>{`
-        /* No-op: keep styling inside Recharts defaults; individual club colors set with inline Cells below in JSX update */
-      `}</style>
-    </Card>
+      <Card theme={T} title="Distance Distribution">
+        <div style={{ width: "100%", height: 340 }}>
+          <ResponsiveContainer>
+            <BarChart data={distanceBoxData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="club" />
+              <YAxis />
+              <Tooltip
+                formatter={(val: any, name: any, ctx: any) => {
+                  const key = ctx.dataKey as string;
+                  if (key === "carry") return [val, "Carry (avg)"];
+                  if (key === "total") return [val, "Total (avg)"];
+                  return [val, name];
+                }}
+              />
+              <Legend />
+              <Bar dataKey="carry" name="Carry (avg)">
+                {distanceBoxData.map((d, i) => (
+                  <Cell key={`carry-${i}`} fill={d.color} />
+                ))}
+              </Bar>
+              {/* Total bars — fixed green */}
+              <Bar dataKey="total" name="Total (avg)" fill="#2CA02C" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+    </div>
   );
-
-  // NOTE: The above placeholder rects avoid Typescript warnings in some setups if Cell wasn’t imported.
-  // If you already have `Cell` from 'recharts' in your project, replace the two <Bar> blocks with:
-  //
-  // <Bar dataKey="carry" name="Carry (avg)">
-  //   {distanceBoxData.map((d, i) => (<Cell key={i} fill={d.color} />))}
-  // </Bar>
-  // <Bar dataKey="total" name="Total (avg)" fill="#2CA02C" />
 
   const renderHighlights = () => {
     const longestText = longestShot
@@ -252,96 +241,104 @@ export default function InsightsView({
       ? `${mostConsistentClub.club} (SD ${mostConsistentClub.sd.toFixed(1)} yds)`
       : "—";
     return (
-      <Card
-        title="Highlights (All Clubs)"
+      <div
         draggable
         onDragStart={onDragStart("highlights")}
         onDragOver={onDragOver("highlights")}
         onDrop={onDrop("highlights")}
       >
-        <ul className="text-sm space-y-2">
-          <li><b>Longest Carry:</b> {longestText}</li>
-          <li><b>Most Consistent:</b> {consistentText}</li>
-          <li>
-            <b>Efficiency Score:</b> {effScore}/100
-            <span title="Derived from average carry and smash factor on a 0–100 scale (weighted 65% carry, 35% smash)."
-                  className="ml-2 text-slate-500 cursor-help">ⓘ</span>
-          </li>
-        </ul>
-      </Card>
+        <Card theme={T} title="Highlights (All Clubs)">
+          <ul className="text-sm space-y-2">
+            <li><b>Longest Carry:</b> {longestText}</li>
+            <li><b>Most Consistent:</b> {consistentText}</li>
+            <li>
+              <b>Efficiency Score:</b> {effScore}/100
+              <span
+                title="Derived from average carry and smash factor on a 0–100 scale (weighted 65% carry, 35% smash)."
+                className="ml-2 text-slate-500 cursor-help"
+              >
+                ⓘ
+              </span>
+            </li>
+          </ul>
+        </Card>
+      </div>
     );
   };
 
   const renderWarnings = () => (
-    <Card
-      title="Gapping Warnings (All Clubs)"
+    <div
       draggable
       onDragStart={onDragStart("warnings")}
       onDragOver={onDragOver("warnings")}
       onDrop={onDrop("warnings")}
     >
-      {gapWarnings.length === 0 ? (
-        <div className="text-sm text-slate-600">No gapping issues detected.</div>
-      ) : (
-        <ul className="list-disc ml-5 text-sm space-y-1">
-          {gapWarnings.map((t, i) => <li key={i}>{t}</li>)}
-        </ul>
-      )}
-    </Card>
+      <Card theme={T} title="Gapping Warnings (All Clubs)">
+        {gapWarnings.length === 0 ? (
+          <div className="text-sm text-slate-600">No gapping issues detected.</div>
+        ) : (
+          <ul className="list-disc ml-5 text-sm space-y-1">
+            {gapWarnings.map((t, i) => <li key={i}>{t}</li>)}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 
   const renderPersonalRecords = () => (
-    <Card
-      title="Personal Records"
+    <div
       draggable
       onDragStart={onDragStart("personalRecords")}
       onDragOver={onDragOver("personalRecords")}
       onDrop={onDrop("personalRecords")}
     >
-      {!selectedClub && (
-        <div className="text-sm text-slate-600">
-          Select a single club to view PRs based on all available data for that club.
-        </div>
-      )}
-      {selectedClub && prs && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-lg p-3 border">
-            <div className="text-slate-500">PR Carry</div>
-            <div className="mt-1 text-lg font-semibold" style={{ color: "#3A86FF" }}>
-              {prs.prCarry != null ? `${prs.prCarry.toFixed(1)} yds` : "—"}
+      <Card theme={T} title="Personal Records">
+        {!selectedClub && (
+          <div className="text-sm text-slate-600">
+            Select a single club to view PRs based on all available data for that club.
+          </div>
+        )}
+        {selectedClub && prs && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg p-3 border">
+              <div className="text-slate-500">PR Carry</div>
+              <div className="mt-1 text-lg font-semibold" style={{ color: "#3A86FF" }}>
+                {prs.prCarry != null ? `${prs.prCarry.toFixed(1)} yds` : "—"}
+              </div>
+              <div className="text-slate-500 mt-1">{prs.club}</div>
             </div>
-            <div className="text-slate-500 mt-1">{prs.club}</div>
-          </div>
-          <div className="rounded-lg p-3 border">
-            <div className="text-slate-500">PR Total</div>
-            <div className="mt-1 text-lg font-semibold" style={{ color: "#2CA02C" }}>
-              {prs.prTotal != null ? `${prs.prTotal.toFixed(1)} yds` : "—"}
+            <div className="rounded-lg p-3 border">
+              <div className="text-slate-500">PR Total</div>
+              <div className="mt-1 text-lg font-semibold" style={{ color: "#2CA02C" }}>
+                {prs.prTotal != null ? `${prs.prTotal.toFixed(1)} yds` : "—"}
+              </div>
+              <div className="text-slate-500 mt-1">{prs.club}</div>
             </div>
-            <div className="text-slate-500 mt-1">{prs.club}</div>
+            <div className="rounded-lg p-3 border">
+              <div className="text-slate-500">Level</div>
+              <div className="mt-1 text-lg font-semibold">{prs.level}</div>
+              <div className="text-slate-500 mt-1">Based on avg total distance</div>
+            </div>
           </div>
-          <div className="rounded-lg p-3 border">
-            <div className="text-slate-500">Level</div>
-            <div className="mt-1 text-lg font-semibold">{prs.level}</div>
-            <div className="text-slate-500 mt-1">Based on avg total distance</div>
-          </div>
-        </div>
-      )}
-    </Card>
+        )}
+      </Card>
+    </div>
   );
 
   const renderProgress = () => {
     // If one club selected, plot Carry over time using ALL data for that club (ignoring club filter)
     if (!selectedClub) {
       return (
-        <Card
-          title="Club Progress"
+        <div
           draggable
           onDragStart={onDragStart("progress")}
           onDragOver={onDragOver("progress")}
           onDrop={onDrop("progress")}
         >
-          <div className="text-sm text-slate-600">Select a single club to see carry over time.</div>
-        </Card>
+          <Card theme={T} title="Club Progress">
+            <div className="text-sm text-slate-600">Select a single club to see carry over time.</div>
+          </Card>
+        </div>
       );
     }
 
@@ -351,37 +348,38 @@ export default function InsightsView({
       .sort((a, b) => a.t - b.t);
 
     return (
-      <Card
-        title={`Club Progress — ${selectedClub}`}
+      <div
         draggable
         onDragStart={onDragStart("progress")}
         onDragOver={onDragOver("progress")}
         onDrop={onDrop("progress")}
       >
-        <div style={{ width: "100%", height: 320 }}>
-          <ResponsiveContainer>
-            <LineChart data={series} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="t"
-                type="number"
-                domain={["auto", "auto"]}
-                tickFormatter={(v) => new Date(v).toLocaleDateString()}
-              >
-                <Label value="Date" position="insideBottom" offset={-5} />
-              </XAxis>
-              <YAxis>
-                <Label value="Carry (yds)" angle={-90} position="insideLeft" />
-              </YAxis>
-              <Tooltip
-                labelFormatter={(v) => new Date(Number(v)).toLocaleString()}
-                formatter={(val: any) => [val, "Carry"]}
-              />
-              <Line type="monotone" dataKey="carry" stroke={clubColorFor(selectedClub)} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+        <Card theme={T} title={`Club Progress — ${selectedClub}`}>
+          <div style={{ width: "100%", height: 320 }}>
+            <ResponsiveContainer>
+              <LineChart data={series} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="t"
+                  type="number"
+                  domain={["auto", "auto"]}
+                  tickFormatter={(v) => new Date(v).toLocaleDateString()}
+                >
+                  <Label value="Date" position="insideBottom" offset={-5} />
+                </XAxis>
+                <YAxis>
+                  <Label value="Carry (yds)" angle={-90} position="insideLeft" />
+                </YAxis>
+                <Tooltip
+                  labelFormatter={(v) => new Date(Number(v)).toLocaleString()}
+                  formatter={(val: any) => [val, "Carry"]}
+                />
+                <Line type="monotone" dataKey="carry" stroke={clubColorFor(selectedClub)} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
     );
   };
 
@@ -393,17 +391,18 @@ export default function InsightsView({
     personalRecords: renderPersonalRecords(),
     progress: renderProgress(),
     weaknesses: (
-      <Card
-        title="Biggest Weakness (Preview)"
+      <div
         draggable
         onDragStart={onDragStart("weaknesses")}
         onDragOver={onDragOver("weaknesses")}
         onDrop={onDrop("weaknesses")}
       >
-        <div className="text-sm text-slate-600">
-          More analysis coming soon (face-to-path dispersion, spin window, strike variability, etc.).
-        </div>
-      </Card>
+        <Card theme={T} title="Biggest Weakness (Preview)">
+          <div className="text-sm text-slate-600">
+            More analysis coming soon (face-to-path dispersion, spin window, strike variability, etc.).
+          </div>
+        </Card>
+      </div>
     ),
   };
 
