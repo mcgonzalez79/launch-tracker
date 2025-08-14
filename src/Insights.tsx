@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Theme } from "./theme";
-import { Shot, ClubRow, mean, stddev, orderIndex, clubColor } from "./utils";
+import { Theme, colorForClub } from "./theme";
+import { Shot, ClubRow, mean, stddev, orderIndex } from "./utils";
 import { Card, InfoTooltip, Modal } from "./components/UI";
 import {
   BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip as RTooltip, Legend,
@@ -50,16 +50,19 @@ function buildDistanceRows(rows: ClubRow[]) {
   return rows
     .slice()
     .sort((a, b) => orderIndex(a.club) - orderIndex(b.club))
-    .map((r) => ({
-      club: r.club,
-      carry: Number.isFinite(r.avgCarry) ? Number(r.avgCarry.toFixed(1)) : 0,
-      total: Number.isFinite(r.avgTotal) ? Number(r.avgTotal.toFixed(1)) : 0,
-      color: clubColor(r.club),
-      totalColor: lighten(clubColor(r.club)),
-    }));
+    .map((r) => {
+      const c = colorForClub(r.club);
+      return {
+        club: r.club,
+        carry: Number.isFinite(r.avgCarry) ? Number(r.avgCarry.toFixed(1)) : 0,
+        total: Number.isFinite(r.avgTotal) ? Number(r.avgTotal.toFixed(1)) : 0,
+        color: c,
+        totalColor: lighten(c),
+      };
+    });
 }
 
-/** Gapping analysis on a pool (independent of the club filter for global warnings) */
+/** Gapping analysis on a pool (independent of the club filter) */
 function computeGaps(pool: Shot[]) {
   const map = new Map<string, number[]>();
   for (const s of pool) {
@@ -77,11 +80,10 @@ function computeGaps(pool: Shot[]) {
     const gap = Math.abs(rows[i].avgCarry - rows[i - 1].avgCarry);
     if (gap < 12) warnings.push({ pair: `${rows[i - 1].club} → ${rows[i].club}`, gap });
   }
-  const tightClubs = warnings.length;
-  return { warnings, tightClubs, rows };
+  return { warnings, tightClubs: warnings.length, rows };
 }
 
-/** Efficiency score 0–100 across a pool (selection-independent when called with filteredNoClubOutliers) */
+/** Efficiency score 0–100 across a pool (selection-independent) */
 function efficiencyScore(pool: Shot[]) {
   if (!pool.length) return 0;
   const smash = pool.map((s) => s.SmashFactor).filter((x): x is number => x != null);
@@ -95,7 +97,7 @@ function efficiencyScore(pool: Shot[]) {
   return score;
 }
 
-/** Proficiency (by total distance) using benchmarks */
+/** Proficiency for a given club from avg total */
 function proficiencyForClub(club: string, total: number) {
   const b = BENCHMARKS[club];
   if (!b) return { level: "N/A", color: "#94a3b8" };
@@ -119,10 +121,8 @@ export default function InsightsView({
 }: Props) {
   const [showProfModal, setShowProfModal] = useState(false);
 
-  /* Distance distribution (selection-aware) */
   const distRows = useMemo(() => buildDistanceRows(tableRows), [tableRows]);
 
-  /* Highlights (selection-independent) */
   const longest = useMemo(() => {
     let best: { club: string; carry: number; total?: number } | null = null;
     for (const s of filteredNoClubOutliers) {
@@ -153,11 +153,8 @@ export default function InsightsView({
   }, [filteredNoClubOutliers]);
 
   const effScore = useMemo(() => efficiencyScore(filteredNoClubOutliers), [filteredNoClubOutliers]);
-
-  /* Gaps (selection-independent) */
   const gaps = useMemo(() => computeGaps(filteredNoClubOutliers), [filteredNoClubOutliers]);
 
-  /* Proficiency text (selection-aware: take the first club in distRows as context) */
   const prof = useMemo(() => {
     const first = distRows[0];
     if (!first) return { club: "", level: "N/A", color: "#94a3b8" };
@@ -166,7 +163,6 @@ export default function InsightsView({
     return { club: first.club, ...p };
   }, [distRows]);
 
-  /* Cards map (draggable) */
   const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
     distanceBox: {
       title: "Distance Distribution (by Club)",
@@ -194,15 +190,11 @@ export default function InsightsView({
                 <RTooltip formatter={(v: any, n: any) => [`${v} yds`, n]} labelFormatter={() => ""} />
                 <Legend />
                 <Bar dataKey="carry" name="Carry" isAnimationActive={false} radius={[0, 6, 6, 0]} fillOpacity={0.95}>
-                  {distRows.map((d, i) => (
-                    <Cell key={`c-${i}`} fill={d.color} />
-                  ))}
+                  {distRows.map((d, i) => <Cell key={`c-${i}`} fill={d.color} />)}
                   <LabelList dataKey="carry" position="insideRight" formatter={(v: any) => `${v}`} />
                 </Bar>
                 <Bar dataKey="total" name="Total" isAnimationActive={false} radius={[0, 6, 6, 0]}>
-                  {distRows.map((d, i) => (
-                    <Cell key={`t-${i}`} fill={d.totalColor} />
-                  ))}
+                  {distRows.map((d, i) => <Cell key={`t-${i}`} fill={d.totalColor} />)}
                   <LabelList dataKey="total" position="right" formatter={(v: any) => `${v}`} />
                 </Bar>
               </BarChart>
@@ -368,7 +360,6 @@ export default function InsightsView({
       ),
     },
 
-    // Placeholder row for future progress card
     progress: {
       title: "Club Progress (Distance Over Time)",
       render: () => (
