@@ -5,8 +5,8 @@ import {
   Shot, ClubRow, orderIndex, mean
 } from "./utils";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
-  ComposedChart, ErrorBar, Line
+  XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
+  ComposedChart, Bar, ErrorBar, BarChart, Cell
 } from "recharts";
 
 /* ================== Benchmarks for proficiency ================== */
@@ -134,6 +134,17 @@ function gapWarnings(allShotsNoClub: Shot[], thresholdTight = 12, thresholdWide 
   return { tight, wide, totalTight: tight.length };
 }
 
+/* ====== color helper: prefer theme clubColorOf/clubPalette ====== */
+const FALLBACK = ["#3A86FF","#2ECC71","#FFB703","#EF476F","#8E44AD","#00B8D9","#F94144","#577590","#E67E22","#2ECC71"];
+function colorForClub(theme: Theme, club: string, idx: number) {
+  const t: any = theme as any;
+  try {
+    if (typeof t.clubColorOf === "function") return t.clubColorOf(club);
+    if (Array.isArray(t.clubPalette) && t.clubPalette.length) return t.clubPalette[idx % t.clubPalette.length];
+  } catch {}
+  return FALLBACK[idx % FALLBACK.length];
+}
+
 /* ================== Modal ================== */
 function Modal({
   theme, title, open, onClose, children, width = 760
@@ -211,7 +222,7 @@ export default function InsightsView({
   }, [filteredNoClubOutliers]);
 
   /* ======= Distance Distribution (box & whisker) ======= */
-  // Clubs on Y, Distances on X (no medians shown)
+  // Clubs on Y, Distances on X (no medians rendered or in tooltip)
   const clubsOrdered = useMemo(
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
@@ -256,7 +267,7 @@ export default function InsightsView({
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club only; short height otherwise) ======= */
+  /* ======= Progress chart (single club only; autosizes by content) ======= */
   const selectedClubName = useMemo(() => {
     const set = new Set(filteredOutliers.map(s => s.Club));
     return set.size === 1 ? Array.from(set)[0] : null;
@@ -275,20 +286,19 @@ export default function InsightsView({
     return pool;
   }, [filteredOutliers, selectedClubName]);
 
-  const progressHeight = (selectedClubName && progressRows.length > 1) ? 360 : 200;
-
   return (
     <div className="grid grid-cols-1 gap-8">
       {insightsOrder.map((key) => {
         if (key === "distanceBox") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)">
-              <div style={{ width: "100%", height: 480 }}>
+              <div style={{ width: "100%", height: 500 }}>
                 <ResponsiveContainer>
                   <ComposedChart
                     layout="vertical"
                     data={boxRows}
-                    margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
+                    margin={{ top: 10, right: 16, bottom: 10, left: 100 }}
+                    barCategoryGap={24}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
@@ -297,7 +307,6 @@ export default function InsightsView({
                       formatter={(_, __, p: any) => {
                         const d = p && p.payload ? p.payload : {};
                         const lines = [
-                          // Removed medians
                           `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
                           `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
                         ];
@@ -307,16 +316,22 @@ export default function InsightsView({
                     />
                     <Legend />
 
-                    {/* Carry box (horizontal) */}
+                    {/* Carry box (horizontal, per-club color) */}
                     <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
-                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
+                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)">
+                      {boxRows.map((row, i) => (
+                        <Cell key={`c-carry-${row.club}`} fill={colorForClub(theme, row.club, i)} fillOpacity={0.85} />
+                      ))}
+                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#475569" />
                     </Bar>
 
-                    {/* Total box (horizontal) */}
+                    {/* Total box (horizontal, per-club color — lighter opacity) */}
                     <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
-                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
+                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)">
+                      {boxRows.map((row, i) => (
+                        <Cell key={`c-total-${row.club}`} fill={colorForClub(theme, row.club, i)} fillOpacity={0.45} />
+                      ))}
+                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#94a3b8" />
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -453,8 +468,9 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              <div style={{ width: "100%", height: progressHeight }}>
-                {selectedClubName && progressRows.length > 1 ? (
+              {/* Auto-resizes: chart only when a single club is selected; otherwise compact text */}
+              {selectedClubName && progressRows.length > 1 ? (
+                <div style={{ width: "100%", height: 360 }}>
                   <ResponsiveContainer>
                     <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -466,15 +482,17 @@ export default function InsightsView({
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
+                      {/* Single series; color comes from theme brand */}
+                      <BarChart />
+                      {/* You can switch to <Line> if you prefer a line instead of column trend */}
                     </ComposedChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="text-sm text-slate-500">
-                    Select a single club in Filters to view progress over time (needs multiple shots).
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500 p-2">
+                  Select a single club in Filters to view progress over time (needs multiple shots).
+                </div>
+              )}
             </Card>
           </div>
         );
