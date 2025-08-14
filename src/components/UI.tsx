@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Theme } from "../theme";
 
-/** Core UI used across pages */
+/** Card (supports drag) */
 export function Card({
   title,
   children,
@@ -12,6 +12,7 @@ export function Card({
   onDragOver,
   onDrop,
   fullBleed = false,
+  dragHandle = false,
 }: {
   title?: string;
   children: React.ReactNode;
@@ -22,6 +23,8 @@ export function Card({
   onDragOver?: (k: string) => (e: React.DragEvent) => void;
   onDrop?: (k: string) => (e: React.DragEvent) => void;
   fullBleed?: boolean;
+  /** some places pass dragHandle for a visual affordance */
+  dragHandle?: boolean;
 }) {
   const wrapProps =
     draggableKey && onDragStart && onDragOver && onDrop
@@ -47,9 +50,14 @@ export function Card({
           className="px-4 py-3 flex items-center justify-between"
           style={{ borderBottom: `1px solid ${theme?.cardBorder ?? "#e5e7eb"}` }}
         >
-          <h3 className="text-sm font-semibold" style={{ color: theme?.text ?? "#0f172a" }}>
-            {title}
-          </h3>
+          <div className="flex items-center gap-2">
+            {dragHandle && (
+              <span title="Drag to rearrange" style={{ cursor: "grab", opacity: 0.7 }}>⋮⋮</span>
+            )}
+            <h3 className="text-sm font-semibold" style={{ color: theme?.text ?? "#0f172a" }}>
+              {title}
+            </h3>
+          </div>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
       )}
@@ -58,16 +66,15 @@ export function Card({
   );
 }
 
+/** Top tabs */
 export function TopTab({
   label,
   active,
   onClick,
-  theme,
 }: {
   label: string;
   active?: boolean;
   onClick?: () => void;
-  theme?: Theme;
 }) {
   return (
     <button
@@ -93,21 +100,16 @@ export const IconSun = () => (
 );
 export const IconMoon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z"
-      stroke="currentColor"
-      strokeWidth="2"
-      fill="none"
-    />
+    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" stroke="currentColor" strokeWidth="2" fill="none" />
   </svg>
 );
 
-/** Pretty hover tooltip (used for help text) */
+/** Nice hover tooltip */
 export function InfoTooltip({
   label,
   children,
   theme,
-  maxWidth = 280,
+  maxWidth = 320,
 }: {
   label: React.ReactNode;
   children: React.ReactNode;
@@ -137,7 +139,7 @@ export function InfoTooltip({
   );
 }
 
-/** Simple modal */
+/** Modal */
 export function Modal({
   open,
   onClose,
@@ -154,20 +156,14 @@ export function Modal({
   width?: number;
 }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     if (open) document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.5)" }}
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
       <div
         className="rounded-2xl overflow-hidden"
         style={{ width, maxWidth: "95vw", background: theme?.card ?? "#fff", border: `1px solid ${theme?.cardBorder ?? "#e5e7eb"}` }}
@@ -181,6 +177,36 @@ export function Modal({
         </div>
         <div className="p-4">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/** KPI (for Dashboard) */
+export function KPI({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="rounded-2xl p-3 shadow text-sm" style={{ background: "#ffffff" }}>
+      <div className="text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold" style={{ color }}>{value || "-"}</div>
+    </div>
+  );
+}
+
+/** Table helpers */
+export function Th({ children }: { children: React.ReactNode }) {
+  return <th className="py-2 pr-4 text-slate-600">{children}</th>;
+}
+export function Td({ children }: { children: React.ReactNode }) {
+  return <td className="py-2 pr-4">{children}</td>;
+}
+
+/** Empty chart placeholder */
+export function EmptyChart({ label = "No data" }: { label?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center h-48 rounded-xl border text-sm"
+      style={{ borderColor: "#e5e7eb", color: "#94a3b8", background: "repeating-linear-gradient(45deg,#fafafa,#fafafa 10px,#f5f5f5 10px,#f5f5f5 20px)" }}
+    >
+      {label}
     </div>
   );
 }
