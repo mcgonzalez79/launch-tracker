@@ -1,7 +1,7 @@
 import React from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, Label
+  Scatter, ScatterChart, ZAxis, ReferenceLine, Label   // ← add Label
 } from "recharts";
 import { Theme, clubPalette, colorForClub, CARRY_BAR, TOTAL_BAR, alpha } from "./theme";
 import { Shot, ClubRow, fmtNum } from "./utils";
@@ -135,33 +135,42 @@ export default function DashboardCards(props: {
       </div>
     ))},
     eff: { title: "Efficiency — Club Speed vs Ball Speed", render: () => (!hasData ? <EmptyChart theme={T} /> : (
-     <div style={{ width: "100%", height: 340 }}>
+     <div style={{ width: "100%", height: 360 }}>
   <ResponsiveContainer>
-    <ScatterChart margin={{ top: 28, right: 16, bottom: 30, left: 12 }}>
+    <ScatterChart margin={{ top: 8, right: 16, bottom: 48, left: 64 }}>
       <CartesianGrid />
       <XAxis
         type="number"
         dataKey="ClubSpeed_mph"
         name="Club Speed"
         unit=" mph"
-        domain={[50, 'dataMax + 5']}   // <-- start at 50 mph
-        tickMargin={8}                  // extra space from axis
-      />
+        domain={[50, 'dataMax + 5']}   // start at 50 mph
+        tickMargin={10}
+      >
+        <Label value="Club Speed (mph)" position="insideBottom" offset={-10} />
+      </XAxis>
       <YAxis
         type="number"
         dataKey="BallSpeed_mph"
         name="Ball Speed"
         unit=" mph"
-        tickMargin={8}
-      />
+        tickMargin={10}
+      >
+        <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" offset={-10} />
+      </YAxis>
+
       <Tooltip formatter={(v: any, n: any) => [v, n]} />
+
+      {/* Legend sits above plot with reserved height so it can't overlap */}
       <Legend
-        verticalAlign="top"            // <-- keep away from x-axis ticks
-        align="left"
+        layout="horizontal"
+        verticalAlign="top"
+        align="center"
         iconType="circle"
-        height={28}                    // reserve space for legend row
-        wrapperStyle={{ paddingBottom: 6 }}
+        height={40}                     // reserves vertical space
+        wrapperStyle={{ paddingBottom: 4 }}
       />
+
       {clubs.map((c, i) => (
         <Scatter
           key={c}
@@ -173,6 +182,7 @@ export default function DashboardCards(props: {
     </ScatterChart>
   </ResponsiveContainer>
 </div>
+
 
     ))},
     launchspin: { title: "Launch vs Spin — bubble size is Carry", render: () => (!hasData ? <EmptyChart theme={T} /> : (
