@@ -135,19 +135,45 @@ export default function DashboardCards(props: {
       </div>
     ))},
     eff: { title: "Efficiency — Club Speed vs Ball Speed", render: () => (!hasData ? <EmptyChart theme={T} /> : (
-      <div style={{ width:"100%", height:340 }}>
-        <ResponsiveContainer>
-          <ScatterChart>
-            <CartesianGrid stroke={T.border} />
-            <XAxis type="number" dataKey="ClubSpeed_mph" name="Club Speed" unit=" mph" stroke={T.textDim}><Label value="Club Speed (mph)" position="insideBottom" offset={-5} fill={T.textDim}/></XAxis>
-            <YAxis type="number" dataKey="BallSpeed_mph" name="Ball Speed" unit=" mph" stroke={T.textDim}><Label value="Ball Speed (mph)" angle={-90} position="insideLeft" fill={T.textDim}/></YAxis>
-            <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v:any,n:any)=>[v,n]} />
-            {clubs.map((c)=>(
-              <Scatter key={c} name={c} data={filteredOutliers.filter(s=>s.Club===c)} fill={colorForClub(c, clubs, clubPalette)} />
-            ))}
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+     <div style={{ width: "100%", height: 340 }}>
+  <ResponsiveContainer>
+    <ScatterChart margin={{ top: 28, right: 16, bottom: 30, left: 12 }}>
+      <CartesianGrid />
+      <XAxis
+        type="number"
+        dataKey="ClubSpeed_mph"
+        name="Club Speed"
+        unit=" mph"
+        domain={[50, 'dataMax + 5']}   // <-- start at 50 mph
+        tickMargin={8}                  // extra space from axis
+      />
+      <YAxis
+        type="number"
+        dataKey="BallSpeed_mph"
+        name="Ball Speed"
+        unit=" mph"
+        tickMargin={8}
+      />
+      <Tooltip formatter={(v: any, n: any) => [v, n]} />
+      <Legend
+        verticalAlign="top"            // <-- keep away from x-axis ticks
+        align="left"
+        iconType="circle"
+        height={28}                    // reserve space for legend row
+        wrapperStyle={{ paddingBottom: 6 }}
+      />
+      {clubs.map((c, i) => (
+        <Scatter
+          key={c}
+          name={c}
+          data={filteredOutliers.filter(s => s.Club === c)}
+          fill={clubPalette[i % clubPalette.length]}
+        />
+      ))}
+    </ScatterChart>
+  </ResponsiveContainer>
+</div>
+
     ))},
     launchspin: { title: "Launch vs Spin — bubble size is Carry", render: () => (!hasData ? <EmptyChart theme={T} /> : (
       <div style={{ width:"100%", height:340 }}>
