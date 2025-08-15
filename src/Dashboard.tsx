@@ -118,74 +118,7 @@ export default function DashboardCards(props: {
       </>
     )},
     shape: { title: "Shot Shape Distribution", render: () => (!hasData ? <EmptyChart theme={T} /> : <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />) },
-    
-    dispersion: { title: "Dispersion — Driving Range View (50y to max)", render: () => (!hasData ? <EmptyChart theme={T} /> : 
-<div style={{ width: "100%", height: 360 }}>
-  <ResponsiveContainer>
-    <ScatterChart margin={{ top: 44, right: 16, bottom: 30, left: 56 }}>
-      {/* Legend ABOVE the plot; height reserves space so nothing overlaps */}
-      <Legend
-        layout="horizontal"
-        verticalAlign="top"
-        align="center"
-        iconType="circle"
-        height={36}                     // reserve space for the legend row
-        wrapperStyle={{ paddingBottom: 4 }}
-      />
-
-      <CartesianGrid strokeDasharray="3 3" />
-
-      <XAxis
-        type="number"
-        dataKey="CarryDeviationDistance_yds"
-        name="Carry Deviation"
-        unit=" yds"
-        tickMargin={10}
-      >
-        <Label value="Deviation Left (–) / Right (+) [yds]" position="insideBottom" offset={-10} />
-      </XAxis>
-
-      <YAxis
-        type="number"
-        dataKey="CarryDistance_yds"
-        name="Carry Distance"
-        unit=" yds"
-        tickMargin={10}
-      >
-        <Label value="Carry (yds)" angle={-90} position="insideLeft" offset={-10} />
-      </YAxis>
-
-      {/* Centerline */}
-      <ReferenceLine x={0} stroke={theme.muted} />
-
-      {/* Optional: 50-yd “targets” or flags you already render can stay;
-          the reserved legend height + top margin keeps them from overlapping */}
-
-      <Tooltip formatter={(v: any, n: any) => [v, n]} />
-
-      {clubs.map((c, i) => (
-        <Scatter
-          key={c}
-          name={c}
-          data={filteredOutliers.filter(s => s.Club === c)}
-          fill={clubPalette[i % clubPalette.length]}
-        />
-      ))}
-    </ScatterChart>
-  </ResponsiveContainer>
-</div>
-                                                                                       
-                                                                                       
-                                                                                       ) 
-                
-                
-                
-                
-                },
-    
-    
-    
-    
+    dispersion: { title: "Dispersion — Driving Range View (50y to max)", render: () => (!hasData ? <EmptyChart theme={T} /> : <div style={{ width:"100%", height:420 }}><RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} /></div>) },
     gap: { title: "Gap Chart — Carry vs Total by Club", render: () => (!hasData ? <EmptyChart theme={T} /> : (
       <div style={{ width:"100%", height:340 }}>
         <ResponsiveContainer>
@@ -201,8 +134,6 @@ export default function DashboardCards(props: {
         </ResponsiveContainer>
       </div>
     ))},
-
-    
     eff: { title: "Efficiency — Club Speed vs Ball Speed", render: () => (!hasData ? <EmptyChart theme={T} /> : (
      <div style={{ width: "100%", height: 360 }}>
   <ResponsiveContainer>
@@ -251,10 +182,10 @@ export default function DashboardCards(props: {
     </ScatterChart>
   </ResponsiveContainer>
 </div>
+
+
+
     ))},
-
-
-    
     launchspin: { title: "Launch vs Spin — bubble size is Carry", render: () => (!hasData ? <EmptyChart theme={T} /> : (
       <div style={{ width:"100%", height:340 }}>
         <ResponsiveContainer>
