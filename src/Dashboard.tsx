@@ -147,7 +147,7 @@ export default function DashboardCards(props: {
         domain={[50, 'dataMax + 5']}   // start at 50 mph
         tickMargin={10}
       >
-        <Label value="Club Speed (mph)" position="insideBottom" offset={-10} />
+        <Label value="Club Speed (mph)" position="insideBottom" offset={-20} />
       </XAxis>
       <YAxis
         type="number"
@@ -156,7 +156,7 @@ export default function DashboardCards(props: {
         unit=" mph"
         tickMargin={10}
       >
-        <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" offset={-10} />
+        <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" offset={-20} />
       </YAxis>
 
       <Tooltip formatter={(v: any, n: any) => [v, n]} />
