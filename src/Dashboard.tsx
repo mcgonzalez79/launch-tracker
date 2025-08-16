@@ -287,6 +287,32 @@ function AveragesTable({ theme, rows }:{ theme: Theme; rows: ClubRow[] }) {
   );
 }
 
+/* ---------- KPI single-card component ---------- */
+
+function computeKpis(pool: Shot[]) {
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  const grab = (sel: (s: Shot) => number | undefined) => pool.map(sel).filter((x): x is number => x != null);
+  return {
+    carry: avg(grab(s => s.CarryDistance_yds)),
+    total: avg(grab(s => s.TotalDistance_yds)),
+    smash: avg(grab(s => s.SmashFactor)),
+    spin:  avg(grab(s => s.SpinRate_rpm)),
+    cs:    avg(grab(s => s.ClubSpeed_mph)),
+    bs:    avg(grab(s => s.BallSpeed_mph)),
+  };
+}
+
+function KPIValue({ theme, value, unit, digits=1 }: { theme: Theme; value: number; unit?: string; digits?: number }) {
+  const T = theme;
+  return (
+    <div className="px-4 py-5 rounded-2xl" style={{ background: rgbaFromHex(T.brand, 0.06), border: `1px solid ${T.border}` }}>
+      <div className="text-2xl font-semibold" style={{ color: T.brand }}>
+        {fmt(value, digits)}{unit ? ` ${unit}` : ""}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- DashboardCards (launchspin removed) ---------- */
 
 type Props = {
@@ -309,34 +335,19 @@ export default function DashboardCards(props: Props) {
   const { theme: T, cardOrder, onDragStart, onDragOver, onDrop,
     filteredOutliers, tableRows, clubs } = props;
 
-  // Cards map — "launchspin" removed. Unknown keys are ignored.
+  const kp = computeKpis(filteredOutliers);
+
+  // Cards map — "kpis" replaced by six individual KPI cards. Unknown keys ignored.
   const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
-    kpis: {
-      title: "KPIs",
-      render: () => {
-        const pool = filteredOutliers;
-        if (!pool.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
-        const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-        const vals = {
-          carry: avg(pool.map(s => s.CarryDistance_yds!).filter(v => v != null as any)),
-          total: avg(pool.map(s => s.TotalDistance_yds!).filter(v => v != null as any)),
-          smash: avg(pool.map(s => s.SmashFactor!).filter(v => v != null as any)),
-          spin:  avg(pool.map(s => s.SpinRate_rpm!).filter(v => v != null as any)),
-          cs:    avg(pool.map(s => s.ClubSpeed_mph!).filter(v => v != null as any)),
-          bs:    avg(pool.map(s => s.BallSpeed_mph!).filter(v => v != null as any)),
-        };
-        return (
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Carry</div><div className="text-lg font-semibold">{fmt(vals.carry, 1)} yds</div></div>
-            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Total</div><div className="text-lg font-semibold">{fmt(vals.total, 1)} yds</div></div>
-            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Smash</div><div className="text-lg font-semibold">{fmt(vals.smash, 3)}</div></div>
-            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Spin</div><div className="text-lg font-semibold">{fmt(vals.spin, 0)} rpm</div></div>
-            <div><div className="text-xs" style={{ color: T.textDim }}>Club Speed</div><div className="text-lg font-semibold">{fmt(vals.cs, 1)} mph</div></div>
-            <div><div className="text-xs" style={{ color: T.textDim }}>Ball Speed</div><div className="text-lg font-semibold">{fmt(vals.bs, 1)} mph</div></div>
-          </div>
-        );
-      }
-    },
+    // Individual KPI cards
+    kpiCarry: { title: "Avg Carry", render: () => <KPIValue theme={T} value={kp.carry} unit="yds" digits={1} /> },
+    kpiTotal: { title: "Avg Total", render: () => <KPIValue theme={T} value={kp.total} unit="yds" digits={1} /> },
+    kpiSmash: { title: "Avg Smash", render: () => <KPIValue theme={T} value={kp.smash} digits={3} /> },
+    kpiSpin:  { title: "Avg Spin",  render: () => <KPIValue theme={T} value={kp.spin}  unit="rpm" digits={0} /> },
+    kpiCS:    { title: "Avg Club Speed", render: () => <KPIValue theme={T} value={kp.cs} unit="mph" digits={1} /> },
+    kpiBS:    { title: "Avg Ball Speed", render: () => <KPIValue theme={T} value={kp.bs} unit="mph" digits={1} /> },
+
+    // Other cards
     shape: {
       title: "Shot Shape Distribution",
       render: () => <ShotShapeCard theme={T} shots={filteredOutliers} />
@@ -359,7 +370,14 @@ export default function DashboardCards(props: Props) {
     },
   };
 
-  const keys = cardOrder.filter(k => CARDS[k]);
+  // Expand legacy "kpis" into the six new KPI cards (non-destructive; doesn't modify storage)
+  const expandedKeys = cardOrder.flatMap((k) =>
+    k === "kpis"
+      ? ["kpiCarry", "kpiTotal", "kpiSmash", "kpiSpin", "kpiCS", "kpiBS"]
+      : [k]
+  );
+
+  const keys = expandedKeys.filter((k) => CARDS[k]);
 
   return (
     <div className="grid grid-cols-1 gap-8">
@@ -381,4 +399,3 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 }
-
