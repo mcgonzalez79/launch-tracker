@@ -90,7 +90,8 @@ export default function App() {
   /* ===== Import processing (XLSX/CSV + dedupe) ===== */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
-    the const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
+    const Sm = coalesceSmash(s2);
+    const F2P = coalesceFaceToPath(s2);
     if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
     if (F2P !== undefined) s2.FaceToPath_deg = F2P;
     return s2;
@@ -106,7 +107,7 @@ export default function App() {
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
-    const nextRow   = rowsRaw[best.idx + 1] || [];
+       const nextRow   = rowsRaw[best.idx + 1] || [];
     const effectiveHeader = best.usedTwoRows ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" ")) : headerRow;
 
     const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
@@ -398,7 +399,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main (now width-constrained with a fixed cap) */}
+      {/* Main (width constrained) */}
       <div className="mx-auto w-full px-4 py-4 max-w-[1200px]">
         <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6">
           {/* Left / Filters */}
