@@ -69,7 +69,8 @@ function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; 
       })}
       <g transform={`translate(10, ${PAD_T - 30})`}>
         <foreignObject x="0" y="0" width="160" height={Math.min(innerH, 240)}>
-          <div xmlns="http://www.w3.org/1999/xhtml" style={{ maxHeight: 240, overflowY: 'auto', padding: 8, background: T.white, opacity: 0.92, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+          {/* removed xmlns to satisfy TS typing for HTMLDivElement */}
+          <div style={{ maxHeight: 240, overflowY: 'auto', padding: 8, background: T.white, opacity: 0.92, border: `1px solid ${T.border}`, borderRadius: 8 }}>
             <div style={{ fontSize: 12, color: T.textDim, marginBottom: 4 }}>Clubs</div>
             {clubs.map((c, i) => (
               <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -147,7 +148,7 @@ export default function DashboardCards(props: {
               dataKey="ClubSpeed_mph"
               name="Club Speed"
               unit=" mph"
-              domain={[50, 'dataMax + 5']}   // start at 50 mph
+              domain={[50, 'dataMax + 5']}
               tickMargin={8} minTickGap={6}
               stroke={T.textDim}
             >
@@ -165,14 +166,7 @@ export default function DashboardCards(props: {
             </YAxis>
 
             <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v:any,n:any)=>[v,n]} />
-            <Legend
-              layout="horizontal"
-              verticalAlign="top"
-              align="right"
-              iconType="circle"
-              height={40}
-              wrapperStyle={{ paddingBottom: 4 }}
-            />
+            <Legend layout="horizontal" verticalAlign="top" align="right" iconType="circle" height={40} wrapperStyle={{ paddingBottom: 4 }} />
 
             {clubs.map((c, i) => (
               <Scatter
