@@ -4,7 +4,7 @@ import { Card } from "./components/UI";
 import { Shot, ClubRow, orderIndex, mean } from "./utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
-  ComposedChart, ErrorBar, Line
+  ComposedChart, ErrorBar, Line, Label
 } from "recharts";
 
 /* ================== Benchmarks for proficiency ================== */
@@ -14,7 +14,7 @@ const BENCHMARKS: Record<string, Record<Skill, number>> = {
   "Driver":           { Beginner: 170, Average: 200, Good: 230, Advanced: 260, PGATour: 295 },
   "3 Wood":           { Beginner: 155, Average: 180, Good: 205, Advanced: 230, PGATour: 260 },
   "4 Hybrid":         { Beginner: 145, Average: 170, Good: 190, Advanced: 210, PGATour: 230 },
-  "5 Hybrid (5 Iron)":{ Beginner: 135, Average: 160, Good: 180, Advanced: 200, PGATour: 220 },
+  "5 Hybrid (5 Iron)":{"Beginner": 135, "Average": 160, "Good": 180, "Advanced": 200, "PGATour": 220 },
   "6 Iron":           { Beginner: 125, Average: 150, Good: 170, Advanced: 185, PGATour: 205 },
   "7 Iron":           { Beginner: 115, Average: 140, Good: 160, Advanced: 175, PGATour: 195 },
   "8 Iron":           { Beginner: 105, Average: 130, Good: 150, Advanced: 165, PGATour: 180 },
@@ -169,10 +169,10 @@ function Modal({
 /* ================== Insights View ================== */
 type Props = {
   theme: Theme;
-  tableRows: ClubRow[];                   // averages (already filtered & outliers toggle applied)
-  filteredOutliers: Shot[];               // respects club selection
-  filteredNoClubOutliers: Shot[];         // ignores club selection (for highlights & gap warnings)
-  filteredNoClubRaw?: Shot[];             // ignores club selection & includes outliers (for global PRs if desired)
+  tableRows: ClubRow[];
+  filteredOutliers: Shot[];
+  filteredNoClubOutliers: Shot[];
+  filteredNoClubRaw?: Shot[];
   allClubs: string[];
   insightsOrder: string[];
   onDragStart: (k: string) => (e: React.DragEvent) => void;
@@ -189,7 +189,6 @@ export default function InsightsView({
   const globalPoolForPR = filteredNoClubRaw && filteredNoClubRaw.length ? filteredNoClubRaw : filteredNoClubOutliers;
   const globalPR = useMemo(() => personalRecords(globalPoolForPR), [globalPoolForPR]);
 
-  // Most consistent club (global)
   const globalConsistency = useMemo(() => {
     const byClub = new Map<string, number[]>();
     filteredNoClubOutliers.forEach(s => {
@@ -208,7 +207,6 @@ export default function InsightsView({
   }, [filteredNoClubOutliers]);
 
   /* ======= Distance Distribution (box & whisker) ======= */
-  // Clubs on Y, Distances on X (no medians shown)
   const clubsOrdered = useMemo(
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
@@ -242,18 +240,14 @@ export default function InsightsView({
     return rows;
   }, [filteredOutliers, clubsOrdered]);
 
-  /* ======= Personal Records & Proficiency (dependent on selection) ======= */
   const selectedPR = useMemo(() => personalRecords(filteredOutliers), [filteredOutliers]);
   const selectedProf = useMemo(() => proficiencyScore(filteredOutliers, null), [filteredOutliers]);
 
-  /* ======= Gap Warnings (always all clubs) ======= */
   const gw = useMemo(() => gapWarnings(filteredNoClubOutliers), [filteredNoClubOutliers]);
 
-  /* ======= Benchmarks modal ======= */
   const [showBench, setShowBench] = useState(false);
   const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
 
-  /* ======= Progress chart (single club only; dynamic height) ======= */
   const selectedClubName = useMemo(() => {
     const set = new Set(filteredOutliers.map(s => s.Club));
     return set.size === 1 ? Array.from(set)[0] : null;
@@ -272,10 +266,9 @@ export default function InsightsView({
     return pool;
   }, [filteredOutliers, selectedClubName]);
 
-  // Dynamic height: grows with data, collapses when no chart
   const progressHeight = useMemo(() => {
-    if (!selectedClubName || progressRows.length <= 1) return undefined; // no fixed height -> shrink to content
-    const grow = 240 + (progressRows.length * 6); // scale with points
+    if (!selectedClubName || progressRows.length <= 1) return undefined;
+    const grow = 240 + (progressRows.length * 6);
     return Math.max(260, Math.min(420, grow));
   }, [selectedClubName, progressRows.length]);
 
@@ -293,7 +286,9 @@ export default function InsightsView({
                     margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
+                    <XAxis type="number" tickMargin={8} minTickGap={6}>
+                      <Label value="Distance (yds)" position="bottom" offset={20} />
+                    </XAxis>
                     <YAxis dataKey="club" type="category" />
                     <Tooltip
                       formatter={(_, __, p: any) => {
@@ -356,13 +351,13 @@ export default function InsightsView({
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">Most Consistent Club</div>
                   {globalConsistency.bestClub
-                    ? (<>
-                        <div className="mt-1 text-lg font-semibold">{globalConsistency.bestClub}</div>
-                        <div className="text-slate-600 mt-1 text-sm">
-                          Carry SD ≈ {globalConsistency.bestSd.toFixed(1)} yds (avg {globalConsistency.avgCarry.toFixed(1)} yds)
-                        </div>
-                      </>)
-                    : (<div className="mt-1 text-slate-600 text-sm">More shots needed to measure consistency.</div>)
+                    ? (
+                      <>
+                        <div className="mt-1 text-2xl font-semibold">{globalConsistency.bestClub}</div>
+                        <div className="text-slate-600 mt-1 text-sm">Avg carry {globalConsistency.avgCarry.toFixed(1)} yds, SD {globalConsistency.bestSd.toFixed(1)} yds</div>
+                      </>
+                    )
+                    : <div className="mt-1 text-slate-600 text-sm">Need ≥ 5 shots per club.</div>
                   }
                 </div>
               </div>
@@ -372,29 +367,21 @@ export default function InsightsView({
 
         if (key === "warnings") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Gapping Warnings (all clubs)">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
-                  {gw.tight.length ? (
-                    <ul className="list-disc pl-5 text-sm">
-                      {gw.tight.map((t, i) => <li key={i}>{t}</li>)}
-                    </ul>
-                  ) : <div className="text-sm text-slate-500">None detected</div>}
-                </div>
-
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm font-semibold mb-1">Wide Gaps (&gt; 30 yds)</div>
-                  {gw.wide.length ? (
-                    <ul className="list-disc pl-5 text-sm">
-                      {gw.wide.map((t, i) => <li key={i}>{t}</li>)}
-                    </ul>
-                  ) : <div className="text-sm text-slate-500">None detected</div>}
-                </div>
-              </div>
-
-              <div className="mt-3 text-sm text-slate-500">
-                Clubs with a tight gap: <b>{gw.totalTight}</b>
+            <Card theme={theme} title="Gapping Warnings">
+              <div className="text-sm">
+                {gw.tight.length === 0 && gw.wide.length === 0 && <div>No warnings.</div>}
+                {gw.tight.length > 0 && (
+                  <div className="mb-2">
+                    <div className="font-semibold">Too Tight (&lt; 12 yds):</div>
+                    <ul className="list-disc pl-6">{gw.tight.map((t,i)=><li key={i}>{t}</li>)}</ul>
+                  </div>
+                )}
+                {gw.wide.length > 0 && (
+                  <div>
+                    <div className="font-semibold">Too Wide (&gt; 30 yds):</div>
+                    <ul className="list-disc pl-6">{gw.wide.map((t,i)=><li key={i}>{t}</li>)}</ul>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -402,9 +389,8 @@ export default function InsightsView({
 
         if (key === "personalRecords") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Personal Records (by current selection)">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry (selected) */}
+            <Card theme={theme} title="Personal Records (current selection)">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Carry</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -413,10 +399,7 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
-
-                {/* PR Total (selected) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Total</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -425,24 +408,6 @@ export default function InsightsView({
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
-
-                {/* Proficiency (selected) + button to open modal */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Proficiency Level</div>
-                  <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
-                  <div className="text-slate-600 mt-1">
-                    Score: {selectedProf.score.toFixed(0)} / 100
-                    <span title="Compares your average total distance to reference ranges for each club you’ve selected, normalized to 0–100." style={{ marginLeft: 8, cursor: "help", fontSize: 12, color: "#64748b" }}>ⓘ</span>
-                  </div>
-                  <button
-                    onClick={() => setShowBench(true)}
-                    className="mt-3 px-3 py-2 text-sm rounded-md"
-                    style={{ background: theme.brand, color: "#fff" }}
-                  >
-                    View benchmark chart
-                  </button>
                 </div>
               </div>
             </Card>
@@ -451,25 +416,22 @@ export default function InsightsView({
 
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Club Progress — Carry over Time">
-              {/* If no chart, no fixed height -> card shrinks to this content */}
-              {(!selectedClubName || progressRows.length <= 1) ? (
-                <div className="text-sm text-slate-500">
-                  Select a single club in Filters to view progress over time (needs multiple shots).
-                </div>
-              ) : (
+            <Card theme={theme} title="Club Progress (single-club selection)">
+              {selectedClubName && progressRows.length > 1 ? (
                 <div style={{ width: "100%", height: progressHeight }}>
                   <ResponsiveContainer>
-                    <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
+                    <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 20, left: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line dataKey="carry" name={`${selectedClubName} Carry`} stroke="#2563eb" dot={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
+              ) : (
+                <div className="text-sm" style={{ color: "#64748b" }}>Select exactly one club to see progress.</div>
               )}
             </Card>
           </div>
@@ -477,78 +439,56 @@ export default function InsightsView({
 
         if (key === "weaknesses") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Biggest Weakness (across all clubs)">
-              <WeaknessCallout pool={filteredNoClubOutliers} />
+            <Card theme={theme} title="Proficiency (normalized to benchmarks)">
+              <div className="text-sm">
+                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Benchmarks are generalized carry/total distances by skill level for common clubs.
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowBench(true)}
+                  className="px-3 py-2 rounded-lg text-sm border"
+                  style={{ borderColor: "#e5e7eb", color: "#111827", background: "#fff" }}
+                >
+                  View Benchmarks
+                </button>
+              </div>
+              <Modal theme={theme} title="Benchmarks" open={showBench} onClose={() => setShowBench(false)}>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left pr-4">Club</th>
+                        <th className="text-left pr-4">Beginner</th>
+                        <th className="text-left pr-4">Average</th>
+                        <th className="text-left pr-4">Good</th>
+                        <th className="text-left pr-4">Advanced</th>
+                        <th className="text-left pr-4">PGA Tour</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {benches.map(r => (
+                        <tr key={r.club}>
+                          <td className="pr-4">{r.club}</td>
+                          <td className="pr-4">{r.Beginner}</td>
+                          <td className="pr-4">{r.Average}</td>
+                          <td className="pr-4">{r.Good}</td>
+                          <td className="pr-4">{r.Advanced}</td>
+                          <td className="pr-4">{r.PGATour}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Modal>
             </Card>
           </div>
         );
 
         return null;
       })}
-
-      {/* Modal: Benchmarks chart */}
-      <Modal theme={theme} title="Average Distances by Skill Level (reference)" open={showBench} onClose={() => setShowBench(false)}>
-        <div style={{ width: "100%", height: 520 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={benches}
-              layout="vertical"
-              margin={{ top: 10, right: 20, bottom: 10, left: 80 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" />
-              <YAxis dataKey="club" type="category" />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="Beginner" fill="#e5e7eb" name="Beginner" />
-              <Bar dataKey="Average"  fill="#60a5fa" name="Average" />
-              <Bar dataKey="Good"     fill="#34d399" name="Good" />
-              <Bar dataKey="Advanced" fill="#f59e0b" name="Advanced" />
-              <Bar dataKey="PGATour"  fill="#ef4444" name="PGA Tour" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="text-xs text-slate-500 mt-3">
-          These reference values are example ranges for illustration. Use your own benchmark tables if you prefer.
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-/* ================== Helpers (Insights-only) ================== */
-function WeaknessCallout({ pool }: { pool: Shot[] }) {
-  const byClub = new Map<string, Shot[]>();
-  pool.forEach(s => {
-    if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-    byClub.get(s.Club)!.push(s);
-  });
-
-  type Row = { club: string; avgSmash: number; avgCarry: number; count: number };
-  const rows: Row[] = [];
-  byClub.forEach((arr, club) => {
-    const smash = arr.map(s => s.SmashFactor).filter((x): x is number => x!=null);
-    const carry = arr.map(s => s.CarryDistance_yds).filter((x): x is number => x!=null);
-    if (arr.length >= 5 && carry.length) {
-      rows.push({
-        club,
-        count: arr.length,
-        avgSmash: smash.length ? (smash.reduce((a,b)=>a+b,0)/smash.length) : 0,
-        avgCarry: carry.reduce((a,b)=>a+b,0)/carry.length
-      });
-    }
-  });
-
-  if (!rows.length) {
-    return <div className="text-sm text-slate-500">Add more shots to see a weaknesses analysis.</div>;
-  }
-
-  rows.sort((a,b)=> (a.avgSmash - b.avgSmash) || (a.avgCarry - b.avgCarry));
-  const w = rows[0];
-
-  return (
-    <div className="text-sm">
-      Biggest weakness appears to be <b>{w.club}</b> (avg smash {w.avgSmash.toFixed(3)}, carry {w.avgCarry.toFixed(1)} yds across {w.count} shots).
     </div>
   );
 }
