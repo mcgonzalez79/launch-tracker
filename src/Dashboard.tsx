@@ -3,228 +3,296 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Scatter, ScatterChart, ZAxis, ReferenceLine, Label
 } from "recharts";
-import { Theme, clubPalette, colorForClub, CARRY_BAR, TOTAL_BAR, alpha } from "./theme";
-import { Shot, ClubRow, fmtNum } from "./utils";
-import { Card, KPI, EmptyChart, Th, Td } from "./components/UI";
+import { Theme, colorForClub, alpha } from "./theme";
+import { Shot, ClubRow, fmtNum, orderIndex } from "./utils";
+import { Card, EmptyChart, Th, Td } from "./components/UI";
 
-/* Shot shape distribution (boxes) */
-function ShotShape({ theme, draw, straight, fade }:{ theme: Theme; draw:{n:number;pct:number}; straight:{n:number;pct:number}; fade:{n:number;pct:number} }) {
+type ShapeBucket = { n: number; pct: number };
+
+function classifyShapes(shots: Shot[]) {
+  const buckets = { hook: 0, draw: 0, straight: 0, fade: 0, slice: 0 };
+  const total = shots.length || 1;
+  shots.forEach(s => {
+    const axis = (s.SpinAxis_deg ?? 0);
+    if (axis <= -6) buckets.hook++;
+    else if (axis < -2) buckets.draw++;
+    else if (axis <= 2) buckets.straight++;
+    else if (axis < 6) buckets.fade++;
+    else buckets.slice++;
+  });
+  const pct = (n: number): ShapeBucket => ({ n, pct: 100 * n / total });
+  return {
+    hook: pct(buckets.hook),
+    draw: pct(buckets.draw),
+    straight: pct(buckets.straight),
+    fade: pct(buckets.fade),
+    slice: pct(buckets.slice),
+  };
+}
+
+function ShotShapeCard({ theme, shots }: { theme: Theme; shots: Shot[] }) {
   const T = theme;
-  const Box = ({ title, pct, n, bg, color }:{ title:string; pct:number; n:number; bg:string; color:string }) => (
-    <div className="rounded-2xl px-6 py-6" style={{ background: bg, border: `1px solid ${T.border}` }}>
-      <div className="text-2xl font-semibold" style={{ color }}>{pct.toFixed(1)}%</div>
-      <div className="mt-1 text-sm" style={{ color: T.text }}>{title}</div>
-      <div className="text-xs" style={{ color: T.textDim }}>{n} shots</div>
+  if (!shots.length) return <EmptyChart theme={T} />;
+  const s = classifyShapes(shots);
+  const Box = ({ title, bucket, bg, color }:{ title:string; bucket:ShapeBucket; bg:string; color:string }) => (
+    <div className="rounded-2xl px-4 py-5" style={{ background: bg, border: `1px solid ${T.border}` }}>
+      <div className="text-2xl font-semibold" style={{ color }}>{bucket.pct.toFixed(1)}%</div>
+      <div className="mt-1 text-sm" style={{ color: T.text }}>{title} <span style={{ color: T.textDim }}>({bucket.n})</span></div>
     </div>
   );
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Box title="Draw" pct={draw.pct} n={draw.n} bg={T.blueSoft} color="#4EA3FF" />
-      <Box title="Straight" pct={straight.pct} n={straight.n} bg={T.greenSoft} color={T.brand} />
-      <Box title="Fade" pct={fade.pct} n={fade.n} bg={T.orangeSoft} color="#F59E0B" />
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <Box title="Hook" bucket={s.hook} bg={alpha("#EF4444",0.08)} color="#DC2626" />
+      <Box title="Draw" bucket={s.draw} bg={alpha("#10B981",0.10)} color="#059669" />
+      <Box title="Straight" bucket={s.straight} bg={alpha(T.brand,0.10)} color={T.brand} />
+      <Box title="Fade" bucket={s.fade} bg={alpha("#F59E0B",0.10)} color="#D97706" />
+      <Box title="Slice" bucket={s.slice} bg={alpha("#3B82F6",0.10)} color="#2563EB" />
     </div>
   );
 }
 
-/* Range Dispersion SVG */
-function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: string[]; }) {
+function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: string[] }) {
   const T = theme;
+  if (!shots.length) return <EmptyChart theme={T} />;
   const lateralDev = (s: Shot): number | undefined => {
     if (s.CarryDeviationDistance_yds !== undefined) return s.CarryDeviationDistance_yds;
-    if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) return s.CarryDistance_yds * Math.sin((s.LaunchDirection_deg * Math.PI) / 180);
+    if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) {
+      return (s.CarryDistance_yds as number) * Math.sin(((s.LaunchDirection_deg as number) * Math.PI) / 180);
+    }
     return undefined;
   };
-  const pts = shots.map((s) => ({ club: s.Club, x: lateralDev(s), y: s.CarryDistance_yds })).filter((p) => p.x !== undefined && p.y !== undefined) as { club: string; x: number; y: number }[];
-  const YMIN = 50;
-  const yMaxData = pts.length ? Math.max(...pts.map((p) => p.y)) : 150;
-  const nice = (v: number, step: number) => Math.ceil((v + step * 0.1) / step) * step;
-  const YMAX = Math.max(100, nice(Math.max(YMIN, yMaxData), 25));
-  const xMaxData = pts.length ? Math.max(...pts.map((p) => Math.abs(p.x))) : 25;
-  const XMAX = Math.max(25, nice(xMaxData, 5));
-  const LEGEND_W = 170;
-  const W = 900, H = 420, PAD_T = 46, PAD_R = 40, PAD_B = 40, PAD_L = 40 + LEGEND_W;
-  const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
-  const xScale = (x: number) => PAD_L + ((x + XMAX) / (2 * XMAX)) * innerW;
-  const yScale = (y: number) => { const clamped = Math.max(YMIN, Math.min(YMAX, y)); return H - PAD_B - ((clamped - YMIN) / (YMAX - YMIN)) * innerH; };
-  const byClub = new Map<string, { x: number; y: number }[]>(); pts.forEach((p) => { if (!byClub.has(p.club)) byClub.set(p.club, []); byClub.get(p.club)!.push({ x: p.x, y: p.y }); });
-  const distTicks: number[] = []; for (let d = 50; d <= YMAX; d += 50) distTicks.push(d);
+  const pts = shots.map(s => {
+    const x = s.CarryDistance_yds;
+    const y = lateralDev(s);
+    return (x == null || y == null) ? null : { x, y, club: s.Club };
+  }).filter(Boolean) as {x:number;y:number;club:string}[];
+
+  if (!pts.length) return <EmptyChart theme={T} />;
+
+  const domainX = [Math.floor(Math.min(...pts.map(p=>p.x)))-5, Math.ceil(Math.max(...pts.map(p=>p.x)))+5];
+  const domainY = [Math.floor(Math.min(...pts.map(p=>p.y)))-5, Math.ceil(Math.max(...pts.map(p=>p.y)))+5];
+
+  const byClub = new Map<string, {x:number;y:number}[]>();
+  pts.forEach(p => { if (!byClub.has(p.club)) byClub.set(p.club, []); byClub.get(p.club)!.push({x:p.x,y:p.y}); });
+
+  const series = clubs.filter(c => byClub.has(c)).map(club => ({
+    club,
+    data: byClub.get(club)!,
+    color: colorForClub(club),
+  }));
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" style={{ background: T.brandSoft, borderRadius: 12, border: `1px solid ${T.border}` }}>
-      {Array.from({ length: 12 }).map((_, i) => (
-        <rect key={i} x={PAD_L} y={PAD_T + (innerH / 12) * i} width={innerW} height={innerH / 12} fill={i % 2 === 0 ? T.gridStripeA : T.gridStripeB} opacity={0.9} />
-      ))}
-      <line x1={xScale(0)} y1={PAD_T - 6} x2={xScale(0)} y2={H - PAD_B + 6} stroke={T.brand} strokeDasharray="6 6" strokeWidth={2} />
-      <text x={xScale(0) + 10} y={PAD_T - 12} fontSize={12} fill={T.textDim}>Target line</text>
-      {distTicks.map((d) => (
-        <g key={d}>
-          <line x1={PAD_L} x2={W - PAD_R} y1={yScale(d)} y2={yScale(d)} stroke={T.border} strokeDasharray="4 8" />
-          <Flag theme={T} x={xScale(0)} y={yScale(d)} color={alpha("#1F77B4", 0.8)} label={`${d}y`} />
-        </g>
-      ))}
-      {[...byClub.keys()].map((club) => {
-        const color = clubPalette[clubs.findIndex(c=>c.toLowerCase()===club.toLowerCase()) % clubPalette.length];
-        const ptsC = byClub.get(club)!;
-        return <g key={club}>{ptsC.map((p, i) => <circle key={i} cx={xScale(p.x)} cy={yScale(p.y)} r={4} fill={color} stroke={T.white} strokeWidth={1} opacity={0.95} />)}</g>;
-      })}
-      <g transform={`translate(10, ${PAD_T - 30})`}>
-        <foreignObject x="0" y="0" width="160" height={Math.min(innerH, 240)}>
-          {/* removed xmlns to satisfy TS typing for HTMLDivElement */}
-          <div style={{ maxHeight: 240, overflowY: 'auto', padding: 8, background: T.white, opacity: 0.92, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-            <div style={{ fontSize: 12, color: T.textDim, marginBottom: 4 }}>Clubs</div>
-            {clubs.map((c, i) => (
-              <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ width: 10, height: 10, background: clubPalette[i % clubPalette.length], borderRadius: 2 }} />
-                <span style={{ fontSize: 12, color: T.textDim }}>{c}</span>
-              </div>
-            ))}
-          </div>
-        </foreignObject>
-      </g>
-    </svg>
-  );
-}
-function Flag({ theme, x, y, color, label }:{ theme: Theme; x: number; y: number; color: string; label: string }) {
-  const T = theme; const poleH = 22, flagW = 16, flagH = 10;
-  return (
-    <g>
-      <line x1={x} y1={y} x2={x} y2={y - poleH} stroke={T.textDim} strokeWidth={2} />
-      <polygon points={`${x},${y - poleH} ${x + flagW},${y - poleH + flagH / 2} ${x},${y - poleH + flagH}`} fill={color} stroke={T.text} strokeWidth={0.5} />
-      <text x={x + flagW + 6} y={y - poleH + flagH / 1.2} fontSize={11} fill={T.text}>{label}</text>
-    </g>
-  );
-}
-
-export default function DashboardCards(props: {
-  theme: Theme; cardOrder: string[]; setCardOrder: (v: string[]) => void;
-  onDragStart: (k: string) => (e: React.DragEvent) => void;
-  onDragOver: (k: string) => (e: React.DragEvent) => void;
-  onDrop: (k: string) => (e: React.DragEvent) => void;
-  hasData: boolean; kpis: any; filteredOutliers: Shot[]; filtered: Shot[]; shots: Shot[];
-  tableRows: ClubRow[]; clubs: string[];
-}) {
-  const { theme: T, cardOrder, onDragStart, onDragOver, onDrop, hasData, kpis, filteredOutliers, filtered, shots, tableRows, clubs } = props;
-
-  const CARDS: Record<string, { title: string; render: () => JSX.Element }> = {
-    kpis: { title: "Key Metrics", render: () => (
-      <>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          <KPI theme={T} label="Avg Carry" value={fmtNum(kpis.avgCarry, 1, " yds")} color={T.brand} />
-          <KPI theme={T} label="Avg Total" value={fmtNum(kpis.avgTotal, 1, " yds")} color={T.brand} />
-          <KPI theme={T} label="Avg Smash" value={fmtNum(kpis.avgSmash, 3, "")} color={T.brand} />
-          <KPI theme={T} label="Avg Spin" value={fmtNum(kpis.avgSpin, 0, " rpm")} color={T.brand} />
-          <KPI theme={T} label="Avg Club Spd" value={fmtNum(kpis.avgCS, 1, " mph")} color={T.brand} />
-          <KPI theme={T} label="Avg Ball Spd" value={fmtNum(kpis.avgBS, 1, " mph")} color={T.brand} />
-        </div>
-        <div className="text-xs mt-2" style={{ color: T.textDim }}>
-          Using <b>{filteredOutliers.length}</b> shots after filters (of {filtered.length} filtered, {shots.length} imported).
-        </div>
-      </>
-    )},
-    shape: { title: "Shot Shape Distribution", render: () => (!hasData ? <EmptyChart theme={T} /> : <ShotShape theme={T} draw={kpis.shape.draw} straight={kpis.shape.straight} fade={kpis.shape.fade} />) },
-    dispersion: { title: "Dispersion — Driving Range View (50y to max)", render: () => (!hasData ? <EmptyChart theme={T} /> : <div style={{ width:"100%", height:420 }}><RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} /></div>) },
-    gap: { title: "Gap Chart — Carry vs Total by Club", render: () => (!hasData ? <EmptyChart theme={T} /> : (
-      <div style={{ width:"100%", height:340 }}>
+    <div>
+      <div className="w-full" style={{ height: 320 }}>
         <ResponsiveContainer>
-          <BarChart data={tableRows}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-            <XAxis dataKey="club" stroke={T.textDim} />
-            <YAxis stroke={T.textDim} />
-            <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} />
-            <Legend wrapperStyle={{ color: T.text }} />
-            <Bar dataKey="avgCarry" name="Carry (avg)" fill={CARRY_BAR} />
-            <Bar dataKey="avgTotal" name="Total (avg)" fill={TOTAL_BAR} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    ))},
-    eff: { title: "Efficiency — Club Speed vs Ball Speed", render: () => (!hasData ? <EmptyChart theme={T} /> : (
-      <div style={{ width: "100%", height: 360 }}>
-        <ResponsiveContainer>
-          <ScatterChart margin={{ top: 8, right: 16, bottom: 48, left: 64 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-            <XAxis
-              type="number"
-              dataKey="ClubSpeed_mph"
-              name="Club Speed"
-              unit=" mph"
-              domain={[50, 'dataMax + 5']}
-              tickMargin={8} minTickGap={6}
-              stroke={T.textDim}
-            >
-              <Label value="Club Speed (mph)" position="bottom" offset={24} />
-            </XAxis>
-            <YAxis
-              stroke={T.textDim}
-              type="number"
-              dataKey="BallSpeed_mph"
-              name="Ball Speed"
-              unit=" mph"
-              tickMargin={10}
-            >
-              <Label value="Ball Speed (mph)" angle={-90} position="insideLeft" offset={-10} />
-            </YAxis>
-
-            <Tooltip contentStyle={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text }} formatter={(v:any,n:any)=>[v,n]} />
-            <Legend layout="horizontal" verticalAlign="top" align="right" iconType="circle" height={40} wrapperStyle={{ paddingBottom: 4 }} />
-
-            {clubs.map((c, i) => (
-              <Scatter
-                key={c}
-                name={c}
-                data={filteredOutliers.filter(s => s.Club === c)}
-                fill={clubPalette[i % clubPalette.length]}
-              />
+          <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+            <CartesianGrid stroke={alpha(T.textDim,0.2)} />
+            <XAxis type="number" dataKey="x" name="Carry (yd)" domain={domainX} tick={{ fill: T.text }} label={{ value: "Carry (yds)", position: "insideBottom", dy: 10, fill: T.text }} />
+            <YAxis type="number" dataKey="y" name="Lateral (yd)" domain={domainY} tick={{ fill: T.text }} label={{ value: "Lateral deviation (yds)", angle: -90, position: "insideLeft", fill: T.text }} />
+            {series.map(s => (
+              <Scatter key={s.club} data={s.data} name={s.club} fill={alpha(s.color,0.9)} />
             ))}
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-    ))},
-    table: { title: "Club Averages", render: () => (!hasData ? <EmptyChart theme={T} /> : (
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm" style={{ color: T.text }}>
-          <thead>
-            <tr className="text-left" style={{ color: T.textDim }}>
-              <Th theme={T}>Club</Th>
-              <Th theme={T}>Shots</Th>
-              <Th theme={T}>Avg Carry</Th>
-              <Th theme={T}>Avg Total</Th>
-              <Th theme={T}>Avg Smash</Th>
-              <Th theme={T}>Avg Spin</Th>
-              <Th theme={T}>Avg Club Spd</Th>
-              <Th theme={T}>Avg Ball Spd</Th>
-              <Th theme={T}>Avg Launch</Th>
-              <Th theme={T}>Face-to-Path</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {tableRows.map((r) => (
-              <tr key={r.club}>
-                <Td>{r.club}</Td>
-                <Td>{r.count}</Td>
-                <Td>{fmtNum(r.avgCarry,1," yds")}</Td>
-                <Td>{fmtNum(r.avgTotal,1," yds")}</Td>
-                <Td>{fmtNum(r.avgSmash,3,"")}</Td>
-                <Td>{fmtNum(r.avgSpin,0," rpm")}</Td>
-                <Td>{fmtNum(r.avgCS,1," mph")}</Td>
-                <Td>{fmtNum(r.avgBS,1," mph")}</Td>
-                <Td>{fmtNum(r.avgLA,1,"°")}</Td>
-                <Td>{fmtNum(r.avgF2P,2,"°")}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Legend outside chart */}
+      <div className="flex flex-wrap gap-3 mt-3">
+        {series.map(s => (
+          <div key={s.club} className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: s.color }} />
+            <span style={{ color: T.text }}>{s.club}</span>
+          </div>
+        ))}
       </div>
-    ))},
-  };
+    </div>
+  );
+}
+
+function GapChart({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: string[] }) {
+  const T = theme;
+  if (!shots.length) return <EmptyChart theme={T} />;
+  // average carry per club
+  const byClub = new Map<string, number[]>();
+  shots.forEach(s => {
+    if (s.Club && s.CarryDistance_yds != null) {
+      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
+      byClub.get(s.Club)!.push(s.CarryDistance_yds as number);
+    }
+  });
+  let rows = Array.from(byClub.entries()).map(([club, arr]) => ({
+    club,
+    avg: arr.reduce((a,b)=>a+b,0)/arr.length
+  }));
+  // order LW -> ... -> Driver
+  rows.sort((a,b)=> orderIndex(b.club) - orderIndex(a.club));
 
   return (
-    <div className="grid grid-cols-1 gap-6">
-      {props.cardOrder.map((k) => (
-        <div key={k} draggable onDragStart={props.onDragStart(k)} onDragOver={props.onDragOver(k)} onDrop={props.onDrop(k)}>
-          <Card theme={T} title={CARDS[k]?.title || k} dragHandle>{CARDS[k]?.render() || null}</Card>
+    <div style={{ height: 320 }}>
+      <ResponsiveContainer>
+        <BarChart data={rows} margin={{ top: 10, right: 10, bottom: 30, left: 10 }}>
+          <CartesianGrid stroke={alpha(T.textDim,0.2)} />
+          <XAxis dataKey="club" tick={{ fill: T.text }} angle={-30} textAnchor="end" interval={0} />
+          <YAxis tick={{ fill: T.text }} label={{ value: "Avg Carry (yds)", angle: -90, position: "insideLeft", fill: T.text }} />
+          <Tooltip />
+          <Bar dataKey="avg" fill={alpha(T.brand,0.9)} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
+  const T = theme;
+  if (!shots.length) return <EmptyChart theme={T} />;
+  const points = shots.map(s => {
+    if (s.ClubSpeed_mph != null && s.BallSpeed_mph != null) {
+      return { x: s.ClubSpeed_mph as number, y: s.BallSpeed_mph as number, club: s.Club };
+    }
+    return null;
+  }).filter(Boolean) as {x:number;y:number;club:string}[];
+
+  if (!points.length) return <EmptyChart theme={T} />;
+
+  const xs = points.map(p=>p.x);
+  const ys = points.map(p=>p.y);
+  const xmin = Math.floor(Math.min(...xs))-2, xmax = Math.ceil(Math.max(...xs))+2;
+  const smashAvg = ys.reduce((a,b)=>a+b,0)/xs.reduce((a,b)=>a+b,0); // ≈ average smash
+
+  const seg = [{ x: xmin, y: smashAvg * xmin }, { x: xmax, y: smashAvg * xmax }];
+
+  return (
+    <div style={{ height: 320 }}>
+      <ResponsiveContainer>
+        <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+          <CartesianGrid stroke={alpha(T.textDim,0.2)} />
+          <XAxis type="number" dataKey="x" name="Club Speed" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
+          <YAxis type="number" dataKey="y" name="Ball Speed" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
+          <Tooltip />
+          <Scatter data={points} fill={alpha(T.brand,0.9)} />
+          <ReferenceLine segment={seg} ifOverflow="extendDomain" stroke={T.brand} strokeDasharray="6 4">
+            <Label position="right" value={`Smash ~ ${smashAvg.toFixed(3)}`} fill={T.text} />
+          </ReferenceLine>
+        </ScatterChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AveragesTable({ theme, rows }:{ theme: Theme; rows: ClubRow[] }) {
+  const T = theme;
+  if (!rows.length) return <EmptyChart theme={T} />;
+  return (
+    <div className="overflow-auto">
+      <table className="min-w-full">
+        <thead>
+          <tr>
+            <Th theme={T}>Club</Th>
+            <Th theme={T}>Shots</Th>
+            <Th theme={T}>Avg Carry</Th>
+            <Th theme={T}>Avg Total</Th>
+            <Th theme={T}>Smash</Th>
+            <Th theme={T}>Spin</Th>
+            <Th theme={T}>Club Spd</Th>
+            <Th theme={T}>Ball Spd</Th>
+            <Th theme={T}>Launch</Th>
+            <Th theme={T}>F2P</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r=>(
+            <tr key={r.club}>
+              <Td>{r.club}</Td>
+              <Td>{r.count}</Td>
+              <Td>{fmtNum(r.avgCarry,1)}</Td>
+              <Td>{fmtNum(r.avgTotal,1)}</Td>
+              <Td>{fmtNum(r.avgSmash,3)}</Td>
+              <Td>{fmtNum(r.avgSpin,0)}</Td>
+              <Td>{fmtNum(r.avgCS,1)}</Td>
+              <Td>{fmtNum(r.avgBS,1)}</Td>
+              <Td>{fmtNum(r.avgLA,1)}</Td>
+              <Td>{fmtNum(r.avgF2P,2)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type Props = {
+  theme: Theme;
+  cardOrder: string[];
+  setCardOrder: (v: string[]) => void;
+  onDragStart: (k: string) => (e: React.DragEvent) => void;
+  onDragOver: (k: string) => (e: React.DragEvent) => void;
+  onDrop: (k: string) => (e: React.DragEvent) => void;
+  hasData: boolean;
+  kpis: any;
+  filteredOutliers: Shot[];
+  filtered: Shot[];
+  shots: Shot[];
+  tableRows: ClubRow[];
+  clubs: string[];
+};
+
+export default function DashboardCards(props: Props) {
+  const { theme: T, cardOrder, onDragStart, onDragOver, onDrop,
+    filteredOutliers, tableRows, clubs } = props;
+
+  // Cards map — launchspin removed. Unknown keys are ignored.
+  const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
+    kpis: { title: "KPIs", render: () => {
+      const pool = filteredOutliers;
+      if (!pool.length) return <EmptyChart theme={T} />;
+      const avg = (arr:number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+      const vals = {
+        carry: avg(pool.map(s=>s.CarryDistance_yds!).filter(v=>v!=null as any)),
+        total: avg(pool.map(s=>s.TotalDistance_yds!).filter(v=>v!=null as any)),
+        smash: avg(pool.map(s=>s.SmashFactor!).filter(v=>v!=null as any)),
+        spin:  avg(pool.map(s=>s.SpinRate_rpm!).filter(v=>v!=null as any)),
+        cs:    avg(pool.map(s=>s.ClubSpeed_mph!).filter(v=>v!=null as any)),
+        bs:    avg(pool.map(s=>s.BallSpeed_mph!).filter(v=>v!=null as any)),
+      };
+      return (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div><div className="text-xs" style={{color:T.textDim}}>Avg Carry</div><div className="text-lg font-semibold">{fmtNum(vals.carry,1)} yds</div></div>
+          <div><div className="text-xs" style={{color:T.textDim}}>Avg Total</div><div className="text-lg font-semibold">{fmtNum(vals.total,1)} yds</div></div>
+          <div><div className="text-xs" style={{color:T.textDim}}>Avg Smash</div><div className="text-lg font-semibold">{fmtNum(vals.smash,3)}</div></div>
+          <div><div className="text-xs" style={{color:T.textDim}}>Avg Spin</div><div className="text-lg font-semibold">{fmtNum(vals.spin,0)} rpm</div></div>
+          <div><div className="text-xs" style={{color:T.textDim}}>Club Speed</div><div className="text-lg font-semibold">{fmtNum(vals.cs,1)} mph</div></div>
+          <div><div className="text-xs" style={{color:T.textDim}}>Ball Speed</div><div className="text-lg font-semibold">{fmtNum(vals.bs,1)} mph</div></div>
         </div>
-      ))}
+      );
+    }},
+    shape: { title: "Shot Shape Distribution", render: () =>
+      <ShotShapeCard theme={T} shots={filteredOutliers} />
+    },
+    dispersion: { title: "Range Dispersion (Carry vs Lateral)", render: () =>
+      <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} />
+    },
+    gap: { title: "Gapping (Avg Carry by Club)", render: () =>
+      <GapChart theme={T} shots={filteredOutliers} clubs={clubs} />
+    },
+    eff: { title: "Efficiency (Ball vs Club Speed) + Smash Trend", render: () =>
+      <EfficiencyChart theme={T} shots={filteredOutliers} />
+    },
+    table: { title: "Club Averages", render: () =>
+      <AveragesTable theme={T} rows={tableRows} />
+    },
+  };
+
+  const keys = cardOrder.filter(k => CARDS[k]);
+
+  return (
+    <div className="grid grid-cols-1 gap-8">
+      {keys.map((key) => {
+        const card = CARDS[key];
+        return (
+          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)} style={{ cursor: "grab" }}>
+            <Card theme={T} title={card.title} dragHandle>{card.render()}</Card>
+          </div>
+        );
+      })}
     </div>
   );
 }
