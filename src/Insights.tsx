@@ -7,6 +7,36 @@ import {
   ComposedChart, ErrorBar, Line
 } from "recharts";
 
+/* ================== Small handle icon (6 dots) ================== */
+function HandleDots({ color = "#94a3b8" }: { color?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      title="Drag"
+      style={{
+        position: "absolute",
+        top: 8,
+        right: 8,
+        opacity: 0.7,
+        display: "inline-flex",
+        height: 16,
+        width: 16,
+        cursor: "grab",
+        userSelect: "none"
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill={color}>
+        <circle cx="8" cy="7" r="1.6" />
+        <circle cx="8" cy="12" r="1.6" />
+        <circle cx="8" cy="17" r="1.6" />
+        <circle cx="14" cy="7" r="1.6" />
+        <circle cx="14" cy="12" r="1.6" />
+        <circle cx="14" cy="17" r="1.6" />
+      </svg>
+    </span>
+  );
+}
+
 /* ================== Benchmarks for proficiency ================== */
 type Skill = "Beginner" | "Average" | "Good" | "Advanced" | "PGATour";
 
@@ -285,40 +315,43 @@ export default function InsightsView({
         if (key === "distanceBox") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)">
-              <div style={{ width: "100%", height: 480 }}>
-                <ResponsiveContainer>
-                  <ComposedChart
-                    layout="vertical"
-                    data={boxRows}
-                    margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="club" type="category" />
-                    <Tooltip
-                      formatter={(_, __, p: any) => {
-                        const d = p && p.payload ? p.payload : {};
-                        const lines = [
-                          `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
-                          `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
-                        ];
-                        return [lines.join("\n"), "Stats"];
-                      }}
-                      labelFormatter={(l) => `Club: ${l}`}
-                    />
-                    <Legend />
-                    {/* Carry box (horizontal) */}
-                    <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
-                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
-                    </Bar>
-                    {/* Total box (horizontal) */}
-                    <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
-                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
-                    </Bar>
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div className="relative">
+                <HandleDots />
+                <div style={{ width: "100%", height: 480 }}>
+                  <ResponsiveContainer>
+                    <ComposedChart
+                      layout="vertical"
+                      data={boxRows}
+                      margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="club" type="category" />
+                      <Tooltip
+                        formatter={(_, __, p: any) => {
+                          const d = p && p.payload ? p.payload : {};
+                          const lines = [
+                            `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
+                            `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
+                          ];
+                          return [lines.join("\n"), "Stats"];
+                        }}
+                        labelFormatter={(l) => `Club: ${l}`}
+                      />
+                      <Legend />
+                      {/* Carry box (horizontal) */}
+                      <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
+                      <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
+                        <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
+                      </Bar>
+                      {/* Total box (horizontal) */}
+                      <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
+                      <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
+                        <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
+                      </Bar>
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </Card>
           </div>
@@ -327,43 +360,46 @@ export default function InsightsView({
         if (key === "highlights") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Highlights (independent of club selection)">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Carry</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {globalPR.bestCarry?.CarryDistance_yds ? `${globalPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
+              <div className="relative">
+                <HandleDots />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* PR Carry */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">PR Carry</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {globalPR.bestCarry?.CarryDistance_yds ? `${globalPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
+                    </div>
+                    <div className="text-slate-600 mt-1 text-sm">
+                      {globalPR.bestCarry?.Club ? `(${globalPR.bestCarry.Club})` : ""}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                   </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {globalPR.bestCarry?.Club ? `(${globalPR.bestCarry.Club})` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
 
-                {/* PR Total */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Total</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {globalPR.bestTotal?.TotalDistance_yds ? `${globalPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
+                  {/* PR Total */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">PR Total</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {globalPR.bestTotal?.TotalDistance_yds ? `${globalPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
+                    </div>
+                    <div className="text-slate-600 mt-1 text-sm">
+                      {globalPR.bestTotal?.Club ? `(${globalPR.bestTotal.Club})` : ""}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                   </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {globalPR.bestTotal?.Club ? `(${globalPR.bestTotal.Club})` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
 
-                {/* Most Consistent (global) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Most Consistent Club</div>
-                  {globalConsistency.bestClub
-                    ? (<>
-                        <div className="mt-1 text-lg font-semibold">{globalConsistency.bestClub}</div>
-                        <div className="text-slate-600 mt-1 text-sm">
-                          Carry SD ≈ {globalConsistency.bestSd.toFixed(1)} yds (avg {globalConsistency.avgCarry.toFixed(1)} yds)
-                        </div>
-                      </>)
-                    : (<div className="mt-1 text-slate-600 text-sm">More shots needed to measure consistency.</div>)
-                  }
+                  {/* Most Consistent (global) */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">Most Consistent Club</div>
+                    {globalConsistency.bestClub
+                      ? (<>
+                          <div className="mt-1 text-lg font-semibold">{globalConsistency.bestClub}</div>
+                          <div className="text-slate-600 mt-1 text-sm">
+                            Carry SD ≈ {globalConsistency.bestSd.toFixed(1)} yds (avg {globalConsistency.avgCarry.toFixed(1)} yds)
+                          </div>
+                        </>)
+                      : (<div className="mt-1 text-slate-600 text-sm">More shots needed to measure consistency.</div>)
+                    }
+                  </div>
                 </div>
               </div>
             </Card>
@@ -373,28 +409,31 @@ export default function InsightsView({
         if (key === "warnings") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Gapping Warnings (all clubs)">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
-                  {gw.tight.length ? (
-                    <ul className="list-disc pl-5 text-sm">
-                      {gw.tight.map((t, i) => <li key={i}>{t}</li>)}
-                    </ul>
-                  ) : <div className="text-sm text-slate-500">None detected</div>}
+              <div className="relative">
+                <HandleDots />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm font-semibold mb-1">Tight Gaps (&lt; 12 yds)</div>
+                    {gw.tight.length ? (
+                      <ul className="list-disc pl-5 text-sm">
+                        {gw.tight.map((t, i) => <li key={i}>{t}</li>)}
+                      </ul>
+                    ) : <div className="text-sm text-slate-500">None detected</div>}
+                  </div>
+
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm font-semibold mb-1">Wide Gaps (&gt; 30 yds)</div>
+                    {gw.wide.length ? (
+                      <ul className="list-disc pl-5 text-sm">
+                        {gw.wide.map((t, i) => <li key={i}>{t}</li>)}
+                      </ul>
+                    ) : <div className="text-sm text-slate-500">None detected</div>}
+                  </div>
                 </div>
 
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm font-semibold mb-1">Wide Gaps (&gt; 30 yds)</div>
-                  {gw.wide.length ? (
-                    <ul className="list-disc pl-5 text-sm">
-                      {gw.wide.map((t, i) => <li key={i}>{t}</li>)}
-                    </ul>
-                  ) : <div className="text-sm text-slate-500">None detected</div>}
+                <div className="mt-3 text-sm text-slate-500">
+                  Clubs with a tight gap: <b>{gw.totalTight}</b>
                 </div>
-              </div>
-
-              <div className="mt-3 text-sm text-slate-500">
-                Clubs with a tight gap: <b>{gw.totalTight}</b>
               </div>
             </Card>
           </div>
@@ -403,46 +442,49 @@ export default function InsightsView({
         if (key === "personalRecords") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Personal Records (by current selection)">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry (selected) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Carry</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {selectedPR.bestCarry?.CarryDistance_yds ? `${selectedPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
+              <div className="relative">
+                <HandleDots />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* PR Carry (selected) */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">PR Carry</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {selectedPR.bestCarry?.CarryDistance_yds ? `${selectedPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
+                    </div>
+                    <div className="text-slate-600 mt-1 text-sm">
+                      {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                   </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
 
-                {/* PR Total (selected) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Total</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {selectedPR.bestTotal?.TotalDistance_yds ? `${selectedPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
+                  {/* PR Total (selected) */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">PR Total</div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {selectedPR.bestTotal?.TotalDistance_yds ? `${selectedPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
+                    </div>
+                    <div className="text-slate-600 mt-1 text-sm">
+                      {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                   </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
 
-                {/* Proficiency (selected) + button to open modal */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Proficiency Level</div>
-                  <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
-                  <div className="text-slate-600 mt-1">
-                    Score: {selectedProf.score.toFixed(0)} / 100
-                    <span title="Compares your average total distance to reference ranges for each club you’ve selected, normalized to 0–100." style={{ marginLeft: 8, cursor: "help", fontSize: 12, color: "#64748b" }}>ⓘ</span>
+                  {/* Proficiency (selected) + button to open modal */}
+                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                    <div className="text-sm text-slate-500">Proficiency Level</div>
+                    <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
+                    <div className="text-slate-600 mt-1">
+                      Score: {selectedProf.score.toFixed(0)} / 100
+                      <span title="Compares your average total distance to reference ranges for each club you’ve selected, normalized to 0–100." style={{ marginLeft: 8, cursor: "help", fontSize: 12, color: "#64748b" }}>ⓘ</span>
+                    </div>
+                    <button
+                      onClick={() => setShowBench(true)}
+                      className="mt-3 px-3 py-2 text-sm rounded-md"
+                      style={{ background: theme.brand, color: "#fff" }}
+                    >
+                      View benchmark chart
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowBench(true)}
-                    className="mt-3 px-3 py-2 text-sm rounded-md"
-                    style={{ background: theme.brand, color: "#fff" }}
-                  >
-                    View benchmark chart
-                  </button>
                 </div>
               </div>
             </Card>
@@ -452,25 +494,28 @@ export default function InsightsView({
         if (key === "progress") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Club Progress — Carry over Time">
-              {/* If no chart, no fixed height -> card shrinks to this content */}
-              {(!selectedClubName || progressRows.length <= 1) ? (
-                <div className="text-sm text-slate-500">
-                  Select a single club in Filters to view progress over time (needs multiple shots).
-                </div>
-              ) : (
-                <div style={{ width: "100%", height: progressHeight }}>
-                  <ResponsiveContainer>
-                    <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              <div className="relative">
+                <HandleDots />
+                {/* If no chart, no fixed height -> card shrinks to this content */}
+                {(!selectedClubName || progressRows.length <= 1) ? (
+                  <div className="text-sm text-slate-500">
+                    Select a single club in Filters to view progress over time (needs multiple shots).
+                  </div>
+                ) : (
+                  <div style={{ width: "100%", height: progressHeight }}>
+                    <ResponsiveContainer>
+                      <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke="#3A86FF" strokeWidth={2} dot={{ r: 2 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
             </Card>
           </div>
         );
@@ -478,7 +523,10 @@ export default function InsightsView({
         if (key === "weaknesses") return (
           <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
             <Card theme={theme} title="Biggest Weakness (across all clubs)">
-              <WeaknessCallout pool={filteredNoClubOutliers} />
+              <div className="relative">
+                <HandleDots />
+                <WeaknessCallout pool={filteredNoClubOutliers} />
+              </div>
             </Card>
           </div>
         );
