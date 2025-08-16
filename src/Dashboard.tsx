@@ -350,12 +350,12 @@ export default function DashboardCards(props: Props) {
         }
         return (
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-            <KPIItem theme={T} label="Avg Carry" value={kp.carry} unit="yds" digits={1} />
-            <KPIItem theme={T} label="Avg Total" value={kp.total} unit="yds" digits={1} />
+            <KPIItem theme={T} label="Avg Carry (yds)" value={kp.carry} digits={1} />
+            <KPIItem theme={T} label="Avg Total (yds)" value={kp.total} digits={1} />
             <KPIItem theme={T} label="Avg Smash" value={kp.smash} digits={3} />
-            <KPIItem theme={T} label="Avg Spin" value={kp.spin} unit="rpm" digits={0} />
-            <KPIItem theme={T} label="Avg Club Spd" value={kp.cs} unit="mph" digits={1} />
-            <KPIItem theme={T} label="Avg Ball Spd" value={kp.bs} unit="mph" digits={1} />
+            <KPIItem theme={T} label="Avg Spin (rpm)" value={kp.spin} digits={0} />
+            <KPIItem theme={T} label="Avg Club Spd (mph)" value={kp.cs} digits={1} />
+            <KPIItem theme={T} label="Avg Ball Spd (mph)" value={kp.bs} digits={1} />
           </div>
         );
       }
