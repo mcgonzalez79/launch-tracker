@@ -227,17 +227,35 @@ export default function App() {
 
   const withOutliers = (pool: Shot[]) => {
     if (!excludeOutliers) return pool;
-    const carryVals = pool.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-    const smashVals = pool.map(s => (s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined))).filter((x): x is number => x != null);
-    const haveC = carryVals.length >= 5, haveS = smashVals.length >= 5;
-    const cm = haveC ? mean(carryVals) : 0, cs = haveC ? stddev(carryVals) : 0;
-    const sm = haveS ? mean(smashVals) : 0, ss = haveS ? stddev(smashVals) : 0;
-    return pool.filter(s => {
-      let ok = true;
-      if (haveC && s.CarryDistance_yds != null) ok = ok && s.CarryDistance_yds >= cm - 2.5 * cs && s.CarryDistance_yds <= cm + 2.5 * cs;
-      if (haveS) { const sv = s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined); if (sv != null) ok = ok && sv >= sm - 2.5 * ss && sv <= sm + 2.5 * ss; }
-      return ok;
+    const byClub = new Map<string, Shot[]>();
+    pool.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
+
+    function iqrFence(vals: number[]) {
+      if (vals.length < 5) return { lo: -Infinity, hi: Infinity };
+      const a = vals.slice().sort((x,y)=>x-y);
+      const q = (p:number) => {
+        const pos = (a.length - 1) * p, b = Math.floor(pos), r = pos - b;
+        return a[b + 1] !== undefined ? a[b] + r * (a[b+1] - a[b]) : a[b];
+      };
+      const q1 = q(0.25), q3 = q(0.75), iqr = q3 - q1;
+      return { lo: q1 - 1.5*iqr, hi: q3 + 1.5*iqr };
+    }
+
+    const keep: Shot[] = [];
+    byClub.forEach(arr => {
+      const carries = arr.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
+      const smashes = arr.map(s => (s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined))).filter((x): x is number => x != null);
+      const cf = iqrFence(carries);
+      const sf = iqrFence(smashes);
+      arr.forEach(s => {
+        const c = s.CarryDistance_yds;
+        const sm = (s.SmashFactor ?? (s.BallSpeed_mph && s.ClubSpeed_mph ? s.BallSpeed_mph / s.ClubSpeed_mph : undefined));
+        const okC = c == null || (c >= cf.lo && c <= cf.hi);
+        const okS = sm == null || (sm >= sf.lo && sm <= sf.hi);
+        if (okC && okS) keep.push(s);
+      });
     });
+    return keep;
   };
   const filteredOutliers = useMemo(() => withOutliers(filtered), [filtered, excludeOutliers]);
   const filteredNoClubOutliers = useMemo(() => withOutliers(filteredNoClub), [filteredNoClub, excludeOutliers]);
@@ -260,7 +278,9 @@ export default function App() {
         avgCS: (grab(s => s.ClubSpeed_mph).length ? mean(grab(s => s.ClubSpeed_mph)) : 0),
         avgBS: (grab(s => s.BallSpeed_mph).length ? mean(grab(s => s.BallSpeed_mph)) : 0),
         avgLA: (grab(s => s.LaunchAngle_deg).length ? mean(grab(s => s.LaunchAngle_deg)) : 0),
-        avgF2P: (grab(s => coalesceFaceToPath(s)).length ? mean(grab(s => coalesceFaceToPath(s))) : 0),
+        avgF2P: (grab(s => s.FaceToPath_deg ?? (s.ClubFace_deg != null && s.ClubPath_deg != null ? s.ClubFace_deg - s.ClubPath_deg : undefined)).length
+          ? mean(grab(s => s.FaceToPath_deg ?? (s.ClubFace_deg != null && s.ClubPath_deg != null ? s.ClubFace_deg - s.ClubPath_deg : undefined)))
+          : 0),
       });
     }
     return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
@@ -320,92 +340,129 @@ export default function App() {
   // DnD handlers (dashboard)
   const dragKeyRef = useRef<string | null>(null);
   const onDragStart = (k: string) => (e: React.DragEvent) => { dragKeyRef.current = k; e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver  = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const onDrop      = (k: string) => (e: React.DragEvent) => { e.preventDefault(); const from = dragKeyRef.current; dragKeyRef.current = null; if (!from || from === k) return;
-    setCardOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; }); };
-
-  // DnD (insights)
-  const onDragStartInsight = onDragStart;
-  const onDragOverInsight  = onDragOver;
-  const onDropInsight      = (k: string) => (e: React.DragEvent) => { e.preventDefault(); const from = dragKeyRef.current; dragKeyRef.current = null; if (!from || from === k) return;
-    setInsightsOrder((prev) => { const arr = prev.slice(); const i = arr.indexOf(from), j = arr.indexOf(k); if (i === -1 || j === -1) return prev; arr.splice(j, 0, ...arr.splice(i, 1)); return arr; }); };
-
-  // Print Club Averages
-  const printClubAverages = () => {
-    const win = window.open("", "_blank", "width=900,height=700"); if (!win) return;
-    win.document.write(`<html><head><title>Club Averages</title><style>
-      body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;}
-      h1{margin:0 0 12px;color:${T.brand}} table{border-collapse:collapse;width:100%;font-size:13px}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left} th{background:#f8fafc}
-    </style></head><body><h1>Launch Tracker — Club Averages</h1><table>
-      <tr><th>Club</th><th>Shots</th><th>Avg Carry</th><th>Avg Total</th><th>Avg Smash</th><th>Avg Spin</th><th>Avg Club Spd</th><th>Avg Ball Spd</th><th>Avg Launch</th><th>Face-to-Path</th></tr>
-      ${tableRows.map(r=>`<tr><td>${r.club}</td><td>${r.count}</td><td>${r.avgCarry.toFixed(1)}</td><td>${r.avgTotal.toFixed(1)}</td><td>${r.avgSmash.toFixed(3)}</td><td>${Math.round(r.avgSpin)}</td><td>${r.avgCS.toFixed(1)}</td><td>${r.avgBS.toFixed(1)}</td><td>${r.avgLA.toFixed(1)}</td><td>${r.avgF2P.toFixed(2)}°</td></tr>`).join("")}
-    </table><script>window.onload=()=>window.print()</script></body></html>`); win.document.close();
+  const onDragOver = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDrop = (k: string) => (e: React.DragEvent) => {
+    e.preventDefault(); const a = dragKeyRef.current; if (!a || a === k) return;
+    setCardOrder(prev => {
+      const arr = prev.filter(x => x !== a);
+      const idx = arr.indexOf(k);
+      if (idx === -1) return prev;
+      arr.splice(idx, 0, a);
+      return arr;
+    });
+    dragKeyRef.current = null;
   };
 
-  return (
-    <div style={{ minHeight: "100vh", background: T.white }}>
-      {/* Header */}
-      <header className="px-6 py-4" style={{ background: T.brand, color: "#fff" }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-wide">Launch Tracker</h1>
-          <div className="flex items-center gap-2">
-            <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-            <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
-            <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
-            <button onClick={() => setDark(!dark)} className="ml-3 p-2 rounded-lg border" style={{ background: "#ffffff10", borderColor: "#ffffff55" }} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
-              {dark ? <IconSun /> : <IconMoon />}
-            </button>
-          </div>
-        </div>
-      </header>
+  // DnD handlers (insights)
+  const dragKeyRef2 = useRef<string | null>(null);
+  const onDragStart2 = (k: string) => (e: React.DragEvent) => { dragKeyRef2.current = k; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOver2 = (k: string) => (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const onDrop2 = (k: string) => (e: React.DragEvent) => {
+    e.preventDefault(); const a = dragKeyRef2.current; if (!a || a === k) return;
+    setInsightsOrder(prev => {
+      const arr = prev.filter(x => x !== a);
+      const idx = arr.indexOf(k);
+      if (idx === -1) return prev;
+      arr.splice(idx, 0, a);
+      return arr;
+    });
+    dragKeyRef2.current = null;
+  };
 
-      {/* Messages */}
-      {msgs.length > 0 && (
-        <div className="px-6 mt-4">
-          <div className="max-w-7xl mx-auto flex flex-col gap-2">
-            {msgs.map(m => (
-              <div key={m.id} className="rounded-lg px-4 py-3 text-sm flex items-start justify-between"
-                   style={{ background: m.type === "error" ? "#FDECEC" : m.type === "success" ? "#EDFDF3" : m.type === "warn" ? "#FFF6EC" : "#EEF5FF", color: "#111827", border: `1px solid #E5E7EB` }}>
-                <div style={{ whiteSpace: "pre-line" }}>{m.text}</div>
-                <button onClick={() => closeMsg(m.id)} className="ml-4 px-2 py-1 text-xs rounded border" style={{ borderColor: "#E5E7EB", color: "#475569" }}>×</button>
-              </div>
-            ))}
-          </div>
+  // Export actions
+  const onExportCSV = () => exportCSV(shots, "launch-tracker-data.csv");
+
+  // Print club averages
+  const onPrintClubAverages = () => {
+    const rows = tableRows.map(r => ({
+      Club: r.club, Shots: r.count,
+      "Avg Carry (yds)": r.avgCarry.toFixed(1),
+      "Avg Total (yds)": r.avgTotal.toFixed(1),
+      "Avg Smash": r.avgSmash.toFixed(3),
+      "Avg Spin (rpm)": r.avgSpin.toFixed(0),
+      "Avg Club Spd (mph)": r.avgCS.toFixed(1),
+      "Avg Ball Spd (mph)": r.avgBS.toFixed(1),
+      "Avg Launch (deg)": r.avgLA.toFixed(1),
+      "Face-to-Path (deg)": r.avgF2P.toFixed(2),
+    }));
+    const win = window.open("", "_blank"); if (!win) return;
+    const css = `table{border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px 8px}th{text-align:left;background:#f6f6f6}`;
+    win.document.write(`<html><head><title>Club Averages</title><style>${css}</style></head><body><h3>Club Averages</h3>`);
+    win.document.write("<table><thead><tr>" + Object.keys(rows[0] || {}).map(k => `<th>${k}</th>`).join("") + "</tr></thead><tbody>");
+    rows.forEach(r => win.document!.write("<tr>" + Object.values(r).map(v => `<td>${v}</td>`).join("") + "</tr>"));
+    win.document.write("</tbody></table></body></html>"); win.document.close();
+  };
+
+  // KPIs
+  const kpis = useMemo(() => {
+    const pool = filteredOutliers;
+    const grab = (sel: (s: Shot) => number | undefined) => pool.map(sel).filter((x): x is number => x !== undefined);
+    const avgCarry = grab(s => s.CarryDistance_yds); const avgTotal = grab(s => s.TotalDistance_yds);
+    const avgSmash = grab(s => s.SmashFactor); const avgSpin = grab(s => s.SpinRate_rpm);
+    const avgCS = grab(s => s.ClubSpeed_mph); const avgBS = grab(s => s.BallSpeed_mph);
+    const meanOr0 = (arr: number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+
+    // Shot shape
+    const draw = pool.filter(s => (s.SpinAxis_deg ?? 0) < -2).length;
+    const fade = pool.filter(s => (s.SpinAxis_deg ?? 0) >  2).length;
+    const straight = pool.length - draw - fade;
+    const pct = (n:number) => pool.length ? (100*n/pool.length) : 0;
+
+    return {
+      avgCarry: meanOr0(avgCarry), avgTotal: meanOr0(avgTotal), avgSmash: meanOr0(avgSmash),
+      avgSpin: meanOr0(avgSpin), avgCS: meanOr0(avgCS), avgBS: meanOr0(avgBS),
+      shape: { draw: { n: draw, pct: pct(draw) }, straight: { n: straight, pct: pct(straight) }, fade: { n: fade, pct: pct(fade) } }
+    };
+  }, [filteredOutliers]);
+
+  return (
+    <div style={{ minHeight: "100%", background: T.bg }}>
+      {/* Top bar */}
+      <div className="px-4 py-3 flex items-center justify-between" style={{ background: T.brand, color: "#fff" }}>
+        <div className="flex items-center gap-2">
+          <div className="text-lg font-semibold">Launch Tracker</div>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <TopTab theme={T} label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")} />
+          <TopTab theme={T} label="Insights"  active={view==="insights"}  onClick={()=>setView("insights")} />
+          <TopTab theme={T} label="Journal"   active={view==="journal"}   onClick={()=>setView("journal")} />
+          <button onClick={()=>setDark(v=>!v)} className="ml-2 px-2 py-1 rounded-md border" style={{ borderColor: "#ffffff55", background: "#ffffff22", color: "#fff" }}>
+            {dark ? <IconSun /> : <IconMoon />}
+          </button>
+        </div>
+      </div>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-12 gap-8">
-        {/* LEFT */}
-        <aside className="col-span-12 lg:col-span-3 space-y-8">
-          <div ref={filtersRef}>
-            <FiltersPanel
-              theme={T}
-              shots={shots}
-              sessions={sessions}
-              clubs={clubs}
-              selectedClubs={selectedClubs}
-              setSelectedClubs={setSelectedClubs}
-              sessionFilter={sessionFilter}
-              setSessionFilter={setSessionFilter}
-              excludeOutliers={excludeOutliers}
-              setExcludeOutliers={setExcludeOutliers}
-              dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo}
-              carryMin={carryMin} carryMax={carryMax} setCarryMin={setCarryMin} setCarryMax={setCarryMax}
-              carryBounds={carryBounds}
-              onImportFile={onFile}
-              onLoadSample={loadSample}
-              onExportCSV={()=>exportCSV(filteredOutliers as any)}
-              onPrintClubAverages={printClubAverages}
-              onDeleteSession={deleteSession}
-              onDeleteAll={deleteAll}
-            />
-          </div>
-        </aside>
+      <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6 p-4">
+        {/* Left / Filters */}
+        <div ref={filtersRef}>
+          <FiltersPanel
+            theme={T}
+            shots={shots}
+            sessions={sessions}
+            clubs={clubs}
+            selectedClubs={selectedClubs}
+            setSelectedClubs={setSelectedClubs}
+            sessionFilter={sessionFilter}
+            setSessionFilter={setSessionFilter}
+            excludeOutliers={excludeOutliers}
+            setExcludeOutliers={setExcludeOutliers}
+            dateFrom={dateFrom} dateTo={dateTo}
+            setDateFrom={setDateFrom} setDateTo={setDateTo}
+            carryMin={carryMin} carryMax={carryMax}
+            setCarryMin={setCarryMin} setCarryMax={setCarryMax}
+            carryBounds={carryBounds}
+            onImportFile={onFile}
+            onLoadSample={loadSample}
+            onExportCSV={onExportCSV}
+            onPrintClubAverages={onPrintClubAverages}
+            onDeleteSession={deleteSession}
+            onDeleteAll={deleteAll}
+          />
+        </div>
 
-        {/* RIGHT */}
-        <section className="col-span-12 lg:col-span-9">
+        {/* Right / View */}
+        <div className="grid grid-cols-1 gap-6">
           {view === "dashboard" && (
             <DashboardCards
               theme={T}
@@ -414,44 +471,30 @@ export default function App() {
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDrop={onDrop}
-              hasData={filteredOutliers.length>0}
-              kpis={{
-                avgCarry: filteredOutliers.map(s=>s.CarryDistance_yds).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                avgTotal: filteredOutliers.map(s=>s.TotalDistance_yds).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                avgSmash: filteredOutliers.map(s=>s.SmashFactor).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                avgSpin: filteredOutliers.map(s=>s.SpinRate_rpm).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                avgCS: filteredOutliers.map(s=>s.ClubSpeed_mph).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                avgBS: filteredOutliers.map(s=>s.BallSpeed_mph).filter((x):x is number=>x!=null).reduce((a,b,i,arr)=>a+b/(arr.length||1),0) || undefined,
-                shape: {
-                  draw: { n: filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) < -2).length, pct: filteredOutliers.length ? (filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) < -2).length / filteredOutliers.length) * 100 : 0 },
-                  fade: { n: filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length, pct: filteredOutliers.length ? (filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length / filteredOutliers.length) * 100 : 0 },
-                  straight: { n: Math.max(0, filteredOutliers.length - filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) < -2).length - filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length),
-                              pct: filteredOutliers.length ? (Math.max(0, filteredOutliers.length - filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) < -2).length - filteredOutliers.filter(s => (s.SpinAxis_deg ?? 0) > 2).length) / filteredOutliers.length) * 100 : 0 },
-                }
-              }}
+              hasData={hasData}
+              kpis={kpis}
               filteredOutliers={filteredOutliers}
               filtered={filtered}
               shots={shots}
-              tableRows={tableRowsDash}   // <-- using top-level memo now
+              tableRows={tableRowsDash}
               clubs={clubs}
             />
           )}
 
           {view === "insights" && (
-          <InsightsView
-            theme={T}
-            tableRows={tableRows}
-            filteredOutliers={filteredOutliers}
-            filteredNoClubOutliers={filteredNoClubOutliers}
-            filteredNoClubRaw={filteredNoClub}    // <-- add this line
-            allClubs={clubs}
-            insightsOrder={insightsOrder}
-            onDragStart={onDragStart}
-            onDragOver={onDragOver}
-            onDrop={onDropInsight}
-          />
-        )}
-
+            <InsightsView
+              theme={T}
+              tableRows={tableRows}
+              filteredOutliers={filteredOutliers}
+              filteredNoClubOutliers={filteredNoClubOutliers}
+              filteredNoClubRaw={filteredNoClub}   // to allow “includes outliers” PRs if desired
+              allClubs={clubs}
+              insightsOrder={insightsOrder}
+              onDragStart={onDragStart2}
+              onDragOver={onDragOver2}
+              onDrop={onDrop2}
+            />
+          )}
 
           {view === "journal" && (
             <JournalView
@@ -463,12 +506,8 @@ export default function App() {
               defaultHeightPx={filtersHeight}
             />
           )}
-        </section>
-      </main>
-
-      <footer className="px-6 py-8 text-xs text-center" style={{ color: "#475569" }}>
-        Gap chart: Carry = blue, Total = green. Shot shape: Draw &lt; -2°, Straight ±2°, Fade &gt; 2°. Data is saved locally.
-      </footer>
+        </div>
+      </div>
     </div>
   );
 }
