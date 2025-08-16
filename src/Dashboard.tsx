@@ -1,14 +1,37 @@
 import React from "react";
 import {
-  Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Scatter, ScatterChart, ZAxis, ReferenceLine, Label
+  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Scatter, ScatterChart, ReferenceLine, Label
 } from "recharts";
-import { Theme, colorForClub, alpha } from "./theme";
-import { Shot, ClubRow, fmtNum, orderIndex } from "./utils";
-import { Card, EmptyChart, Th, Td } from "./components/UI";
+import { Theme } from "./theme";
+import { Shot, ClubRow, orderIndex } from "./utils";
+import { Card } from "./components/UI";
+
+/* ---------- local helpers (no extra imports) ---------- */
+
+function fmt(v: number | undefined | null, digits = 1): string {
+  if (v == null || Number.isNaN(v as number)) return "–";
+  return Number(v).toFixed(digits);
+}
+
+// Very light hex → rgba for translucent fills
+function rgbaFromHex(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const bigint = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  // eslint-disable-next-line no-bitwise
+  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+const CLUB_PALETTE = [
+  "#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED",
+  "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#9333EA",
+  "#22C55E", "#3B82F6"
+];
+
+/* ---------- Shot Shape (adds Hook/Slice) ---------- */
 
 type ShapeBucket = { n: number; pct: number };
-
 function classifyShapes(shots: Shot[]) {
   const buckets = { hook: 0, draw: 0, straight: 0, fade: 0, slice: 0 };
   const total = shots.length || 1;
@@ -32,28 +55,39 @@ function classifyShapes(shots: Shot[]) {
 
 function ShotShapeCard({ theme, shots }: { theme: Theme; shots: Shot[] }) {
   const T = theme;
-  if (!shots.length) return <EmptyChart theme={T} />;
+  if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
   const s = classifyShapes(shots);
-  const Box = ({ title, bucket, bg, color }:{ title:string; bucket:ShapeBucket; bg:string; color:string }) => (
+
+  const Box = ({ title, bucket, fg, bg }:{
+    title: string; bucket: ShapeBucket; fg: string; bg: string;
+  }) => (
     <div className="rounded-2xl px-4 py-5" style={{ background: bg, border: `1px solid ${T.border}` }}>
-      <div className="text-2xl font-semibold" style={{ color }}>{bucket.pct.toFixed(1)}%</div>
-      <div className="mt-1 text-sm" style={{ color: T.text }}>{title} <span style={{ color: T.textDim }}>({bucket.n})</span></div>
+      <div className="text-2xl font-semibold" style={{ color: fg }}>{bucket.pct.toFixed(1)}%</div>
+      <div className="mt-1 text-sm" style={{ color: T.text }}>
+        {title} <span style={{ color: T.textDim }}>({bucket.n})</span>
+      </div>
     </div>
   );
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <Box title="Hook" bucket={s.hook} bg={alpha("#EF4444",0.08)} color="#DC2626" />
-      <Box title="Draw" bucket={s.draw} bg={alpha("#10B981",0.10)} color="#059669" />
-      <Box title="Straight" bucket={s.straight} bg={alpha(T.brand,0.10)} color={T.brand} />
-      <Box title="Fade" bucket={s.fade} bg={alpha("#F59E0B",0.10)} color="#D97706" />
-      <Box title="Slice" bucket={s.slice} bg={alpha("#3B82F6",0.10)} color="#2563EB" />
+      <Box title="Hook"     bucket={s.hook}     fg="#DC2626" bg={rgbaFromHex("#EF4444", 0.08)} />
+      <Box title="Draw"     bucket={s.draw}     fg="#059669" bg={rgbaFromHex("#10B981", 0.10)} />
+      <Box title="Straight" bucket={s.straight} fg={T.brand} bg={rgbaFromHex(T.brand, 0.10)} />
+      <Box title="Fade"     bucket={s.fade}     fg="#D97706" bg={rgbaFromHex("#F59E0B", 0.10)} />
+      <Box title="Slice"    bucket={s.slice}    fg="#2563EB" bg={rgbaFromHex("#3B82F6", 0.10)} />
     </div>
   );
 }
 
-function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: string[] }) {
+/* ---------- Dispersion (legend outside) ---------- */
+
+function RangeDispersion({ theme, shots, clubs }:{
+  theme: Theme; shots: Shot[]; clubs: string[];
+}) {
   const T = theme;
-  if (!shots.length) return <EmptyChart theme={T} />;
+  if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
+
   const lateralDev = (s: Shot): number | undefined => {
     if (s.CarryDeviationDistance_yds !== undefined) return s.CarryDeviationDistance_yds;
     if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) {
@@ -61,46 +95,70 @@ function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; 
     }
     return undefined;
   };
+
   const pts = shots.map(s => {
     const x = s.CarryDistance_yds;
     const y = lateralDev(s);
     return (x == null || y == null) ? null : { x, y, club: s.Club };
-  }).filter(Boolean) as {x:number;y:number;club:string}[];
+  }).filter(Boolean) as { x: number; y: number; club: string }[];
 
-  if (!pts.length) return <EmptyChart theme={T} />;
+  if (!pts.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
-  const domainX = [Math.floor(Math.min(...pts.map(p=>p.x)))-5, Math.ceil(Math.max(...pts.map(p=>p.x)))+5];
-  const domainY = [Math.floor(Math.min(...pts.map(p=>p.y)))-5, Math.ceil(Math.max(...pts.map(p=>p.y)))+5];
+  const xMin = Math.floor(Math.min(...pts.map(p => p.x))) - 5;
+  const xMax = Math.ceil(Math.max(...pts.map(p => p.x))) + 5;
+  const yMin = Math.floor(Math.min(...pts.map(p => p.y))) - 5;
+  const yMax = Math.ceil(Math.max(...pts.map(p => p.y))) + 5;
 
-  const byClub = new Map<string, {x:number;y:number}[]>();
-  pts.forEach(p => { if (!byClub.has(p.club)) byClub.set(p.club, []); byClub.get(p.club)!.push({x:p.x,y:p.y}); });
+  // build series by club (only for clubs present in filtered shots)
+  const byClub = new Map<string, { x: number; y: number }[]>();
+  pts.forEach(p => {
+    if (!byClub.has(p.club)) byClub.set(p.club, []);
+    byClub.get(p.club)!.push({ x: p.x, y: p.y });
+  });
 
-  const series = clubs.filter(c => byClub.has(c)).map(club => ({
-    club,
-    data: byClub.get(club)!,
-    color: colorForClub(club),
-  }));
+  const presentClubs = clubs.filter(c => byClub.has(c));
+  const colorFor = (club: string) => {
+    const idx = Math.abs(orderIndex(club)) % CLUB_PALETTE.length;
+    return CLUB_PALETTE[idx];
+  };
 
   return (
     <div>
       <div className="w-full" style={{ height: 320 }}>
         <ResponsiveContainer>
           <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-            <CartesianGrid stroke={alpha(T.textDim,0.2)} />
-            <XAxis type="number" dataKey="x" name="Carry (yd)" domain={domainX} tick={{ fill: T.text }} label={{ value: "Carry (yds)", position: "insideBottom", dy: 10, fill: T.text }} />
-            <YAxis type="number" dataKey="y" name="Lateral (yd)" domain={domainY} tick={{ fill: T.text }} label={{ value: "Lateral deviation (yds)", angle: -90, position: "insideLeft", fill: T.text }} />
-            {series.map(s => (
-              <Scatter key={s.club} data={s.data} name={s.club} fill={alpha(s.color,0.9)} />
+            <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              domain={[xMin, xMax]}
+              tick={{ fill: T.text }}
+              label={{ value: "Carry (yds)", position: "insideBottom", dy: 10, fill: T.text }}
+            />
+            <YAxis
+              type="number"
+              dataKey="y"
+              domain={[yMin, yMax]}
+              tick={{ fill: T.text }}
+              label={{ value: "Lateral deviation (yds)", angle: -90, position: "insideLeft", fill: T.text }}
+            />
+            {presentClubs.map((club) => (
+              <Scatter
+                key={club}
+                data={byClub.get(club)!}
+                name={club}
+                fill={rgbaFromHex(colorFor(club), 0.9)}
+              />
             ))}
           </ScatterChart>
         </ResponsiveContainer>
       </div>
       {/* Legend outside chart */}
       <div className="flex flex-wrap gap-3 mt-3">
-        {series.map(s => (
-          <div key={s.club} className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: s.color }} />
-            <span style={{ color: T.text }}>{s.club}</span>
+        {presentClubs.map((club) => (
+          <div key={club} className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: colorFor(club) }} />
+            <span style={{ color: T.text }}>{club}</span>
           </div>
         ))}
       </div>
@@ -108,10 +166,12 @@ function RangeDispersion({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; 
   );
 }
 
-function GapChart({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: string[] }) {
+/* ---------- Gapping (LW → … → Driver) ---------- */
+
+function GapChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   const T = theme;
-  if (!shots.length) return <EmptyChart theme={T} />;
-  // average carry per club
+  if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
+
   const byClub = new Map<string, number[]>();
   shots.forEach(s => {
     if (s.Club && s.CarryDistance_yds != null) {
@@ -121,54 +181,60 @@ function GapChart({ theme, shots, clubs }:{ theme: Theme; shots: Shot[]; clubs: 
   });
   let rows = Array.from(byClub.entries()).map(([club, arr]) => ({
     club,
-    avg: arr.reduce((a,b)=>a+b,0)/arr.length
+    avg: arr.reduce((a, b) => a + b, 0) / arr.length
   }));
-  // order LW -> ... -> Driver
-  rows.sort((a,b)=> orderIndex(b.club) - orderIndex(a.club));
+
+  // LW -> ... -> Driver (orderIndex: higher = longer, so sort descending)
+  rows.sort((a, b) => orderIndex(b.club) - orderIndex(a.club));
 
   return (
     <div style={{ height: 320 }}>
       <ResponsiveContainer>
         <BarChart data={rows} margin={{ top: 10, right: 10, bottom: 30, left: 10 }}>
-          <CartesianGrid stroke={alpha(T.textDim,0.2)} />
+          <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
           <XAxis dataKey="club" tick={{ fill: T.text }} angle={-30} textAnchor="end" interval={0} />
           <YAxis tick={{ fill: T.text }} label={{ value: "Avg Carry (yds)", angle: -90, position: "insideLeft", fill: T.text }} />
           <Tooltip />
-          <Bar dataKey="avg" fill={alpha(T.brand,0.9)} />
+          <Bar dataKey="avg" fill={rgbaFromHex(T.brand, 0.9)} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
+/* ---------- Efficiency + Smash trendline ---------- */
+
 function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   const T = theme;
-  if (!shots.length) return <EmptyChart theme={T} />;
+  if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
+
   const points = shots.map(s => {
     if (s.ClubSpeed_mph != null && s.BallSpeed_mph != null) {
-      return { x: s.ClubSpeed_mph as number, y: s.BallSpeed_mph as number, club: s.Club };
+      return { x: s.ClubSpeed_mph as number, y: s.BallSpeed_mph as number };
     }
     return null;
-  }).filter(Boolean) as {x:number;y:number;club:string}[];
+  }).filter(Boolean) as { x: number; y: number }[];
 
-  if (!points.length) return <EmptyChart theme={T} />;
+  if (!points.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
-  const xs = points.map(p=>p.x);
-  const ys = points.map(p=>p.y);
-  const xmin = Math.floor(Math.min(...xs))-2, xmax = Math.ceil(Math.max(...xs))+2;
-  const smashAvg = ys.reduce((a,b)=>a+b,0)/xs.reduce((a,b)=>a+b,0); // ≈ average smash
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const xmin = Math.floor(Math.min(...xs)) - 2;
+  const xmax = Math.ceil(Math.max(...xs)) + 2;
 
+  // average smash ≈ avg( ballSpeed ) / avg( clubSpeed )
+  const smashAvg = (ys.reduce((a, b) => a + b, 0) / ys.length) / (xs.reduce((a, b) => a + b, 0) / xs.length);
   const seg = [{ x: xmin, y: smashAvg * xmin }, { x: xmax, y: smashAvg * xmax }];
 
   return (
     <div style={{ height: 320 }}>
       <ResponsiveContainer>
         <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
-          <CartesianGrid stroke={alpha(T.textDim,0.2)} />
-          <XAxis type="number" dataKey="x" name="Club Speed" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
-          <YAxis type="number" dataKey="y" name="Ball Speed" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
+          <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
+          <XAxis type="number" dataKey="x" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
+          <YAxis type="number" dataKey="y" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
           <Tooltip />
-          <Scatter data={points} fill={alpha(T.brand,0.9)} />
+          <Scatter data={points} fill={rgbaFromHex(T.brand, 0.9)} />
           <ReferenceLine segment={seg} ifOverflow="extendDomain" stroke={T.brand} strokeDasharray="6 4">
             <Label position="right" value={`Smash ~ ${smashAvg.toFixed(3)}`} fill={T.text} />
           </ReferenceLine>
@@ -178,39 +244,41 @@ function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   );
 }
 
+/* ---------- Averages table ---------- */
+
 function AveragesTable({ theme, rows }:{ theme: Theme; rows: ClubRow[] }) {
   const T = theme;
-  if (!rows.length) return <EmptyChart theme={T} />;
+  if (!rows.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
   return (
     <div className="overflow-auto">
-      <table className="min-w-full">
-        <thead>
-          <tr>
-            <Th theme={T}>Club</Th>
-            <Th theme={T}>Shots</Th>
-            <Th theme={T}>Avg Carry</Th>
-            <Th theme={T}>Avg Total</Th>
-            <Th theme={T}>Smash</Th>
-            <Th theme={T}>Spin</Th>
-            <Th theme={T}>Club Spd</Th>
-            <Th theme={T}>Ball Spd</Th>
-            <Th theme={T}>Launch</Th>
-            <Th theme={T}>F2P</Th>
+      <table className="min-w-full text-sm">
+        <thead style={{ background: rgbaFromHex(T.brand, 0.06) }}>
+          <tr style={{ color: T.text }}>
+            <th className="px-3 py-2 text-left">Club</th>
+            <th className="px-3 py-2 text-right">Shots</th>
+            <th className="px-3 py-2 text-right">Avg Carry</th>
+            <th className="px-3 py-2 text-right">Avg Total</th>
+            <th className="px-3 py-2 text-right">Smash</th>
+            <th className="px-3 py-2 text-right">Spin</th>
+            <th className="px-3 py-2 text-right">Club Spd</th>
+            <th className="px-3 py-2 text-right">Ball Spd</th>
+            <th className="px-3 py-2 text-right">Launch</th>
+            <th className="px-3 py-2 text-right">F2P</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(r=>(
-            <tr key={r.club}>
-              <Td>{r.club}</Td>
-              <Td>{r.count}</Td>
-              <Td>{fmtNum(r.avgCarry,1)}</Td>
-              <Td>{fmtNum(r.avgTotal,1)}</Td>
-              <Td>{fmtNum(r.avgSmash,3)}</Td>
-              <Td>{fmtNum(r.avgSpin,0)}</Td>
-              <Td>{fmtNum(r.avgCS,1)}</Td>
-              <Td>{fmtNum(r.avgBS,1)}</Td>
-              <Td>{fmtNum(r.avgLA,1)}</Td>
-              <Td>{fmtNum(r.avgF2P,2)}</Td>
+          {rows.map(r => (
+            <tr key={r.club} style={{ color: T.text }}>
+              <td className="px-3 py-2">{r.club}</td>
+              <td className="px-3 py-2 text-right">{r.count}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgCarry, 1)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgTotal, 1)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgSmash, 3)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgSpin, 0)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgCS, 1)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgBS, 1)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgLA, 1)}</td>
+              <td className="px-3 py-2 text-right">{fmt(r.avgF2P, 2)}</td>
             </tr>
           ))}
         </tbody>
@@ -218,6 +286,8 @@ function AveragesTable({ theme, rows }:{ theme: Theme; rows: ClubRow[] }) {
     </div>
   );
 }
+
+/* ---------- DashboardCards (launchspin removed) ---------- */
 
 type Props = {
   theme: Theme;
@@ -239,45 +309,53 @@ export default function DashboardCards(props: Props) {
   const { theme: T, cardOrder, onDragStart, onDragOver, onDrop,
     filteredOutliers, tableRows, clubs } = props;
 
-  // Cards map — launchspin removed. Unknown keys are ignored.
+  // Cards map — "launchspin" removed. Unknown keys are ignored.
   const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
-    kpis: { title: "KPIs", render: () => {
-      const pool = filteredOutliers;
-      if (!pool.length) return <EmptyChart theme={T} />;
-      const avg = (arr:number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
-      const vals = {
-        carry: avg(pool.map(s=>s.CarryDistance_yds!).filter(v=>v!=null as any)),
-        total: avg(pool.map(s=>s.TotalDistance_yds!).filter(v=>v!=null as any)),
-        smash: avg(pool.map(s=>s.SmashFactor!).filter(v=>v!=null as any)),
-        spin:  avg(pool.map(s=>s.SpinRate_rpm!).filter(v=>v!=null as any)),
-        cs:    avg(pool.map(s=>s.ClubSpeed_mph!).filter(v=>v!=null as any)),
-        bs:    avg(pool.map(s=>s.BallSpeed_mph!).filter(v=>v!=null as any)),
-      };
-      return (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div><div className="text-xs" style={{color:T.textDim}}>Avg Carry</div><div className="text-lg font-semibold">{fmtNum(vals.carry,1)} yds</div></div>
-          <div><div className="text-xs" style={{color:T.textDim}}>Avg Total</div><div className="text-lg font-semibold">{fmtNum(vals.total,1)} yds</div></div>
-          <div><div className="text-xs" style={{color:T.textDim}}>Avg Smash</div><div className="text-lg font-semibold">{fmtNum(vals.smash,3)}</div></div>
-          <div><div className="text-xs" style={{color:T.textDim}}>Avg Spin</div><div className="text-lg font-semibold">{fmtNum(vals.spin,0)} rpm</div></div>
-          <div><div className="text-xs" style={{color:T.textDim}}>Club Speed</div><div className="text-lg font-semibold">{fmtNum(vals.cs,1)} mph</div></div>
-          <div><div className="text-xs" style={{color:T.textDim}}>Ball Speed</div><div className="text-lg font-semibold">{fmtNum(vals.bs,1)} mph</div></div>
-        </div>
-      );
-    }},
-    shape: { title: "Shot Shape Distribution", render: () =>
-      <ShotShapeCard theme={T} shots={filteredOutliers} />
+    kpis: {
+      title: "KPIs",
+      render: () => {
+        const pool = filteredOutliers;
+        if (!pool.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
+        const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+        const vals = {
+          carry: avg(pool.map(s => s.CarryDistance_yds!).filter(v => v != null as any)),
+          total: avg(pool.map(s => s.TotalDistance_yds!).filter(v => v != null as any)),
+          smash: avg(pool.map(s => s.SmashFactor!).filter(v => v != null as any)),
+          spin:  avg(pool.map(s => s.SpinRate_rpm!).filter(v => v != null as any)),
+          cs:    avg(pool.map(s => s.ClubSpeed_mph!).filter(v => v != null as any)),
+          bs:    avg(pool.map(s => s.BallSpeed_mph!).filter(v => v != null as any)),
+        };
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Carry</div><div className="text-lg font-semibold">{fmt(vals.carry, 1)} yds</div></div>
+            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Total</div><div className="text-lg font-semibold">{fmt(vals.total, 1)} yds</div></div>
+            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Smash</div><div className="text-lg font-semibold">{fmt(vals.smash, 3)}</div></div>
+            <div><div className="text-xs" style={{ color: T.textDim }}>Avg Spin</div><div className="text-lg font-semibold">{fmt(vals.spin, 0)} rpm</div></div>
+            <div><div className="text-xs" style={{ color: T.textDim }}>Club Speed</div><div className="text-lg font-semibold">{fmt(vals.cs, 1)} mph</div></div>
+            <div><div className="text-xs" style={{ color: T.textDim }}>Ball Speed</div><div className="text-lg font-semibold">{fmt(vals.bs, 1)} mph</div></div>
+          </div>
+        );
+      }
     },
-    dispersion: { title: "Range Dispersion (Carry vs Lateral)", render: () =>
-      <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} />
+    shape: {
+      title: "Shot Shape Distribution",
+      render: () => <ShotShapeCard theme={T} shots={filteredOutliers} />
     },
-    gap: { title: "Gapping (Avg Carry by Club)", render: () =>
-      <GapChart theme={T} shots={filteredOutliers} clubs={clubs} />
+    dispersion: {
+      title: "Range Dispersion (Carry vs Lateral)",
+      render: () => <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} />
     },
-    eff: { title: "Efficiency (Ball vs Club Speed) + Smash Trend", render: () =>
-      <EfficiencyChart theme={T} shots={filteredOutliers} />
+    gap: {
+      title: "Gapping (Avg Carry by Club)",
+      render: () => <GapChart theme={T} shots={filteredOutliers} />
     },
-    table: { title: "Club Averages", render: () =>
-      <AveragesTable theme={T} rows={tableRows} />
+    eff: {
+      title: "Efficiency (Ball vs Club Speed) + Smash Trend",
+      render: () => <EfficiencyChart theme={T} shots={filteredOutliers} />
+    },
+    table: {
+      title: "Club Averages",
+      render: () => <AveragesTable theme={T} rows={tableRows} />
     },
   };
 
@@ -288,7 +366,14 @@ export default function DashboardCards(props: Props) {
       {keys.map((key) => {
         const card = CARDS[key];
         return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)} style={{ cursor: "grab" }}>
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+          >
             <Card theme={T} title={card.title} dragHandle>{card.render()}</Card>
           </div>
         );
