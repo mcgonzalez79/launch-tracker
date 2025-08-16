@@ -84,14 +84,22 @@ const FiltersPanel = forwardRef<HTMLDivElement, Props>(function FiltersPanel(pro
               const active = selectedClubs.includes(opt);
               const color = colorForClub(opt, clubs, clubPalette);
               return (
-                <label key={opt} className="flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer"
-                       style={{ borderColor: active ? color : T.border, background: active ? (T===undefined ? "#FAFAFA" : T.panel) : T.panel, color: T.text }}>
+                <label
+                  key={opt}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg border cursor-pointer"
+                  role="button"
+                  aria-pressed={active}
+                  style={{ borderColor: active ? color : T.border, background: T.panel, color: T.text, outline: active ? `2px solid ${color}` : undefined }}
+                >
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 inline-block rounded-full" style={{ background: color }} />
                     <span className="text-sm">{opt}</span>
                   </div>
-                  <input type="checkbox" checked={active}
-                         onChange={() => setSelectedClubs(active ? selectedClubs.filter(s => s !== opt) : [...selectedClubs, opt])} />
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={() => setSelectedClubs(active ? selectedClubs.filter(s => s !== opt) : [...selectedClubs, opt])}
+                  />
                 </label>
               );
             })}
@@ -123,7 +131,7 @@ const FiltersPanel = forwardRef<HTMLDivElement, Props>(function FiltersPanel(pro
 
         {/* Outliers + Dates */}
         <div className="mb-4 flex items-center justify-between">
-          <label className="text-sm font-medium" style={{ color: T.text }}>Exclude outliers (2.5σ)</label>
+          <label className="text-sm font-medium" style={{ color: T.text }}>Exclude outliers (IQR per club)</label>
           <input type="checkbox" checked={excludeOutliers} onChange={(e)=>setExcludeOutliers(e.target.checked)} />
         </div>
         <div className="mb-6">
@@ -138,40 +146,23 @@ const FiltersPanel = forwardRef<HTMLDivElement, Props>(function FiltersPanel(pro
             {[
               { label: "Last 7d", days: 7 },
               { label: "Last 30d", days: 30 },
-              { label: "Last 90d", days: 90 },
-            ].map(({label,days})=>(
-              <button key={label} className="px-2 py-1 text-xs rounded-md border"
-                      style={{ borderColor: T.border, color: T.brand, background: T.panel }}
-                      onClick={()=>{
-                        const to=new Date(); const from=new Date(); from.setDate(to.getDate()-days+1);
-                        setDateFrom(from.toISOString().slice(0,10)); setDateTo(to.toISOString().slice(0,10));
-                      }}>
-                {label}
-              </button>
+              { label: "YTD", days: 366 },
+            ].map(({label, days}) => (
+              <button key={label} onClick={() => {
+                const end = new Date(); const start = new Date(); start.setDate(end.getDate() - days);
+                const fmt = (d: Date) => d.toISOString().slice(0,10);
+                setDateFrom(fmt(start)); setDateTo(fmt(end));
+              }} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>{label}</button>
             ))}
-            <button className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: T.border, color: T.text, background: T.panel }}
-                    onClick={()=>{setDateFrom(""); setDateTo("");}}>Reset</button>
           </div>
         </div>
 
-        {/* Sample / Export */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={onLoadSample} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>Load sample</button>
-          <button onClick={onExportCSV} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.brand, background: T.panel }}>Export CSV</button>
-        </div>
-
-        {/* Print Club Averages */}
-        <div className="mb-4">
-          <button onClick={onPrintClubAverages} className="w-full px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.text, background: T.panel }}>
-            Print Club Averages
-          </button>
-        </div>
-
-        {/* Delete all */}
-        <div className="pt-4 border-t" style={{ borderColor: T.border }}>
-          <button className="px-3 py-2 rounded-lg text-sm border w-full" style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }} onClick={onDeleteAll}>
-            Delete all data
-          </button>
+        {/* Actions */}
+        <div className="mb-6 grid grid-cols-2 gap-2">
+          <button className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={onLoadSample}>Load sample</button>
+          <button className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={onExportCSV}>Export CSV</button>
+          <button className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: T.text, background: T.panel }} onClick={onPrintClubAverages}>Print Averages</button>
+          <button className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: T.border, color: "#B91C1C", background: T.panel }} onClick={onDeleteAll}>Delete All</button>
         </div>
       </Card>
     </div>
