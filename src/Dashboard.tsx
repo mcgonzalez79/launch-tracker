@@ -29,6 +29,12 @@ const CLUB_PALETTE = [
   "#22C55E", "#3B82F6"
 ];
 
+// Shared color picker (consistent across charts)
+function colorForClub(club: string) {
+  const idx = Math.abs(orderIndex(club)) % CLUB_PALETTE.length;
+  return CLUB_PALETTE[idx];
+}
+
 /* ---------- Shot Shape (adds Hook/Slice) ---------- */
 
 type ShapeBucket = { n: number; pct: number };
@@ -117,10 +123,6 @@ function RangeDispersion({ theme, shots, clubs }:{
   });
 
   const presentClubs = clubs.filter(c => byClub.has(c));
-  const colorFor = (club: string) => {
-    const idx = Math.abs(orderIndex(club)) % CLUB_PALETTE.length;
-    return CLUB_PALETTE[idx];
-  };
 
   return (
     <div>
@@ -147,7 +149,7 @@ function RangeDispersion({ theme, shots, clubs }:{
                 key={club}
                 data={byClub.get(club)!}
                 name={club}
-                fill={rgbaFromHex(colorFor(club), 0.9)}
+                fill={rgbaFromHex(colorForClub(club), 0.9)}
               />
             ))}
           </ScatterChart>
@@ -157,7 +159,7 @@ function RangeDispersion({ theme, shots, clubs }:{
       <div className="flex flex-wrap gap-3 mt-3">
         {presentClubs.map((club) => (
           <div key={club} className="flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: colorFor(club) }} />
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: colorForClub(club) }} />
             <span style={{ color: T.text }}>{club}</span>
           </div>
         ))}
@@ -202,18 +204,19 @@ function GapChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   );
 }
 
-/* ---------- Efficiency + Smash trendline ---------- */
+/* ---------- Efficiency + Smash trendline (now per-club colors) ---------- */
 
 function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   const T = theme;
   if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
+  // keep club info for coloring
   const points = shots.map(s => {
     if (s.ClubSpeed_mph != null && s.BallSpeed_mph != null) {
-      return { x: s.ClubSpeed_mph as number, y: s.BallSpeed_mph as number };
+      return { x: s.ClubSpeed_mph as number, y: s.BallSpeed_mph as number, club: s.Club };
     }
     return null;
-  }).filter(Boolean) as { x: number; y: number }[];
+  }).filter(Boolean) as { x: number; y: number; club: string }[];
 
   if (!points.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
@@ -226,20 +229,46 @@ function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   const smashAvg = (ys.reduce((a, b) => a + b, 0) / ys.length) / (xs.reduce((a, b) => a + b, 0) / xs.length);
   const seg = [{ x: xmin, y: smashAvg * xmin }, { x: xmax, y: smashAvg * xmax }];
 
+  // group by club for series colors
+  const byClub = new Map<string, { x: number; y: number }[]>();
+  points.forEach(p => {
+    if (!byClub.has(p.club)) byClub.set(p.club, []);
+    byClub.get(p.club)!.push({ x: p.x, y: p.y });
+  });
+  const presentClubs = Array.from(byClub.keys());
+
   return (
-    <div style={{ height: 320 }}>
-      <ResponsiveContainer>
-        <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
-          <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
-          <XAxis type="number" dataKey="x" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
-          <YAxis type="number" dataKey="y" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
-          <Tooltip />
-          <Scatter data={points} fill={rgbaFromHex(T.brand, 0.9)} />
-          <ReferenceLine segment={seg} ifOverflow="extendDomain" stroke={T.brand} strokeDasharray="6 4">
-            <Label position="right" value={`Smash ~ ${smashAvg.toFixed(3)}`} fill={T.text} />
-          </ReferenceLine>
-        </ScatterChart>
-      </ResponsiveContainer>
+    <div>
+      <div style={{ height: 320 }}>
+        <ResponsiveContainer>
+          <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+            <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
+            <XAxis type="number" dataKey="x" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
+            <YAxis type="number" dataKey="y" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
+            <Tooltip />
+            {presentClubs.map((club) => (
+              <Scatter
+                key={club}
+                data={byClub.get(club)!}
+                name={club}
+                fill={rgbaFromHex(colorForClub(club), 0.9)}
+              />
+            ))}
+            <ReferenceLine segment={seg} ifOverflow="extendDomain" stroke={T.brand} strokeDasharray="6 4">
+              <Label position="right" value={`Smash ~ ${smashAvg.toFixed(3)}`} fill={T.text} />
+            </ReferenceLine>
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      {/* optional legend below for clarity */}
+      <div className="flex flex-wrap gap-3 mt-3">
+        {presentClubs.map((club) => (
+          <div key={club} className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: colorForClub(club) }} />
+            <span style={{ color: T.text }}>{club}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -340,7 +369,7 @@ export default function DashboardCards(props: Props) {
 
   const kp = computeKpis(filteredOutliers);
 
-  // Cards map — "kpis" is now a single card containing a one-row grid of KPI tiles.
+  // Cards map — "kpis" is a single card containing a one-row grid of KPI tiles.
   const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
     kpis: {
       title: "Key Performance Indicators",
