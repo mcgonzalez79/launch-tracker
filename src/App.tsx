@@ -399,7 +399,7 @@ export default function App() {
       </div>
 
       {/* Main (now width-constrained) */}
-      <div className="max-w-7xl mx-auto w-full px-4 py-4">
+      <div className="max-w-screen-xl mx-auto w-full px-4 py-4">
         <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6">
           {/* Left / Filters */}
           <div ref={filtersRef}>
