@@ -16,6 +16,27 @@ export function Card({ theme, title, children, dragHandle }:{ theme: Theme; titl
   );
 }
 
+// src/components/UI.tsx
+export function HandleDots({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`absolute right-2 top-2 inline-flex h-4 w-4 cursor-grab select-none opacity-60 hover:opacity-90 ${className}`}
+      aria-hidden="true"
+      title="Drag"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+        <circle cx="6" cy="7" r="1.5" />
+        <circle cx="6" cy="12" r="1.5" />
+        <circle cx="6" cy="17" r="1.5" />
+        <circle cx="12" cy="7" r="1.5" />
+        <circle cx="12" cy="12" r="1.5" />
+        <circle cx="12" cy="17" r="1.5" />
+      </svg>
+    </span>
+  );
+}
+
+
 export function KPI({ theme, label, value, color, tooltip }:{ theme: Theme; label: string; value: string; color: string; tooltip?: string }) {
   return (
     <div className="rounded-2xl p-3 text-sm" style={{ background: theme.panel, border: `1px solid ${theme.kpiBorder}`, color: theme.text }}>
