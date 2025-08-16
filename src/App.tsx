@@ -90,8 +90,7 @@ export default function App() {
   /* ===== Import processing (XLSX/CSV + dedupe) ===== */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
-    const Sm = coalesceSmash(s2);
-    const F2P = coalesceFaceToPath(s2);
+    const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
     if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
     if (F2P !== undefined) s2.FaceToPath_deg = F2P;
     return s2;
@@ -107,7 +106,7 @@ export default function App() {
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
-       const nextRow   = rowsRaw[best.idx + 1] || [];
+    const nextRow   = rowsRaw[best.idx + 1] || [];
     const effectiveHeader = best.usedTwoRows ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" ")) : headerRow;
 
     const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
@@ -158,7 +157,7 @@ export default function App() {
     for (const s of finalShots) { const key = fpOf(s); if (existing.has(key) || seen.has(key)) { dupCount++; continue; } seen.add(key); deduped.push(s); }
     if (deduped.length) setShots(prev => [...prev, ...deduped]);
 
-    pushMsg(`${usedFallback ? "Imported via fallback" : "Imported"} ${deduped.length}/${finalShots.length} rows from "${filename}". ${dupCount} duplicates skipped.`, deduped.length ? "success" : "warn");
+    pushMsg(`${usedFallback ? "Imported via fallback" : "Imported"} ${deduped length}/${finalShots.length} rows from "${filename}". ${dupCount} duplicates skipped.`, deduped.length ? "success" : "warn");
   }
   const onFile = async (file: File) => {
     try {
@@ -337,7 +336,7 @@ export default function App() {
   };
 
   // Export actions
-  const onExportCSV = () => exportCSV(shots); // single-arg util
+  const onExportCSV = () => exportCSV(shots);
 
   // Print club averages
   const onPrintClubAverages = () => {
@@ -369,7 +368,6 @@ export default function App() {
     const avgCS = grab(s => s.ClubSpeed_mph); const avgBS = grab(s => s.BallSpeed_mph);
     const meanOr0 = (arr: number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 
-    // Shot shape
     const draw = pool.filter(s => (s.SpinAxis_deg ?? 0) < -2).length;
     const fade = pool.filter(s => (s.SpinAxis_deg ?? 0) >  2).length;
     const straight = pool.length - draw - fade;
@@ -384,22 +382,24 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100%", background: T.white }}>
-      {/* Top bar */}
-      <div className="px-4 py-3 flex items-center justify-between" style={{ background: T.brand, color: "#fff" }}>
-        <div className="flex items-center gap-2">
-          <div className="text-lg font-semibold">Launch Tracker</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <TopTab theme={T} label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")} />
-          <TopTab theme={T} label="Insights"  active={view==="insights"}  onClick={()=>setView("insights")} />
-          <TopTab theme={T} label="Journal"   active={view==="journal"}   onClick={()=>setView("journal")} />
-          <button onClick={()=>setDark(v=>!v)} className="ml-2 px-2 py-1 rounded-md border" style={{ borderColor: "#ffffff55", background: "#ffffff22", color: "#fff" }}>
-            {dark ? <IconSun /> : <IconMoon />}
-          </button>
+      {/* Top bar (constrained width) */}
+      <div style={{ background: T.brand, color: "#fff" }}>
+        <div className="max-w-[1200px] mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold">Launch Tracker</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <TopTab theme={T} label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")} />
+            <TopTab theme={T} label="Insights"  active={view==="insights"}  onClick={()=>setView("insights")} />
+            <TopTab theme={T} label="Journal"   active={view==="journal"}   onClick={()=>setView("journal")} />
+            <button onClick={()=>setDark(v=>!v)} className="ml-2 px-2 py-1 rounded-md border" style={{ borderColor: "#ffffff55", background: "#ffffff22", color: "#fff" }}>
+              {dark ? <IconSun /> : <IconMoon />}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main (width constrained) */}
+      {/* Main (width constrained to match header) */}
       <div className="mx-auto w-full px-4 py-4 max-w-[1200px]">
         <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6">
           {/* Left / Filters */}
