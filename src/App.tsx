@@ -35,7 +35,7 @@ export default function App() {
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("launch-tracker:card-order") || "[]"); } catch { return []; }
   });
-  useEffect(() => { if(!cardOrder.length){ setCardOrder(["kpis","shape","dispersion","gap","eff","launchspin","table"]); } }, []);
+  useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"]); } }, []);
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights order (merge-safe)
@@ -61,8 +61,12 @@ export default function App() {
   const filtersRef = useRef<HTMLDivElement>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(420);
   useEffect(() => {
-    const el = filtersRef.current; if (!el) return; const update = () => setFiltersHeight(el.getBoundingClientRect().height || 420);
-    const ro = new ResizeObserver(update); ro.observe(el); window.addEventListener("resize", update); update();
+    const el = filtersRef.current; if (!el) return;
+    const update = () => setFiltersHeight(el.getBoundingClientRect().height || 420);
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    update();
     return () => { ro.disconnect(); window.removeEventListener("resize", update); };
   }, []);
 
@@ -72,13 +76,14 @@ export default function App() {
 
   // Messages with auto-dismiss
   const pushMsg = (text: string, type: Msg["type"] = "info") => {
-    const id = Date.now() + Math.random(); setMsgs((prev) => [...prev, { id, text, type }]);
+    const id = Date.now() + Math.random();
+    setMsgs((prev) => [...prev, { id, text, type }]);
     window.setTimeout(() => setMsgs((prev) => prev.filter(m => m.id !== id)), 15000);
   };
   const closeMsg = (id: number) => setMsgs((prev) => prev.filter(m => m.id !== id));
 
   // Clubs & sessions
-  const clubs = useMemo(() => Array.from(new Set(shots.map(s => s.Club))).sort((a,b)=>orderIndex(a)-orderIndex(b)), [shots]);
+  const clubs = useMemo(() => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)), [shots]);
   const sessions = useMemo(() => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()], [shots]);
 
   const carryBounds = useMemo(() => {
@@ -90,32 +95,41 @@ export default function App() {
   /* ===== Import processing (XLSX/CSV + dedupe) ===== */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
-    const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
+    const Sm = coalesceSmash(s2);
+    const F2P = coalesceFaceToPath(s2);
     if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
     if (F2P !== undefined) s2.FaceToPath_deg = F2P;
     return s2;
   }
+
   function processWorkbook(wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) {
-    const firstSheet = wb.SheetNames.find(n => {
-      const ws = wb.Sheets[n]; const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-      return rr && rr.flat().some(v => v !== null && v !== "");
-    }) || wb.SheetNames[0];
+    const firstSheet =
+      wb.SheetNames.find(n => {
+        const ws = wb.Sheets[n];
+        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+        return rr && rr.flat().some(v => v !== null && v !== "");
+      }) || wb.SheetNames[0];
+
     const ws = wb.Sheets[firstSheet];
     const rowsRaw: any[][] = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, header: 1 }) as any[][];
     if (!rowsRaw.length) { pushMsg("The sheet seems empty.", "warn"); return; }
 
     const best = findBestHeader(rowsRaw);
     const headerRow = rowsRaw[best.idx] || [];
-    const nextRow   = rowsRaw[best.idx + 1] || [];
-    const effectiveHeader = best.usedTwoRows ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" ")) : headerRow;
+    const nextRow = rowsRaw[best.idx + 1] || [];
+    const effectiveHeader = best.usedTwoRows
+      ? headerRow.map((v, i) => [v, nextRow[i]].filter(Boolean).join(" "))
+      : headerRow;
 
     const hdrNorms = effectiveHeader.map((h) => normalizeHeader(String(h ?? "")));
     const normIndex: (keyof Shot | undefined)[] = hdrNorms.map((key) => headerMap[key]);
+
+    // Try to locate a "Club" column even with odd headers
     let clubIdx = normIndex.findIndex((k) => k === "Club");
     if (clubIdx === -1) {
       const clubHeaderSyns = ["club", "club name", "club type", "club model", "club used", "club #", "club id"];
-      clubIdx = hdrNorms.findIndex((h) => clubHeaderSyns.includes(h));
-      if (clubIdx !== -1) normIndex[clubIdx] = "Club";
+      const guess = hdrNorms.findIndex((h) => clubHeaderSyns.includes(h));
+      if (guess !== -1) { clubIdx = guess; normIndex[clubIdx] = "Club"; }
     }
 
     const startRow = best.idx + (best.usedTwoRows ? 2 : 1);
@@ -134,16 +148,23 @@ export default function App() {
         Object.keys(obj).forEach((k) => {
           const mk = k as keyof Shot; const v = obj[mk];
           if (mk === "Timestamp") shot[mk] = isoDate(v);
-          else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") { const val = String(v ?? "").trim(); if (val) shot[mk] = val; }
-          else if (mk === "Swings") { const val = n(v); if (val !== undefined) shot[mk] = Math.round(val); }
-          else { const val = n(v); if (val !== undefined) shot[mk] = val; }
+          else if (mk === "SpinRateType" || mk === "Club" || mk === "SessionId") {
+            const val = String(v ?? "").trim(); if (val) shot[mk] = val;
+          } else if (mk === "Swings") {
+            const val = n(v); if (val !== undefined) shot[mk] = Math.round(val);
+          } else {
+            const val = n(v); if (val !== undefined) shot[mk] = val;
+          }
         });
         if (!shot.SessionId) shot.SessionId = fallbackId;
         mapped.push(applyDerived(shot as Shot));
       }
     }
 
-    let finalShots: Shot[] = mapped; let usedFallback = false;
+    let finalShots: Shot[] = mapped;
+    let usedFallback = false;
+
+    // Fallback parser if we didn't map anything from the sheet
     if (textFromCSV && mapped.length === 0) {
       const weird = parseWeirdLaunchCSV(textFromCSV);
       if (weird) {
@@ -152,13 +173,24 @@ export default function App() {
       }
     }
 
+    // De-dupe against existing + within-import
     const existing = new Set(shots.map(fpOf));
-    const seen = new Set<string>(); const deduped: Shot[] = []; let dupCount = 0;
-    for (const s of finalShots) { const key = fpOf(s); if (existing.has(key) || seen.has(key)) { dupCount++; continue; } seen.add(key); deduped.push(s); }
+    const seen = new Set<string>();
+    const deduped: Shot[] = [];
+    let dupCount = 0;
+    for (const s of finalShots) {
+      const key = fpOf(s);
+      if (existing.has(key) || seen.has(key)) { dupCount++; continue; }
+      seen.add(key); deduped.push(s);
+    }
     if (deduped.length) setShots(prev => [...prev, ...deduped]);
 
-    pushMsg(`${usedFallback ? "Imported via fallback" : "Imported"} ${deduped length}/${finalShots.length} rows from "${filename}". ${dupCount} duplicates skipped.`, deduped.length ? "success" : "warn");
+    pushMsg(
+      `${usedFallback ? "Imported via fallback" : "Imported"} ${deduped.length}/${finalShots.length} rows from "${filename}". ${dupCount} duplicates skipped.`,
+      deduped.length ? "success" : "warn"
+    );
   }
+
   const onFile = async (file: File) => {
     try {
       const isCSV = /\.csv$/i.test(file.name) || file.type === "text/csv" || file.type === "application/vnd.ms-excel";
@@ -174,7 +206,9 @@ export default function App() {
         const wb = XLSX.read(buf, { type: "array" });
         processWorkbook(wb, null, file.name);
       }
-    } catch { pushMsg("Sorry, I couldn't read that file. Is it CSV/XLSX?", "error"); }
+    } catch {
+      pushMsg("Sorry, I couldn't read that file. Is it CSV/XLSX?", "error");
+    }
   };
 
   const loadSample = async () => {
@@ -204,9 +238,11 @@ export default function App() {
     if (sessionFilter !== "ALL") pool = pool.filter(s => (s.SessionId ?? "Unknown Session") === sessionFilter);
     if (!skipClub) pool = selectedClubs.length ? pool.filter(s => selectedClubs.includes(s.Club)) : pool;
     if (dateFrom || dateTo) {
-      const from = dateFrom ? new Date(dateFrom) : null; const to = dateTo ? new Date(dateTo) : null; if (to) to.setDate(to.getDate() + 1);
+      const from = dateFrom ? new Date(dateFrom) : null;
+      const to = dateTo ? new Date(dateTo) : null; if (to) to.setDate(to.getDate() + 1);
       pool = pool.filter(s => {
-        if (!s.Timestamp) return true; const d = new Date(s.Timestamp); if (isNaN(d.getTime())) return true;
+        if (!s.Timestamp) return true;
+        const d = new Date(s.Timestamp); if (isNaN(d.getTime())) return true;
         if (from && d < from) return false; if (to && d >= to) return false; return true;
       });
     }
@@ -233,13 +269,13 @@ export default function App() {
 
     function iqrFence(vals: number[]) {
       if (vals.length < 5) return { lo: -Infinity, hi: Infinity };
-      const a = vals.slice().sort((x,y)=>x-y);
-      const q = (p:number) => {
+      const a = vals.slice().sort((x, y) => x - y);
+      const q = (p: number) => {
         const pos = (a.length - 1) * p, b = Math.floor(pos), r = pos - b;
-        return a[b + 1] !== undefined ? a[b] + r * (a[b+1] - a[b]) : a[b];
+        return a[b + 1] !== undefined ? a[b] + r * (a[b + 1] - a[b]) : a[b];
       };
       const q1 = q(0.25), q3 = q(0.75), iqr = q3 - q1;
-      return { lo: q1 - 1.5*iqr, hi: q3 + 1.5*iqr };
+      return { lo: q1 - 1.5 * iqr, hi: q3 + 1.5 * iqr };
     }
 
     const keep: Shot[] = [];
@@ -264,11 +300,12 @@ export default function App() {
 
   /* Club Averages table rows (for Insights & Dashboard) */
   const tableRows: ClubRow[] = useMemo(() => {
-    const byClub = new Map<string, Shot[]>(); filteredOutliers.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
+    const byClub = new Map<string, Shot[]>();
+    filteredOutliers.forEach(s => { if (!byClub.has(s.Club)) byClub.set(s.Club, []); byClub.get(s.Club)!.push(s); });
     const rows: ClubRow[] = [];
     for (const [club, arr] of byClub.entries()) {
       const grab = (sel: (s: Shot) => number | undefined) => arr.map(sel).filter((x): x is number => x !== undefined);
-      const avg = (vals: number[]) => (vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0);
+      const avg = (vals: number[]) => (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
       const f2pSel = (s: Shot) => (s.ClubFace_deg != null && s.ClubPath_deg != null) ? (s.ClubFace_deg - s.ClubPath_deg) : undefined;
       rows.push({
         club,
@@ -276,14 +313,14 @@ export default function App() {
         avgCarry: avg(grab(s => s.CarryDistance_yds)),
         avgTotal: avg(grab(s => s.TotalDistance_yds)),
         avgSmash: avg(grab(s => s.SmashFactor)),
-        avgSpin:  avg(grab(s => s.SpinRate_rpm)),
-        avgCS:    avg(grab(s => s.ClubSpeed_mph)),
-        avgBS:    avg(grab(s => s.BallSpeed_mph)),
-        avgLA:    avg(grab(s => s.LaunchAngle_deg)),
-        avgF2P:   avg(grab(f2pSel)),
+        avgSpin: avg(grab(s => s.SpinRate_rpm)),
+        avgCS: avg(grab(s => s.ClubSpeed_mph)),
+        avgBS: avg(grab(s => s.BallSpeed_mph)),
+        avgLA: avg(grab(s => s.LaunchAngle_deg)),
+        avgF2P: avg(grab(f2pSel)),
       });
     }
-    return rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
+    return rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
   }, [filteredOutliers]);
 
   /* Delete actions */
@@ -336,7 +373,7 @@ export default function App() {
   };
 
   // Export actions
-  const onExportCSV = () => exportCSV(shots);
+  const onExportCSV = () => exportCSV(shots); // single-arg util
 
   // Print club averages
   const onPrintClubAverages = () => {
@@ -356,7 +393,8 @@ export default function App() {
     win.document.write(`<html><head><title>Club Averages</title><style>${css}</style></head><body><h3>Club Averages</h3>`);
     win.document.write("<table><thead><tr>" + Object.keys(rows[0] || {}).map(k => `<th>${k}</th>`).join("") + "</tr></thead><tbody>");
     rows.forEach(r => win.document!.write("<tr>" + Object.values(r).map(v => `<td>${v}</td>`).join("") + "</tr>"));
-    win.document.write("</tbody></table></body></html>"); win.document.close();
+    win.document.write("</tbody></table></body></html>");
+    win.document.close();
   };
 
   // KPIs
@@ -366,12 +404,13 @@ export default function App() {
     const avgCarry = grab(s => s.CarryDistance_yds); const avgTotal = grab(s => s.TotalDistance_yds);
     const avgSmash = grab(s => s.SmashFactor); const avgSpin = grab(s => s.SpinRate_rpm);
     const avgCS = grab(s => s.ClubSpeed_mph); const avgBS = grab(s => s.BallSpeed_mph);
-    const meanOr0 = (arr: number[]) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+    const meanOr0 = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
+    // Shot shape
     const draw = pool.filter(s => (s.SpinAxis_deg ?? 0) < -2).length;
-    const fade = pool.filter(s => (s.SpinAxis_deg ?? 0) >  2).length;
+    const fade = pool.filter(s => (s.SpinAxis_deg ?? 0) > 2).length;
     const straight = pool.length - draw - fade;
-    const pct = (n:number) => pool.length ? (100*n/pool.length) : 0;
+    const pct = (n: number) => pool.length ? (100 * n / pool.length) : 0;
 
     return {
       avgCarry: meanOr0(avgCarry), avgTotal: meanOr0(avgTotal), avgSmash: meanOr0(avgSmash),
@@ -389,10 +428,15 @@ export default function App() {
             <div className="text-lg font-semibold">Launch Tracker</div>
           </div>
           <div className="flex items-center gap-2">
-            <TopTab theme={T} label="Dashboard" active={view==="dashboard"} onClick={()=>setView("dashboard")} />
-            <TopTab theme={T} label="Insights"  active={view==="insights"}  onClick={()=>setView("insights")} />
-            <TopTab theme={T} label="Journal"   active={view==="journal"}   onClick={()=>setView("journal")} />
-            <button onClick={()=>setDark(v=>!v)} className="ml-2 px-2 py-1 rounded-md border" style={{ borderColor: "#ffffff55", background: "#ffffff22", color: "#fff" }}>
+            <TopTab theme={T} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
+            <TopTab theme={T} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
+            <TopTab theme={T} label="Journal" active={view === "journal"} onClick={() => setView("journal")} />
+            <button
+              onClick={() => setDark(v => !v)}
+              className="ml-2 px-2 py-1 rounded-md border"
+              style={{ borderColor: "#ffffff55", background: "#ffffff22", color: "#fff" }}
+              aria-label="Toggle dark mode"
+            >
               {dark ? <IconSun /> : <IconMoon />}
             </button>
           </div>
