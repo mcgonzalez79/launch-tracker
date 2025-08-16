@@ -398,80 +398,82 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main */}
-      <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6 p-4">
-        {/* Left / Filters */}
-        <div ref={filtersRef}>
-          <FiltersPanel
-            theme={T}
-            shots={shots}
-            sessions={sessions}
-            clubs={clubs}
-            selectedClubs={selectedClubs}
-            setSelectedClubs={setSelectedClubs}
-            sessionFilter={sessionFilter}
-            setSessionFilter={setSessionFilter}
-            excludeOutliers={excludeOutliers}
-            setExcludeOutliers={setExcludeOutliers}
-            dateFrom={dateFrom} dateTo={dateTo}
-            setDateFrom={setDateFrom} setDateTo={setDateTo}
-            carryMin={carryMin} carryMax={carryMax}
-            setCarryMin={setCarryMin} setCarryMax={setCarryMax}
-            carryBounds={carryBounds}
-            onImportFile={onFile}
-            onLoadSample={loadSample}
-            onExportCSV={onExportCSV}
-            onPrintClubAverages={onPrintClubAverages}
-            onDeleteSession={deleteSession}
-            onDeleteAll={deleteAll}
-          />
-        </div>
-
-        {/* Right / View */}
-        <div className="grid grid-cols-1 gap-6">
-          {view === "dashboard" && (
-            <DashboardCards
+      {/* Main (now width-constrained) */}
+      <div className="max-w-7xl mx-auto w-full px-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6">
+          {/* Left / Filters */}
+          <div ref={filtersRef}>
+            <FiltersPanel
               theme={T}
-              cardOrder={cardOrder}
-              setCardOrder={setCardOrder}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDrop={onDrop}
-              hasData={hasData}
-              kpis={kpis}
-              filteredOutliers={filteredOutliers}
-              filtered={filtered}
               shots={shots}
-              tableRows={tableRows}
+              sessions={sessions}
               clubs={clubs}
+              selectedClubs={selectedClubs}
+              setSelectedClubs={setSelectedClubs}
+              sessionFilter={sessionFilter}
+              setSessionFilter={setSessionFilter}
+              excludeOutliers={excludeOutliers}
+              setExcludeOutliers={setExcludeOutliers}
+              dateFrom={dateFrom} dateTo={dateTo}
+              setDateFrom={setDateFrom} setDateTo={setDateTo}
+              carryMin={carryMin} carryMax={carryMax}
+              setCarryMin={setCarryMin} setCarryMax={setCarryMax}
+              carryBounds={carryBounds}
+              onImportFile={onFile}
+              onLoadSample={loadSample}
+              onExportCSV={onExportCSV}
+              onPrintClubAverages={onPrintClubAverages}
+              onDeleteSession={deleteSession}
+              onDeleteAll={deleteAll}
             />
-          )}
+          </div>
 
-          {view === "insights" && (
-            <InsightsView
-              theme={T}
-              tableRows={tableRows}
-              filteredOutliers={filteredOutliers}
-              filteredNoClubOutliers={filteredNoClubOutliers}
-              filteredNoClubRaw={filteredNoClub}
-              allClubs={clubs}
-              insightsOrder={insightsOrder}
-              onDragStart={onDragStart2}
-              onDragOver={onDragOver2}
-              onDrop={onDrop2}
-            />
-          )}
+          {/* Right / View */}
+          <div className="grid grid-cols-1 gap-6">
+            {view === "dashboard" && (
+              <DashboardCards
+                theme={T}
+                cardOrder={cardOrder}
+                setCardOrder={setCardOrder}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+                hasData={hasData}
+                kpis={kpis}
+                filteredOutliers={filteredOutliers}
+                filtered={filtered}
+                shots={shots}
+                tableRows={tableRows}
+                clubs={clubs}
+              />
+            )}
 
-          {view === "journal" && (
-            <JournalView
-              theme={T}
-              editorRef={editorRef}
-              value={journalHTML}
-              onInputHTML={setJournalHTML}
-              sessionLabel={journalKey}
-              defaultHeightPx={filtersHeight}
-            />
-          )}
+            {view === "insights" && (
+              <InsightsView
+                theme={T}
+                tableRows={tableRows}
+                filteredOutliers={filteredOutliers}
+                filteredNoClubOutliers={filteredNoClubOutliers}
+                filteredNoClubRaw={filteredNoClub}
+                allClubs={clubs}
+                insightsOrder={insightsOrder}
+                onDragStart={onDragStart2}
+                onDragOver={onDragOver2}
+                onDrop={onDrop2}
+              />
+            )}
+
+            {view === "journal" && (
+              <JournalView
+                theme={T}
+                editorRef={editorRef}
+                value={journalHTML}
+                onInputHTML={setJournalHTML}
+                sessionLabel={journalKey}
+                defaultHeightPx={filtersHeight}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
