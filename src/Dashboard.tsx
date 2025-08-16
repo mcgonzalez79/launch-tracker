@@ -73,7 +73,7 @@ function ShotShapeCard({ theme, shots }: { theme: Theme; shots: Shot[] }) {
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
       <Box title="Hook"     bucket={s.hook}     fg="#DC2626" bg={rgbaFromHex("#EF4444", 0.08)} />
       <Box title="Draw"     bucket={s.draw}     fg="#059669" bg={rgbaFromHex("#10B981", 0.10)} />
-      <Box title="Straight" bucket={s.straight} fg={T.brand} bg={rgbaFromHex(T.brand, 0.10)} />
+      <Box title="Straight" bucket={s.straight} fg={theme.brand} bg={rgbaFromHex(theme.brand, 0.10)} />
       <Box title="Fade"     bucket={s.fade}     fg="#D97706" bg={rgbaFromHex("#F59E0B", 0.10)} />
       <Box title="Slice"    bucket={s.slice}    fg="#2563EB" bg={rgbaFromHex("#3B82F6", 0.10)} />
     </div>
@@ -287,7 +287,7 @@ function AveragesTable({ theme, rows }:{ theme: Theme; rows: ClubRow[] }) {
   );
 }
 
-/* ---------- KPI single-card component ---------- */
+/* ---------- KPI computation & tiles (one row inside a single card) ---------- */
 
 function computeKpis(pool: Shot[]) {
   const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
@@ -302,10 +302,13 @@ function computeKpis(pool: Shot[]) {
   };
 }
 
-function KPIValue({ theme, value, unit, digits=1 }: { theme: Theme; value: number; unit?: string; digits?: number }) {
+function KPIItem({ theme, label, value, unit, digits=1 }:{
+  theme: Theme; label: string; value: number; unit?: string; digits?: number;
+}) {
   const T = theme;
   return (
-    <div className="px-4 py-5 rounded-2xl" style={{ background: rgbaFromHex(T.brand, 0.06), border: `1px solid ${T.border}` }}>
+    <div className="rounded-2xl px-4 py-5" style={{ background: rgbaFromHex(T.brand, 0.06), border: `1px solid ${T.border}` }}>
+      <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
       <div className="text-2xl font-semibold" style={{ color: T.brand }}>
         {fmt(value, digits)}{unit ? ` ${unit}` : ""}
       </div>
@@ -337,17 +340,26 @@ export default function DashboardCards(props: Props) {
 
   const kp = computeKpis(filteredOutliers);
 
-  // Cards map — "kpis" replaced by six individual KPI cards. Unknown keys ignored.
+  // Cards map — "kpis" is now a single card containing a one-row grid of KPI tiles.
   const CARDS: Record<string, { title: string; render: () => React.ReactNode }> = {
-    // Individual KPI cards
-    kpiCarry: { title: "Avg Carry", render: () => <KPIValue theme={T} value={kp.carry} unit="yds" digits={1} /> },
-    kpiTotal: { title: "Avg Total", render: () => <KPIValue theme={T} value={kp.total} unit="yds" digits={1} /> },
-    kpiSmash: { title: "Avg Smash", render: () => <KPIValue theme={T} value={kp.smash} digits={3} /> },
-    kpiSpin:  { title: "Avg Spin",  render: () => <KPIValue theme={T} value={kp.spin}  unit="rpm" digits={0} /> },
-    kpiCS:    { title: "Avg Club Speed", render: () => <KPIValue theme={T} value={kp.cs} unit="mph" digits={1} /> },
-    kpiBS:    { title: "Avg Ball Speed", render: () => <KPIValue theme={T} value={kp.bs} unit="mph" digits={1} /> },
-
-    // Other cards
+    kpis: {
+      title: "Key Performance Indicators",
+      render: () => {
+        if (!filteredOutliers.length) {
+          return <div className="h-20 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
+        }
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <KPIItem theme={T} label="Avg Carry" value={kp.carry} unit="yds" digits={1} />
+            <KPIItem theme={T} label="Avg Total" value={kp.total} unit="yds" digits={1} />
+            <KPIItem theme={T} label="Avg Smash" value={kp.smash} digits={3} />
+            <KPIItem theme={T} label="Avg Spin" value={kp.spin} unit="rpm" digits={0} />
+            <KPIItem theme={T} label="Avg Club Spd" value={kp.cs} unit="mph" digits={1} />
+            <KPIItem theme={T} label="Avg Ball Spd" value={kp.bs} unit="mph" digits={1} />
+          </div>
+        );
+      }
+    },
     shape: {
       title: "Shot Shape Distribution",
       render: () => <ShotShapeCard theme={T} shots={filteredOutliers} />
@@ -370,14 +382,7 @@ export default function DashboardCards(props: Props) {
     },
   };
 
-  // Expand legacy "kpis" into the six new KPI cards (non-destructive; doesn't modify storage)
-  const expandedKeys = cardOrder.flatMap((k) =>
-    k === "kpis"
-      ? ["kpiCarry", "kpiTotal", "kpiSmash", "kpiSpin", "kpiCS", "kpiBS"]
-      : [k]
-  );
-
-  const keys = expandedKeys.filter((k) => CARDS[k]);
+  const keys = cardOrder.filter(k => CARDS[k]);
 
   return (
     <div className="grid grid-cols-1 gap-8">
