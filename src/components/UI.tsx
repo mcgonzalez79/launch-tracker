@@ -37,7 +37,7 @@ export const Td = ({ children }:{ children: React.ReactNode }) => <td className=
 export function TopTab({ theme, label, active, onClick }:{ theme: Theme; label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} className="px-3 py-2 rounded-lg text-sm border"
-      style={{ background: active ? "#ffffff" : "#ffffff22", borderColor: "#ffffff55", color: active ? theme.brand : "#fff", fontWeight: active ? 600 : 500 }}>
+      style={{ background: active ? theme.white : theme.panel, borderColor: theme.border, color: active ? theme.brand : theme.text, fontWeight: active ? 600 : 500 }}>
       {label}
     </button>
   );
