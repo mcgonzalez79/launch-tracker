@@ -90,7 +90,7 @@ export default function App() {
   /* ===== Import processing (XLSX/CSV + dedupe) ===== */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
-    const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
+    the const Sm = coalesceSmash(s2); const F2P = coalesceFaceToPath(s2);
     if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
     if (F2P !== undefined) s2.FaceToPath_deg = F2P;
     return s2;
@@ -398,8 +398,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main (now width-constrained) */}
-      <div className="max-w-7xl mx-auto w-full px-4 py-4">
+      {/* Main (now width-constrained with a fixed cap) */}
+      <div className="mx-auto w-full px-4 py-4 max-w-[1200px]">
         <div className="grid grid-cols-1 md:grid-cols-[300px,1fr] gap-6">
           {/* Left / Filters */}
           <div ref={filtersRef}>
