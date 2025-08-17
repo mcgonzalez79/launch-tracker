@@ -32,7 +32,7 @@ function benchmarksToRows(clubsOrdered: string[]) {
     }));
 }
 
-/* ================== Helpers (stats) ================== */
+/* ================== Helpers (stats & fmt) ================== */
 function quantile(sorted: number[], q: number): number {
   if (!sorted.length) return NaN;
   const pos = (sorted.length - 1) * q;
@@ -54,6 +54,20 @@ function fiveNumSummary(vals: number[]) {
     q3: quantile(a, 0.75),
     max: a[a.length - 1]
   };
+}
+
+function safeFmtDate(ts?: string): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  // short locale date; tweak if you prefer time: d.toLocaleString()
+  return d.toLocaleDateString();
+}
+
+function avgOrNaN(values: Array<number | undefined>): number | undefined {
+  const nums = values.filter((v): v is number => v != null && Number.isFinite(v));
+  if (!nums.length) return undefined;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
 /* ===== Proficiency score (0..100) vs. benchmark table ===== */
@@ -272,6 +286,14 @@ export default function InsightsView({
     return Math.max(260, Math.min(420, grow));
   }, [selectedClubName, progressRows.length]);
 
+  /* ======= Swing Metrics (current selection) ======= */
+  const swingMetrics = useMemo(() => {
+    const path = avgOrNaN(filteredOutliers.map(s => s.ClubPath_deg));
+    const aoa  = avgOrNaN(filteredOutliers.map(s => s.AngleOfAttack_deg));
+    const face = avgOrNaN(filteredOutliers.map(s => s.ClubFace_deg));
+    return { path, aoa, face };
+  }, [filteredOutliers]);
+
   return (
     <div className="grid grid-cols-1 gap-8">
       {insightsOrder.map((key) => {
@@ -339,7 +361,7 @@ export default function InsightsView({
           >
             <Card theme={theme} title="Highlights (independent of club selection)" dragHandle>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry */}
+                {/* PR Carry (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Carry</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -347,11 +369,12 @@ export default function InsightsView({
                   </div>
                   <div className="text-slate-600 mt-1 text-sm">
                     {globalPR.bestCarry?.Club ? `(${globalPR.bestCarry.Club})` : ""}
+                    {globalPR.bestCarry?.Timestamp ? ` — ${safeFmtDate(globalPR.bestCarry.Timestamp)}` : ""}
                   </div>
                   <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
 
-                {/* PR Total */}
+                {/* PR Total (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Total</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -359,6 +382,7 @@ export default function InsightsView({
                   </div>
                   <div className="text-slate-600 mt-1 text-sm">
                     {globalPR.bestTotal?.Club ? `(${globalPR.bestTotal.Club})` : ""}
+                    {globalPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(globalPR.bestTotal.Timestamp)}` : ""}
                   </div>
                   <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
                 </div>
@@ -392,21 +416,24 @@ export default function InsightsView({
             title="Drag to reorder"
           >
             <Card theme={theme} title="Gapping Warnings" dragHandle>
-              <div className="text-sm">
-                {gw.tight.length === 0 && gw.wide.length === 0 && <div>No warnings.</div>}
-                {gw.tight.length > 0 && (
-                  <div className="mb-2">
-                    <div className="font-semibold">Too Tight (&lt; 12 yds):</div>
-                    <ul className="list-disc pl-6">{gw.tight.map((t,i)=><li key={i}>{t}</li>)}</ul>
-                  </div>
-                )}
-                {gw.wide.length > 0 && (
+              {gw.tight.length === 0 && gw.wide.length === 0 ? (
+                <div className="text-sm">No warnings.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                   <div>
-                    <div className="font-semibold">Too Wide (&gt; 30 yds):</div>
-                    <ul className="list-disc pl-6">{gw.wide.map((t,i)=><li key={i}>{t}</li>)}</ul>
+                    <div className="font-semibold mb-1">Too Tight (&lt; 12 yds)</div>
+                    {gw.tight.length > 0 ? (
+                      <ul className="list-disc pl-6">{gw.tight.map((t,i)=><li key={i}>{t}</li>)}</ul>
+                    ) : <div className="text-slate-500">None</div>}
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="font-semibold mb-1">Too Wide (&gt; 30 yds)</div>
+                    {gw.wide.length > 0 ? (
+                      <ul className="list-disc pl-6">{gw.wide.map((t,i)=><li key={i}>{t}</li>)}</ul>
+                    ) : <div className="text-slate-500">None</div>}
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         );
@@ -423,6 +450,7 @@ export default function InsightsView({
           >
             <Card theme={theme} title="Personal Records (current selection)" dragHandle>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* PR Carry (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Carry</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -430,8 +458,11 @@ export default function InsightsView({
                   </div>
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
+                    {selectedPR.bestCarry?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestCarry.Timestamp)}` : ""}
                   </div>
                 </div>
+
+                {/* PR Total (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Total</div>
                   <div className="mt-1 text-2xl font-semibold">
@@ -439,6 +470,7 @@ export default function InsightsView({
                   </div>
                   <div className="text-slate-600 mt-1 text-sm">
                     {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
+                    {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
                   </div>
                 </div>
               </div>
@@ -531,6 +563,42 @@ export default function InsightsView({
                   </table>
                 </div>
               </Modal>
+            </Card>
+          </div>
+        );
+
+        /* ===== New: Swing Metrics (current selection) ===== */
+        if (key === "swingMetrics") return (
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Swing Metrics (current selection)" dragHandle>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                  <div className="text-sm text-slate-500">Club Path (°)</div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {swingMetrics.path != null ? swingMetrics.path.toFixed(2) : "–"}
+                  </div>
+                </div>
+                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                  <div className="text-sm text-slate-500">Angle of Attack (°)</div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {swingMetrics.aoa != null ? swingMetrics.aoa.toFixed(2) : "–"}
+                  </div>
+                </div>
+                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                  <div className="text-sm text-slate-500">Face Angle (°)</div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {swingMetrics.face != null ? swingMetrics.face.toFixed(2) : "–"}
+                  </div>
+                </div>
+              </div>
             </Card>
           </div>
         );
