@@ -414,10 +414,9 @@ export default function InsightsView(props: Props) {
     return items;
   }, [filteredNoClubOutliers]);
 
-  const gapWarnings = useMemo(() => {
+  // Gapping: compute from all loaded data; do not change on club selection
+  const computeGapWarnings = (rows: Shot[]) => {
     const items: string[] = [];
-    const rows = filteredNoClubOutliers; // ignore club selection; still respects date/session/outlier filters
-
     const g = groupBy(rows, s => s.Club || "Unknown");
     const clubAverages: { club: string; avg: number; n: number }[] = [];
     for (const [club, rs] of g.entries()) {
@@ -441,9 +440,34 @@ export default function InsightsView(props: Props) {
         items.push(`Large gap between ${c1.club} (${c1.avg.toFixed(1)} yds) and ${c2.club} (${c2.avg.toFixed(1)} yds): ${gap.toFixed(1)} yds.`);
       }
     }
-
     return items;
-  }, [filteredNoClubOutliers]);
+  };
+
+  const candidateRowsGap = (filteredNoClubRaw && filteredNoClubRaw.length) ? filteredNoClubRaw : filteredNoClubOutliers;
+  const [gapWarnings, setGapWarnings] = useState<string[]>(() => computeGapWarnings(candidateRowsGap));
+  const prevGapSigRef = useRef<string>(makeSignature(candidateRowsGap));
+  const prevGapSelectedClubsKeyRef = useRef<string>(selectedClubs.slice().sort().join("|"));
+  const prevGapAllClubsKeyRef = useRef<string>(allClubs.join("|"));
+
+  useEffect(() => {
+    const rows = (filteredNoClubRaw && filteredNoClubRaw.length) ? filteredNoClubRaw : filteredNoClubOutliers;
+    const newSig = makeSignature(rows);
+    const clubsKey = selectedClubs.slice().sort().join("|");
+    const allClubsKey = allClubs.join("|");
+
+    const datasetChanged = newSig !== prevGapSigRef.current;
+    const clubsChanged = clubsKey !== prevGapSelectedClubsKeyRef.current;
+    const allClubsChanged = allClubsKey !== prevGapAllClubsKeyRef.current;
+
+    // Only update when the underlying dataset changes for reasons other than club selection
+    if (datasetChanged && (!clubsChanged || allClubsChanged)) {
+      setGapWarnings(computeGapWarnings(rows));
+      prevGapSigRef.current = newSig;
+    }
+
+    prevGapSelectedClubsKeyRef.current = clubsKey;
+    prevGapAllClubsKeyRef.current = allClubsKey;
+  }, [filteredNoClubRaw, filteredNoClubOutliers, selectedClubs, allClubs]);
 
   /* ---------- Personal Records (only when a single club is selected; uses RAW rows) ---------- */
   const personalRecords = (
