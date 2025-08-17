@@ -39,7 +39,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights order (merge-safe)
-  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "warnings", "personalRecords", "progress", "weaknesses"];
+  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "swingMetrics", "warnings", "personalRecords", "progress", "weaknesses"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
