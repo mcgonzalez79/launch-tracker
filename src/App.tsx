@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LIGHT, DARK, Theme } from "./theme";
 import FiltersPanel from "./Filters";
@@ -8,64 +7,101 @@ import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
-  normalizeHeader, headerMap, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
+  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow
 } from "./utils";
 
 /* =========================
-   Toasts
+   Small local helpers
 ========================= */
-function useToasts() {
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
-    const id = m.id ?? Math.floor(Date.now() + Math.random() * 1000);
-    setMsgs(prev => [...prev, { id, text: m.text, type: m.type }]);
-  };
-  const remove = (id: number) => setMsgs(prev => prev.filter(x => x.id !== id));
-  return { msgs, push, remove };
+const norm = (s: any) =>
+  String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+|[\-_()/]/g, "");
+
+const num = (v: any): number => {
+  const x = fpOf(v);
+  return typeof x === "number" ? x : Number.NaN;
+};
+
+function idxOf(headers: string[], variants: string[]): number {
+  for (const v of variants) {
+    const i = headers.findIndex((h) => norm(h) === norm(v));
+    if (i >= 0) return i;
+  }
+  return -1;
 }
 
 /* =========================
-   Helpers
+   Footer
 ========================= */
-const num = (v: any): number | undefined => {
-  const x = fpOf(v);
-  return typeof x === "number" ? x : undefined;
-};
-const applyDerived = (s: Shot): Shot => {
-  const s2 = { ...s };
-  const Sm = coalesceSmash(s2);
-  const F2P = coalesceFaceToPath(s2);
-  if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
-  if (F2P !== undefined) s2.FaceToPath_deg = F2P;
-  return s2;
-};
+function Footer({ T }: { T: Theme }) {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
+        <div className="text-xs" style={{ color: T.textDim }}>
+          © {year} Launch Tracker
+        </div>
+        <nav className="flex items-center gap-3 text-xs">
+          <a
+            href="https://github.com/mcgonzalez79/launch-tracker"
+            target="_blank"
+            rel="noreferrer"
+            className="underline-offset-2 hover:underline"
+            style={{ color: T.text }}
+          >
+            GitHub
+          </a>
+          <span aria-hidden="true" style={{ color: T.textDim }}>•</span>
+          <a href="#" className="underline-offset-2 hover:underline" style={{ color: T.text }}>
+            Privacy
+          </a>
+          <span aria-hidden="true" style={{ color: T.textDim }}>•</span>
+          <a href="#" className="underline-offset-2 hover:underline" style={{ color: T.text }}>
+            Terms
+          </a>
+        </nav>
+      </div>
+    </footer>
+  );
+}
 
 /* =========================
    App
 ========================= */
 export default function App() {
   // Theme
-  const [theme, setTheme] = useState<Theme>(() => {
-    try { return (localStorage.getItem("launch-tracker:theme") || "dark") === "light" ? LIGHT : DARK; } catch { return DARK; }
+  const [dark, setDark] = useState<boolean>(() => {
+    try { return localStorage.getItem("launch-tracker:theme") === "dark"; } catch { return false; }
   });
-  useEffect(() => {
-    try { localStorage.setItem("launch-tracker:theme", theme === LIGHT ? "light" : "dark"); } catch {}
-    document.documentElement.style.setProperty("color-scheme", theme === LIGHT ? "light" : "dark");
-  }, [theme]);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:theme", dark ? "dark" : "light"); } catch {} }, [dark]);
+  const T: Theme = dark ? DARK : LIGHT;
 
-  // Tab
-  const [tab, setTab] = useState<ViewKey>(() => {
-    try { return (localStorage.getItem("launch-tracker:tab") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
+  // View
+  const [view, setView] = useState<ViewKey>(() => {
+    try { return (localStorage.getItem("launch-tracker:view") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:tab", tab); } catch {} }, [tab]);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:view", view); } catch {} }, [view]);
+
+  // Messages (toasts)
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  function toast(msg: Omit<Msg, "id">) {
+    const withId: Msg = { ...msg, id: Date.now() };
+    setMsgs((m) => [...m, withId]);
+    setTimeout(() => setMsgs((m) => m.slice(1)), 3500);
+  }
 
   // Data
   const [shots, setShots] = useState<Shot[]>(() => {
-    try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try {
+      const raw = localStorage.getItem("launch-tracker:shots");
+      return raw ? (JSON.parse(raw) as Shot[]) : [];
+    } catch { return []; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
 
+  // Derived lists
   const clubs = useMemo(
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
@@ -74,6 +110,7 @@ export default function App() {
     () => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()],
     [shots]
   );
+
   const carryBounds = useMemo(() => {
     const vals = shots.map(s => s.CarryDistance_yds).filter((v): v is number => v !== undefined);
     if (!vals.length) return { min: 0, max: 0 };
@@ -81,146 +118,119 @@ export default function App() {
   }, [shots]);
 
   /* =========================
-     Import / Export
+     Import processing
   ========================= */
-  const { msgs, push: toast, remove: removeToast } = useToasts();
+  function applyDerived(s: Shot): Shot {
+    const s2 = { ...s };
+    const Sm = coalesceSmash(s2);
+    const F2P = coalesceFaceToPath(s2);
+    if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+    if (F2P !== undefined) s2.FaceToPath_deg = F2P;
+    return s2;
+  }
 
-  function mergeImportedShots(newShots: Shot[], filename: string) {
+  function processWorkbook(wb: XLSX.WorkBook, _textFromCSV: string | null, filename: string) {
+    const firstSheet =
+      wb.SheetNames.find(n => {
+        const ws = wb.Sheets[n];
+        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+        return rr && rr.flat().some(v => v !== null && v !== "");
+      }) || wb.SheetNames[0];
+
+    const ws = wb.Sheets[firstSheet];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+    if (!rows.length) {
+      toast({ type: "warn", text: `No rows detected in ${filename}` });
+      return;
+    }
+
+    const header = (rows[0] || []).map((h) => String(h ?? ""));
+    const dataRows = rows.slice(1);
+    const get = (r: any[], variants: string[]): any => {
+      const i = idxOf(header, variants);
+      return i >= 0 ? r[i] : null;
+    };
+
+    const newShots: Shot[] = dataRows.map((r) => {
+      const dateRaw = String(get(r, ["date"]) ?? "").trim();
+      const sessionByDay = dateRaw.split(" ")[0] || "Unknown Session";
+      const clubName = String(get(r, ["club name"]) ?? "").trim();
+      const clubType = String(get(r, ["club type"]) ?? "").trim();
+
+      const s: Shot = {
+        SessionId: sessionByDay,
+        Club: clubName || clubType || "Unknown Club",
+        Timestamp: isoDate(dateRaw),
+
+        ClubSpeed_mph:      num(get(r, ["club speed"])),
+        AttackAngle_deg:    num(get(r, ["attack angle"])),
+        ClubPath_deg:       num(get(r, ["club path"])),
+        ClubFace_deg:       num(get(r, ["club face"])),
+        FaceToPath_deg:     num(get(r, ["face to path"])),
+        BallSpeed_mph:      num(get(r, ["ball speed"])),
+        SmashFactor:        num(get(r, ["smash factor"])),
+        LaunchAngle_deg:    num(get(r, ["launch angle"])),
+        ApexHeight_yds:     num(get(r, ["apex height"])),
+        CarryDistance_yds:  num(get(r, ["carry distance"])),
+        CarryDeviationDistance_yds: num(get(r, ["carry deviation distance"])),
+        TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
+        TotalDistance_yds:  num(get(r, ["total distance"])),
+        LaunchDirection_deg: num(get(r, ["launch direction"])),
+      };
+
+      return applyDerived(s);
+    });
+
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
+
     const existing = new Map(shots.map(s => [keyOf(s), s]));
+    const merged = [...existing.values()];
     let added = 0;
     for (const s of newShots) {
       const k = keyOf(s);
       if (!existing.has(k)) {
         existing.set(k, s);
+        merged.push(s);
         added++;
       }
     }
-    setShots(Array.from(existing.values()));
-    toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
+    setShots(merged);
+    toast({ type: "success", text: `Imported ${added} new shots from ${filename}` });
   }
 
-  function rowsToShots(headerRow: any[], dataRows: any[][], filename: string): Shot[] {
-    const header = headerRow.map(h => String(h ?? ""));
-    const hNorm = header.map(h => normalizeHeader(h));
-
-    const idx = (name: string) => hNorm.findIndex(h => h === name);
-
-    return dataRows.map((row) => {
-      const dateRaw = String(row[idx("date")] ?? row[idx("timestamp")] ?? row[idx("datetime")] ?? "").trim();
-      const sessionByDay = (dateRaw.split(" ")[0] || "Unknown Session");
-
-      const clubIdx = (() => {
-        const cand = ["club name", "club", "club type"];
-        for (const c of cand) { const i = idx(c); if (i >= 0) return i; }
-        return -1;
-      })();
-      const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "Unknown Club";
-
-      const s: Shot = {
-        SessionId: sessionByDay,
-        Club: clubVal,
-        Timestamp: isoDate(dateRaw),
-
-        ClubSpeed_mph:      num(row[idx("club speed")]),
-        AttackAngle_deg:    num(row[idx("attack angle")]),
-        ClubPath_deg:       num(row[idx("club path")]),
-        ClubFace_deg:       num(row[idx("club face")]),
-        FaceToPath_deg:     num(row[idx("face to path")]),
-        BallSpeed_mph:      num(row[idx("ball speed")]),
-        SmashFactor:        num(row[idx("smash factor")]),
-        LaunchAngle_deg:    num(row[idx("launch angle")]),
-        LaunchDirection_deg:num(row[idx("launch direction")]),
-        ApexHeight_yds:     num(row[idx("apex height")]),
-        CarryDistance_yds:  num(row[idx("carry distance")]),
-        CarryDeviationDistance_yds: num(row[idx("carry deviation distance")]),
-        TotalDeviationDistance_yds: num(row[idx("total deviation distance")]),
-        TotalDistance_yds:  num(row[idx("total distance")]),
-        Backspin_rpm:       num(row[idx("backspin")]),
-        Sidespin_rpm:       num(row[idx("sidespin")]),
-        SpinRate_rpm:       num(row[idx("spin rate")]),
-        SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
-        SpinAxis_deg:       num(row[idx("spin axis")]),
-      };
-
-      return applyDerived(s);
-    });
+  /* =========================
+     Export (CSV aligned to Shot)
+  ========================= */
+  function exportShotsCSV() {
+    const headers = [
+      "Timestamp", "SessionId", "Club",
+      "CarryDistance_yds", "TotalDistance_yds",
+      "BallSpeed_mph", "ClubSpeed_mph",
+      "LaunchAngle_deg", "LaunchDirection_deg",
+      "ApexHeight_yds",
+      "CarryDeviationDistance_yds", "TotalDeviationDistance_yds",
+      "ClubFace_deg", "ClubPath_deg", "AttackAngle_deg",
+      "SmashFactor", "FaceToPath_deg"
+    ];
+    const esc = (v: any) => {
+      if (v == null) return "";
+      const s = String(v).replace(/"/g, '""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    };
+    const lines = [
+      headers.join(","),
+      ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
+    ];
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.download = `launch-tracker_${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
-
-  function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    const valid = wb.SheetNames.find(n => {
-      const ws = wb.Sheets[n];
-      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-      return rr && rr.flat().some(v => v !== null && v !== "");
-    }) || wb.SheetNames[0];
-
-    const ws = wb.Sheets[valid];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    if (!rows.length) { toast({ type: "warn", text: `No rows detected in ${filename}` }); return; }
-
-    const header = rows[0].map((h) => String(h ?? ""));
-    const second = rows[1]?.map((h) => String(h ?? "")) ?? [];
-    const hasUnitsRow = second.length && second.some(s => /\b(mph|rpm|yds|deg)\b/i.test(s));
-    const dataRows = hasUnitsRow ? rows.slice(2) : rows.slice(1);
-
-    const newShots = rowsToShots(header, dataRows, filename);
-    mergeImportedShots(newShots, filename);
-  }
-
-  function onImportFile(file: File) {
-    (async () => {
-      try {
-        const buffer = await file.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: "array" });
-        processWorkbook(wb, file.name);
-      } catch (wbErr) {
-        try {
-          const text = await file.text();
-          const parsed = parseWeirdLaunchCSV(text);
-          if (parsed) {
-            const shotsFromCsv = weirdRowsToShots(parsed.header, parsed.dataRows, file.name.replace(/\.\w+$/, ""));
-            mergeImportedShots(shotsFromCsv, file.name);
-          } else {
-            throw wbErr;
-          }
-        } catch (csvErr) {
-          console.error(csvErr);
-          toast({ type: "error", text: `Import failed: ${(csvErr as Error).message}` });
-        }
-      }
-    })();
-  }
-
-  function onLoadSample() {
-    const sample: Shot[] = [
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
-        ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
-        CarryDistance_yds: 255, TotalDistance_yds: 280, LaunchDirection_deg: -2, ClubPath_deg: 3.0, ClubFace_deg: 2.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:07:00Z", Club: "Driver",
-        ClubSpeed_mph: 104, BallSpeed_mph: 153, LaunchAngle_deg: 12.5, Backspin_rpm: 2400,
-        CarryDistance_yds: 258, TotalDistance_yds: 284, LaunchDirection_deg: 1, ClubPath_deg: 2.5, ClubFace_deg: 1.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:12:00Z", Club: "7 Iron",
-        ClubSpeed_mph: 84, BallSpeed_mph: 114, LaunchAngle_deg: 18, Backspin_rpm: 6200,
-        CarryDistance_yds: 158, TotalDistance_yds: 168, LaunchDirection_deg: 0, ClubPath_deg: 1.0, ClubFace_deg: 0.5 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:31:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 70, BallSpeed_mph: 92, LaunchAngle_deg: 29, Backspin_rpm: 8500,
-        CarryDistance_yds: 118, TotalDistance_yds: 124, LaunchDirection_deg: -1, ClubPath_deg: -0.5, ClubFace_deg: -1.0 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:34:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 71, BallSpeed_mph: 93, LaunchAngle_deg: 30, Backspin_rpm: 8700,
-        CarryDistance_yds: 120, TotalDistance_yds: 126, LaunchDirection_deg: 0.5, ClubPath_deg: 0.0, ClubFace_deg: 0.2 },
-    ].map(applyDerived);
-    mergeImportedShots(sample, "Sample Data");
-  }
-
-  function exportShotsCSV() { exportCSV(shots); }
-  function onPrintClubAverages() { window.print(); }
-  function onDeleteSession() {
-    if (!shots.length || sessionFilter === "ALL") return;
-    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
-    setShots(keep);
-  }
-  function onDeleteAll() { if (!shots.length) return; setShots([]); }
 
   /* =========================
      Filters state
@@ -228,128 +238,17 @@ export default function App() {
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
   const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
+
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
 
-  /* =========================
-     Filtering
-  ========================= */
-  const filteredBase = useMemo(() => {
-    const inClubs = (s: Shot) => !selectedClubs.length || selectedClubs.includes(s.Club);
-    const inSession = (s: Shot) => sessionFilter === "ALL" || (s.SessionId ?? "Unknown Session") === sessionFilter;
+  const carryMinNum = useMemo(() => (carryMin ? parseFloat(carryMin) : undefined), [carryMin]);
+  const carryMaxNum = useMemo(() => (carryMax ? parseFloat(carryMax) : undefined), [carryMax]);
 
-    const carryMinNum = carryMin ? Number(carryMin) : undefined;
-    const carryMaxNum = carryMax ? Number(carryMax) : undefined;
-
-    return shots.filter(s => {
-      if (!inClubs(s) || !inSession(s)) return false;
-
-      if (dateFrom) {
-        const from = new Date(dateFrom);
-        try { if (new Date(s.Timestamp || "") < from) return false; } catch {}
-      }
-      if (dateTo) {
-        const to = new Date(dateTo);
-        try { if (new Date(s.Timestamp || "") > to) return false; } catch {}
-      }
-      if (Number.isFinite(s.CarryDistance_yds)) {
-        if (carryMinNum != null && (s.CarryDistance_yds ?? 0) < carryMinNum) return false;
-        if (carryMaxNum != null && (s.CarryDistance_yds ?? 0) > carryMaxNum) return false;
-      }
-      return true;
-    });
-  }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
-
-  const filteredOutliers = useMemo(() => {
-    if (!excludeOutliers) return filteredBase;
-    return filteredBase; // hook up IQR trimming later
-  }, [filteredBase, excludeOutliers]);
-
-  /* =========================
-     Derived for child views
-  ========================= */
-  const hasData = filteredBase.length > 0;
-
-  const kpis = useMemo(() => {
-    const vals = (key: keyof Shot) => filteredOutliers.map(s => s[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-    const kpi = (arr: number[]) => ({ mean: arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0, n: arr.length, std: arr.length ? Math.sqrt(arr.reduce((a,b)=>a+(b-(arr.reduce((a,c)=>a+c,0)/arr.length))**2,0)/arr.length) : 0 });
-    return { carry: kpi(vals("CarryDistance_yds")), ball:  kpi(vals("BallSpeed_mph")), club:  kpi(vals("ClubSpeed_mph")), smash: kpi(vals("SmashFactor")) } as any;
-  }, [filteredOutliers]);
-
-  const tableRows: ClubRow[] = useMemo(() => {
-    const byClub = new Map<string, Shot[]>();
-    for (const s of filteredOutliers) {
-      const k = s.Club || "Unknown";
-      if (!byClub.has(k)) byClub.set(k, []);
-      byClub.get(k)!.push(s);
-    }
-    const rows: ClubRow[] = [];
-    Array.from(byClub.keys()).sort((a,b)=>orderIndex(a)-orderIndex(b)).forEach(club => {
-      const arr = byClub.get(club)!;
-      const avg = (key: keyof Shot) => {
-        const xs = arr.map(r => r[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-        return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
-      };
-      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"), avgSmash: avg("SmashFactor"), avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"), avgCS: avg("ClubSpeed_mph"), avgBS: avg("BallSpeed_mph"), avgLA: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
-    });
-    return rows;
-  }, [filteredOutliers]);
-
-  // Drag handlers for card ordering
-  const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
-    try {
-      const raw = localStorage.getItem("launch-tracker:card-order");
-      const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
-      return DEFAULT;
-    } catch { return DEFAULT; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
-
-  const INSIGHTS_DEFAULT = ["dist", "high", "records", "gaps", "progress"];
-  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem("launch-tracker:insights-order");
-      const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
-      return INSIGHTS_DEFAULT;
-    } catch { return INSIGHTS_DEFAULT; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
-
-  const onDragStart = (key: string) => (e: React.DragEvent) => { e.dataTransfer.setData("text/plain", key); };
-  const onDragOver  = (_key: string) => (e: React.DragEvent) => { e.preventDefault(); };
-  const onDrop      = (targetKey: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    const sourceKey = e.dataTransfer.getData("text/plain");
-    if (!sourceKey || sourceKey === targetKey) return;
-    setCardOrder(prev => {
-      const cur = [...prev];
-      const si = cur.indexOf(sourceKey);
-      const ti = cur.indexOf(targetKey);
-      if (si < 0 || ti < 0) return cur;
-      cur.splice(si, 1);
-      cur.splice(ti, 0, sourceKey);
-      return cur;
-    });
-  };
-
-  /* =========================
-     Journal
-  ========================= */
-  const journalRef = useRef<HTMLDivElement>(null);
-  const [journalHTML, setJournalHTML] = useState<string>(() => {
-    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
-  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
-
-  /* =========================
-     Layout
-  ========================= */
+  // sidebar height for Journal sizing
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
@@ -363,46 +262,213 @@ export default function App() {
     return () => ro.disconnect();
   }, [filtersRef.current, shots, selectedClubs, sessionFilter, excludeOutliers, carryMin, carryMax, dateFrom, dateTo]);
 
-  const T = theme;
+  // Card order
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
+    try {
+      const raw = localStorage.getItem("launch-tracker:card-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
+      return DEFAULT;
+    } catch { return DEFAULT; }
+  });
+  useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
+  // Insights order
+  const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "swingMetrics", "warnings", "personalRecords", "progress", "weaknesses"];
+  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("launch-tracker:insights-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
+      return INSIGHTS_DEFAULT;
+    } catch { return INSIGHTS_DEFAULT; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+
+  /* =========================
+     File input helpers
+  ========================= */
+  function onImportFile(file: File) {
+    (async () => {
+      try {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
+        processWorkbook(wb, null, file.name);
+      } catch (err) {
+        console.error(err);
+        toast({ type: "error", text: `Import failed: ${(err as Error).message}` });
+      }
+    })();
+  }
+
+  function onLoadSample() { toast({ type: "info", text: "Sample loader not implemented." }); }
+  function onPrintClubAverages() { window.print(); }
+  function onDeleteSession() {
+    if (sessionFilter === "ALL") return;
+    const remaining = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
+    setShots(remaining);
+    toast({ type: "warn", text: `Deleted session "${sessionFilter}"` });
+  }
+  function onDeleteAll() {
+    if (!shots.length) return;
+    setShots([]);
+    toast({ type: "warn", text: "Deleted all shots" });
+  }
+
+  /* =========================
+     Filtering
+  ========================= */
+  const filteredBase = useMemo(() => {
+    const from = dateFrom ? new Date(dateFrom) : null;
+    const to = dateTo ? new Date(dateTo) : null;
+
+    return shots.filter(s => {
+      if (sessionFilter !== "ALL" && (s.SessionId ?? "Unknown Session") !== sessionFilter) return false;
+      if (selectedClubs.length && !selectedClubs.includes(s.Club)) return false;
+
+      if (from && s.Timestamp) {
+        try { if (new Date(s.Timestamp) < from) return false; } catch {}
+      }
+      if (to && s.Timestamp) {
+        try { if (new Date(s.Timestamp) > to) return false; } catch {}
+      }
+
+      if (Number.isFinite(s.CarryDistance_yds)) {
+        if (carryMinNum != null && s.CarryDistance_yds! < carryMinNum) return false;
+        if (carryMaxNum != null && s.CarryDistance_yds! > carryMaxNum) return false;
+      }
+      return true;
+    });
+  }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMinNum, carryMaxNum]);
+
+  const filteredOutliers = useMemo(() => {
+    if (!excludeOutliers) return filteredBase;
+    return filteredBase;
+  }, [filteredBase, excludeOutliers]);
+
+  const filtered = filteredBase;
+
+  const tableRows = useMemo(() => {
+    const rows: ClubRow[] = [];
+    return rows;
+  }, [filteredOutliers]);
+
+  /* =========================
+     KPIs
+  ========================= */
+  const kCarry = useMemo(() => {
+    const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
+  const kBall = useMemo(() => {
+    const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
+  const kClub = useMemo(() => {
+    const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
+  const kSmash = useMemo(() => {
+    const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
+
+  const hasData = filteredOutliers.length > 0;
+  const kpis = { carry: kCarry, ball: kBall, club: kClub, smash: kSmash };
+
+  /* =========================
+     Drag & drop handlers
+  ========================= */
+  const dragKey = useRef<string | null>(null);
+  const onDragStart = (key: string) => (e: React.DragEvent) => { dragKey.current = key; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOver = (key: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragKey.current === key) return;
+    setCardOrder(o => {
+      const from = o.indexOf(dragKey.current!);
+      const to = o.indexOf(key);
+      if (from < 0 || to < 0) return o;
+      const copy = o.slice();
+      const [k] = copy.splice(from, 1);
+      copy.splice(to, 0, k);
+      return copy;
+    });
+  };
+  const onDrop = (_key: string) => (_: React.DragEvent) => { dragKey.current = null; };
+
+  const dragKey2 = useRef<string | null>(null);
+  const onDragStart2 = (key: string) => (e: React.DragEvent) => { dragKey2.current = key; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOver2 = (key: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragKey2.current === key) return;
+    setInsightsOrder(o => {
+      const from = o.indexOf(dragKey2.current!);
+      const to = o.indexOf(key);
+      if (from < 0 || to < 0) return o;
+      const copy = o.slice();
+      const [k] = copy.splice(from, 1);
+      copy.splice(to, 0, k);
+      return copy;
+    });
+  };
+  const onDrop2 = (_key: string) => (_: React.DragEvent) => { dragKey2.current = null; };
+
+  /* =========================
+     Sidebar toggle (mobile)
+  ========================= */
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+
+  /* =========================
+     Render
+  ========================= */
   return (
-    <div style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
-      <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
+      {/* Header */}
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            className="md:hidden rounded-md px-2 py-1 border"
+            style={{ background: T.panel, borderColor: T.border, color: T.text }}
+            onClick={() => setSidebarOpen(s => !s)}
+            aria-label="Toggle filters"
+            title="Toggle filters"
+          >
+            ☰
+          </button>
           <div className="text-lg font-semibold">Launch Tracker</div>
-          <div className="flex items-center gap-2">
-            {/* Tabs in header (desktop) */}
-            <div className="hidden md:flex items-center gap-2">
-              <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-              <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-              <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-            </div>
-            {/* Theme toggle */}
-            <button
-              className="px-2 py-1 rounded-md border text-xs"
-              style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-              onClick={() => setTheme(theme === LIGHT ? DARK : LIGHT)}
-              title="Toggle theme"
-            >
-              {theme === LIGHT ? <IconMoon/> : <IconSun/>}
-            </button>
-          </div>
+          <div className="hidden md:block text-xs" style={{ color: T.textDim }}>
+            Analyze carry, dispersion, efficiency, and progress
+          </button>
         </div>
-      </header>
 
-      {/* Mobile tabs row */}
-      <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
-          <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+        {/* Right side: tabs + theme */}
+        <div className="flex items-center gap-2">
+          <TopTab label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} theme={T} />
+          <TopTab label="Insights"  active={view === "insights"}  onClick={() => setView("insights")}  theme={T} />
+          <TopTab label="Journal"   active={view === "journal"}   onClick={() => setView("journal")}   theme={T} />
+          <button
+            className="rounded-md px-2 py-1 border"
+            style={{ background: T.panel, borderColor: T.border, color: T.text }}
+            onClick={() => setDark(d => !d)}
+            title={dark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {dark ? <IconSun /> : <IconMoon />}
+          </button>
+        </div>
+          <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
-          {/* Left rail */}
-          <div ref={filtersRef}>
+      {/* Main layout: sidebar + content */}
+      <div className="max-w-6xl mx-auto px-4 pb-6 md:flex md:gap-4">
+        {/* Sidebar */}
+        <aside
+          className={`md:sticky md:top-4 md:self-start md:w-[320px] md:shrink-0 min-w-0 overflow-x-hidden ${sidebarOpen ? "" : "hidden"} md:block`}
+          aria-label="Filters"
+        >
+          <div ref={filtersRef} className="sidebar-fix">
             <FiltersPanel
               theme={T}
               shots={shots}
@@ -430,11 +496,40 @@ export default function App() {
               onDeleteSession={onDeleteSession}
               onDeleteAll={onDeleteAll}
             />
-          </div>
 
-          {/* Right content */}
-          <div>
-            {tab === "dashboard" && (
+            {/* Import / Export inside Filters */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className="rounded-md px-3 py-1 border"
+                style={{ background: T.brand, borderColor: T.brand, color: T.white }}
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = ".xlsx,.xls,.csv";
+                  input.onchange = (e: any) => {
+                    const file = e.target?.files?.[0];
+                    if (file) onImportFile(file);
+                  };
+                  input.click();
+                }}
+              >
+                Import
+              </button>
+              <button
+                className="rounded-md px-3 py-1 border"
+                style={{ background: T.panel, borderColor: T.border, color: T.text }}
+                onClick={exportShotsCSV}
+              >
+                Export CSV
+              </button>
+            </button>
+          </button>
+        </aside>
+
+        {/* Content area */}
+        <main className="flex-1">
+          <div className="mt-2">
+            {view === "dashboard" && (
               <DashboardCards
                 theme={T}
                 cardOrder={cardOrder}
@@ -443,77 +538,57 @@ export default function App() {
                 onDragOver={onDragOver}
                 onDrop={onDrop}
                 hasData={hasData}
-                kpis={kpis as any}
+                kpis={kpis}
                 filteredOutliers={filteredOutliers}
-                filtered={filteredBase}
+                filtered={filtered}
                 shots={shots}
-                tableRows={tableRows as any}
+                tableRows={tableRows}
                 clubs={clubs}
               />
             )}
-            {tab === "insights" && (
+
+            {view === "insights" && (
               <InsightsView
                 theme={T}
-                tableRows={tableRows as any}
+                tableRows={tableRows}
                 filteredOutliers={filteredOutliers}
                 filteredNoClubOutliers={filteredOutliers}
-                filteredNoClubRaw={filteredBase}
+                filteredNoClubRaw={filtered}
                 allClubs={clubs}
                 insightsOrder={insightsOrder}
-                onDragStart={onDragStart}
-                onDragOver={onDragOver}
-                onDrop={onDrop}
+                onDragStart={onDragStart2}
+                onDragOver={onDragOver2}
+                onDrop={onDrop2}
               />
             )}
-            {tab === "journal" && (
+
+            {view === "journal" && (
               <JournalView
                 theme={T}
-                editorRef={journalRef}
-                value={journalHTML}
-                onInputHTML={setJournalHTML}
-                sessionLabel={sessionLabel}
-                defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
+                editorRef={useRef<HTMLDivElement | null>(null)}
+                value={(() => {
+                  try {
+                    const k = `launch-tracker:journal:${sessionFilter}`;
+                    return localStorage.getItem(k) || "";
+                  } catch { return ""; }
+                })()}
+                onInputHTML={(html) => {
+                  try {
+                    const k = `launch-tracker:journal:${sessionFilter}`;
+                    localStorage.setItem(k, html);
+                  } catch {}
+                }}
+                sessionLabel={`Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`}
+                defaultHeightPx={filtersHeight}
               />
             )}
-          </div>
-        </div>
-      </div>
+          </button>
 
-      <Footer T={T} />
-
-      {/* Toasts */}
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
-        {msgs.map((m) => (
-          <div
-            key={m.id}
-            className="px-3 py-2 rounded-md border text-sm shadow-sm"
-            style={{ background: T.panel, borderColor: T.border, color: T.text }}
-          >
-            {m.text}
-          </div>
-        ))}
+          <Footer T={T} />
+        </main>
       </div>
     </div>
   );
-}
+}  const [filtersOpen, setFiltersOpen] = useState(false);
 
-/* =========================
-   Footer
-========================= */
-function Footer({ T }: { T: Theme }) {
-  const year = new Date().getFullYear();
-  return (
-    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
-      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
-        <div className="text-xs" style={{ color: T.textDim }}>
-          © {year} Launch Tracker
-        </div>
-        <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
-          <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
-          <span>·</span>
-          <span>v1.0.0+</span>
-        </nav>
-      </div>
-    </footer>
-  );
-}
+
