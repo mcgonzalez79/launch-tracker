@@ -1,50 +1,151 @@
 import React from "react";
-import { Theme } from "../theme";
+import type { Theme } from "../theme";
 
-export function Card({ theme, title, children, dragHandle }:{ theme: Theme; title: string; children: React.ReactNode; dragHandle?: boolean }) {
+/* Icons */
+export function IconSun() {
   return (
-    <div className="rounded-2xl p-5 shadow" style={{ background: theme.panel, border: `1px solid ${theme.border}` }}>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold tracking-wide" style={{ color: theme.brand }}>{title}</h2>
-        <div className="flex items-center gap-3">
-          {dragHandle && <span title="Drag to reorder" style={{ color: theme.textDim, cursor: "grab" }}>⋮⋮</span>}
-          <div className="h-1 rounded-full w-24" style={{ background: `linear-gradient(90deg, ${theme.brand}, ${theme.brandTint})` }} />
-        </div>
-      </div>
-      {children}
-    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 4V2M12 22v-2M4.93 4.93 3.52 3.52M20.48 20.48l-1.41-1.41M4 12H2M22 12h-2M4.93 19.07 3.52 20.48M20.48 3.52l-1.41 1.41" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  );
+}
+export function IconMoon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+    </svg>
   );
 }
 
-export function KPI({ theme, label, value, color, tooltip }:{ theme: Theme; label: string; value: string; color: string; tooltip?: string }) {
+/* Card */
+export function Card({
+  title,
+  children,
+  theme: T,
+  pad = true,
+}: {
+  title?: string;
+  children?: React.ReactNode;
+  theme: Theme;
+  pad?: boolean;
+}) {
   return (
-    <div className="rounded-2xl p-3 text-sm" style={{ background: theme.panel, border: `1px solid ${theme.kpiBorder}`, color: theme.text }}>
-      <div style={{ color: theme.textDim }}>
-        {label} {tooltip && <span title={tooltip} style={{ marginLeft: 6, cursor: "help", color: theme.brand }}>ⓘ</span>}
-      </div>
-      <div className="mt-1 text-lg font-semibold" style={{ color }}>{value || "-"}</div>
-    </div>
+    <section
+      className="rounded-xl shadow-sm"
+      style={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+    >
+      {title && (
+        <header
+          className="px-4 py-2 rounded-t-xl text-sm font-medium"
+          style={{ borderBottom: `1px solid ${T.border}`, background: T.panelAlt, color: T.text }}
+        >
+          {title}
+        </header>
+      )}
+      <div className={pad ? "p-4" : ""}>{children}</div>
+    </section>
   );
 }
 
-export const EmptyChart = ({ theme }:{ theme: Theme }) =>
-  <div style={{ padding: 16, color: theme.textDim }}>No shots in this range.</div>;
-
-export const Th = ({ children, theme }:{ children: React.ReactNode; theme: Theme }) =>
-  <th className="py-2 pr-4" style={{ color: theme.textDim }}>{children}</th>;
-export const Td = ({ children }:{ children: React.ReactNode }) => <td className="py-2 pr-4">{children}</td>;
-
-export function TopTab({ theme, label, active, onClick }:{ theme: Theme; label: string; active: boolean; onClick: () => void }) {
+/* Top Tab */
+export function TopTab({
+  label,
+  active,
+  onClick,
+  theme: T,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  theme: Theme;
+}) {
   return (
-    <button onClick={onClick} className="px-3 py-2 rounded-lg text-sm border"
-      style={{ background: active ? theme.white : theme.panel, borderColor: theme.border, color: active ? theme.brand : theme.text, fontWeight: active ? 600 : 500 }}>
+    <button
+      onClick={onClick}
+      className="px-3 py-1 rounded-md text-sm border transition-colors"
+      style={{
+        background: active ? T.brand : T.panel,
+        color: active ? T.white : T.text,
+        borderColor: active ? T.brand : T.border,
+      }}
+    >
       {label}
     </button>
   );
 }
 
-export const ToolbarBtn = ({ theme, label, onClick }:{ theme: Theme; label: React.ReactNode; onClick: ()=>void }) =>
-  <button onClick={onClick} className="px-2 py-1 text-xs rounded-md border" style={{ borderColor: theme.border, color: theme.text, background: theme.panel }}>{label}</button>;
+/* Chip (for filters) */
+export function Chip({
+  label,
+  selected,
+  onClick,
+  theme: T,
+}: {
+  label: string;
+  selected?: boolean;
+  onClick?: () => void;
+  theme: Theme;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-2 py-1 rounded-md text-xs border"
+      style={{
+        background: selected ? T.brandMuted : T.panelAlt,
+        color: selected ? T.text : T.text,
+        borderColor: selected ? T.brand : T.border,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
-export const IconSun = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="#FFD166" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="4" fill="#FFD166"/><g stroke="#fff" strokeLinecap="round"><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></g></svg>);
-export const IconMoon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="currentColor" strokeWidth="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>);
+/* Muted button */
+export function MutedButton({
+  children,
+  onClick,
+  theme: T,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  theme: Theme;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1 rounded-md border text-sm"
+      style={{ background: T.panel, color: T.text, borderColor: T.border }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* Primary button */
+export function PrimaryButton({
+  children,
+  onClick,
+  theme: T,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  theme: Theme;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1 rounded-md border text-sm"
+      style={{
+        background: T.brand,
+        color: T.white,
+        borderColor: T.brand,
+      }}
+      onMouseOver={(e) => ((e.currentTarget.style.backgroundColor = T.brandHover))}
+      onMouseOut={(e) => ((e.currentTarget.style.backgroundColor = T.brand))}
+    >
+      {children}
+    </button>
+  );
+}
