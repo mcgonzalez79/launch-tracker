@@ -389,7 +389,7 @@ export default function InsightsView(props: Props) {
   );
 
   /* ---------- Warnings & Gapping (ignore club selection; all clubs) ---------- */
-  const warningsList = useMemo(() => {
+  const warningsGlobal = useMemo(() => {
     const items: string[] = [];
     const rows = filteredNoClubOutliers; // ignore club selection; still respects date/session/outlier filters
 
@@ -411,7 +411,13 @@ export default function InsightsView(props: Props) {
       if (aoa != null && aoa < -1) items.push(`Driver AoA average ${aoa.toFixed(2)}° down. Try tee height/ball position for upward hit.`);
     }
 
-    // Gapping warnings (global, by average carry per club)
+    return items;
+  }, [filteredNoClubOutliers]);
+
+  const gapWarnings = useMemo(() => {
+    const items: string[] = [];
+    const rows = filteredNoClubOutliers; // ignore club selection; still respects date/session/outlier filters
+
     const g = groupBy(rows, s => s.Club || "Unknown");
     const clubAverages: { club: string; avg: number; n: number }[] = [];
     for (const [club, rs] of g.entries()) {
@@ -527,15 +533,28 @@ export default function InsightsView(props: Props) {
     </div>
   );
 
-  /* ---------- Weaknesses (now includes Warnings & Gapping; all clubs) ---------- */
+  /* ---------- Weaknesses (All Clubs) ---------- */
   const weaknesses = (
     <div key="weaknesses" draggable onDragStart={onDragStart("weaknesses")} onDragOver={onDragOver("weaknesses")} onDrop={onDrop("weaknesses")}>
-      <Card title="Weaknesses & Warnings (All Clubs)" theme={T}>
-        {warningsList.length ? (
-          <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
-            {warningsList.map((w, i) => <li key={i}>{w}</li>)}
-          </ul>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings triggered.</div>}
+      <Card title="Weaknesses (All Clubs)" theme={T}>
+        <div className="space-y-5">
+          <section>
+            <div className="font-semibold mb-2" style={{ color: T.textDim }}>General</div>
+            {warningsGlobal.length ? (
+              <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
+                {warningsGlobal.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            ) : <div className="text-sm" style={{ color: T.textDim }}>No general warnings.</div>}
+          </section>
+          <section>
+            <div className="font-semibold mb-2" style={{ color: T.textDim }}>Gapping</div>
+            {gapWarnings.length ? (
+              <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
+                {gapWarnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            ) : <div className="text-sm" style={{ color: T.textDim }}>No gapping warnings.</div>}
+          </section>
+        </div>
       </Card>
     </div>
   );
