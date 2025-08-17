@@ -333,60 +333,43 @@ const shapeCard = (
   );
 
   /* ---------- Table (compact) ---------- */
+  
+  const clubAvgData = useMemo(() => (
+    tableRows.map(r => ({
+      club: (r as any).club,
+      avgCarry: Number((r as any).avgCarry || 0),
+      avgTotal: Number((r as any).avgTotal || 0),
+      avgSmash: Number((r as any).avgSmash || 0),
+      avgCS: Number((r as any).avgCS || 0),
+      avgBS: Number((r as any).avgBS || 0),
+    }))
+  ), [tableRows]);
+
   const tableCard = (
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
-      <Card title="Recent Shots (first 50)" theme={T}>
-        {filteredOutliers.length ? (
-          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
-            <table className="w-full text-sm" style={{ color: T.text }}>
-              <thead style={{ background: T.panelAlt, color: T.text }}>
-                <tr>
-                  <th className="text-left px-2 py-1">Time</th>
-                  <th className="text-left px-2 py-1">Session</th>
-                  <th className="text-left px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">Carry</th>
-                  <th className="text-right px-2 py-1">Ball</th>
-                  <th className="text-right px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">Smash</th>
-                  <th className="text-right px-2 py-1">Lateral</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOutliers.slice(0, 50).map((s, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="px-2 py-1">{s.Timestamp?.slice(0, 19).replace("T", " ")}</td>
-                    <td className="px-2 py-1">{s.SessionId}</td>
-                    <td className="px-2 py-1">{s.Club}</td>
-                    <td className="px-2 py-1 text-right">{isNum(s.CarryDistance_yds) ? s.CarryDistance_yds!.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{isNum(s.BallSpeed_mph) ? s.BallSpeed_mph!.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{isNum(s.ClubSpeed_mph) ? s.ClubSpeed_mph!.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{isNum(s.SmashFactor) ? s.SmashFactor!.toFixed(3) : ""}</td>
-                    <td className="px-2 py-1 text-right">{isNum(s.CarryDeviationDistance_yds) ? s.CarryDeviationDistance_yds!.toFixed(1) : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Card title="Club Averages" theme={T}>
+        {clubAvgData.length ? (
+          <div style={{ height: 320 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={clubAvgData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
+                <YAxis yAxisId="left" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Distance / Speed", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Smash", angle: 90, position: "insideRight", fill: T.textDim, fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  formatter={(val:any, name:string)=>[typeof val==='number'? (name==='avgSmash'? val.toFixed(3): val.toFixed(1)) : val, name.replace('avg','')]}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="avgCarry" name="Carry" />
+                <Bar yAxisId="left" dataKey="avgTotal" name="Total" />
+                <Line yAxisId="right" type="linear" dataKey="avgSmash" name="Smash" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>No rows to display.</div>
+          <div className="text-sm" style={{ color: T.textDim }}>No club averages available.</div>
         )}
       </Card>
     </div>
-  );
-
-  /* ---------- Assemble by order ---------- */
-  const cardMap: Record<string, JSX.Element> = {
-    kpis: kpiCard,
-    shape: shapeCard,
-    dispersion: dispersionCard,
-    gap: gapCard,
-    eff: effCard,
-    table: tableCard,
-  };
-
-  return (
-    <div className="grid gap-4">
-      {cardOrder.map((key) => cardMap[key] ?? null)}
-    </div>
-  );
+  )
 }
