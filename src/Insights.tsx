@@ -477,6 +477,18 @@ export default function InsightsView({
                     {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
                   </div>
                 </div>
+
+                 {/* PR Total (with date) */}
+                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
+                  <div className="text-sm text-slate-500">PR Total</div>
+                  <div className="mt-1 text-2xl font-semibold">
+                    {selectedPR.bestTotal?.TotalDistance_yds ? `${selectedPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
+                  </div>
+                  <div className="text-slate-600 mt-1 text-sm">
+                    {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
+                    {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
+                  </div>
+                </div>
               </div>
             </Card>
           </div>
