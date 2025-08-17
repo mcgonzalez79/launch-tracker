@@ -212,33 +212,43 @@ export default function App() {
     toast({ type: "success", text: `Imported ${added} new shots from ${filename}` });
   }
 
-  /* =========================
-     Export (CSV aligned to Shot)
-  ========================= */
-  function exportShotsCSV() {
-    const headers = [
-      "Timestamp","SessionId","Club",
-      "CarryDistance_yds","TotalDistance_yds",
-      "BallSpeed_mph","ClubSpeed_mph",
-      "LaunchAngle_deg","Spin_rpm",
-      "PeakHeight_yds","LandingAngle_deg",
-      "Offline_yds","Side_deg","Path_deg","AttackAngle_deg",
-      "SmashFactor","FaceToPath_deg"
-    ];
-    const esc = (v:any) => { if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; };
-    const lines = [
-      headers.join(","),
-      ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
-    ];
-    const csv = lines.join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    a.download = `launch-tracker_${stamp}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
+ /* =========================
+   Export (CSV aligned to Shot)
+========================= */
+function exportShotsCSV() {
+  // Keep this list in sync with your Shot interface & the fields you actually populate in processWorkbook
+  const headers = [
+    "Timestamp", "SessionId", "Club",
+    "CarryDistance_yds", "TotalDistance_yds",
+    "BallSpeed_mph", "ClubSpeed_mph",
+    "LaunchAngle_deg", "LaunchDirection_deg",
+    "ApexHeight_yds",
+    "CarryDeviationDistance_yds", "TotalDeviationDistance_yds",
+    "ClubFace_deg", "ClubPath_deg", "AttackAngle_deg",
+    "SmashFactor", "FaceToPath_deg"
+  ];
+
+  const esc = (v: any) => {
+    if (v == null) return "";
+    const s = String(v).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+
+  const lines = [
+    headers.join(","),
+    ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
+  ];
+
+  const csv = lines.join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  a.download = `launch-tracker_${stamp}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 
   /* =========================
      Filters state (names match Filters.tsx)
