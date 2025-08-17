@@ -388,34 +388,60 @@ export default function InsightsView(props: Props) {
     </div>
   );
 
-  /* ---------- Warnings (unchanged basic heuristics, still respects selection) ---------- */
+  /* ---------- Warnings & Gapping (ignore club selection; all clubs) ---------- */
   const warningsList = useMemo(() => {
     const items: string[] = [];
-    // Low smash overall
-    const smashVals = filteredOutliers.map(s => s.SmashFactor).filter(isNum);
+    const rows = filteredNoClubOutliers; // ignore club selection; still respects date/session/outlier filters
+
+    // General heuristics (global)
+    const smashVals = rows.map(s => s.SmashFactor).filter(isNum);
     const sAvg = avg(smashVals);
     if (sAvg != null && sAvg < 1.40) items.push(`Low average smash factor (${sAvg.toFixed(2)}). Focus on centered contact.`);
 
-    // Excess lateral dispersion (IQR over 20 yds)
-    const lateral = filteredOutliers.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
+    const lateral = rows.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
     if (lateral.length >= 8) {
       const q1 = lateral[Math.floor(lateral.length * 0.25)];
       const q3 = lateral[Math.floor(lateral.length * 0.75)];
       if (q3 - q1 > 20) items.push(`High lateral dispersion (IQR ${(q3 - q1).toFixed(1)} yds). Work on start-line control.`);
     }
 
-    // AoA driver hint (if driver exists): if avg AoA < -1 with driver
-    const driverRows = filteredOutliers.filter(s => (s.Club || "").toLowerCase().includes("driver"));
+    const driverRows = rows.filter(s => (s.Club || "").toLowerCase().includes("driver"));
     if (driverRows.length) {
       const aoa = avg(driverRows.map(s => s.AttackAngle_deg).filter(isNum));
       if (aoa != null && aoa < -1) items.push(`Driver AoA average ${aoa.toFixed(2)}° down. Try tee height/ball position for upward hit.`);
     }
+
+    // Gapping warnings (global, by average carry per club)
+    const g = groupBy(rows, s => s.Club || "Unknown");
+    const clubAverages: { club: string; avg: number; n: number }[] = [];
+    for (const [club, rs] of g.entries()) {
+      const carries = rs.map(s => s.CarryDistance_yds).filter(isNum);
+      if (carries.length >= 3) {
+        const a = avg(carries)!;
+        clubAverages.push({ club, avg: a, n: carries.length });
+      }
+    }
+    clubAverages.sort((a, b) => a.avg - b.avg);
+
+    const SMALL_GAP = 10; // yds
+    const LARGE_GAP = 25; // yds
+    for (let i = 0; i < clubAverages.length - 1; i++) {
+      const c1 = clubAverages[i];
+      const c2 = clubAverages[i + 1];
+      const gap = c2.avg - c1.avg;
+      if (gap < SMALL_GAP) {
+        items.push(`Small gap between ${c1.club} (${c1.avg.toFixed(1)} yds) and ${c2.club} (${c2.avg.toFixed(1)} yds): ${gap.toFixed(1)} yds.`);
+      } else if (gap > LARGE_GAP) {
+        items.push(`Large gap between ${c1.club} (${c1.avg.toFixed(1)} yds) and ${c2.club} (${c2.avg.toFixed(1)} yds): ${gap.toFixed(1)} yds.`);
+      }
+    }
+
     return items;
-  }, [filteredOutliers]);
+  }, [filteredNoClubOutliers]);
 
   const warnings = (
     <div key="warnings" draggable onDragStart={onDragStart("warnings")} onDragOver={onDragOver("warnings")} onDrop={onDrop("warnings")}>
-      <Card title="Warnings (Heuristics)" theme={T}>
+      <Card title="Warnings & Gapping (All Clubs)" theme={T}>
         {warningsList.length ? (
           <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
             {warningsList.map((w, i) => <li key={i}>{w}</li>)}
@@ -460,29 +486,34 @@ export default function InsightsView(props: Props) {
     </div>
   );
 
-  /* ---------- Progress (by session; unchanged, ignores club selection) ---------- */
+  /* ---------- Progress (Avg Carry by Day; ignores club selection) ---------- */
   const progressData = useMemo(() => {
-    const groups = groupBy(filteredNoClubOutliers, s => s.SessionId || "Unknown");
-    const out: { session: string; carryAvg: number }[] = [];
-    for (const [session, rows] of groups.entries()) {
-      const carries = rows.map(s => s.CarryDistance_yds).filter(isNum);
-      const a = avg(carries);
-      if (a != null) out.push({ session, carryAvg: a });
+    const rows = filteredNoClubOutliers;
+    const byDay = new Map<string, number[]>();
+    for (const s of rows) {
+      const ts = s.Timestamp ? new Date(s.Timestamp) : null;
+      if (!ts || isNaN(ts.getTime())) continue;
+      const day = ts.toISOString().slice(0, 10); // YYYY-MM-DD
+      const carry = s.CarryDistance_yds;
+      if (!isNum(carry)) continue;
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(carry);
     }
-    out.sort((a, b) => a.session.localeCompare(b.session)); // yyyy-mm-dd sorts lexicographically
+    const out = Array.from(byDay.entries()).map(([day, arr]) => ({ day, carryAvg: avg(arr)! })).filter(d => d.carryAvg != null);
+    out.sort((a, b) => a.day.localeCompare(b.day));
     return out;
   }, [filteredNoClubOutliers]);
 
   const progress = (
     <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
-      <Card title="Progress (Avg Carry by Session)" theme={T}>
+      <Card title="Progress (Avg Carry by Day)" theme={T}>
         {progressData.length ? (
           <div style={{ height: 260 }}>
             <ResponsiveContainer>
               <LineChart data={progressData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="session"
+                  dataKey="day"
                   tick={{ fill: T.tick, fontSize: 12 }}
                   stroke={T.tick}
                   interval={Math.max(0, Math.floor(progressData.length / 8) - 1)}
@@ -497,12 +528,13 @@ export default function InsightsView(props: Props) {
                 <Tooltip
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(v: any) => [`${(v as number).toFixed?.(1)} yds`, "Avg Carry"]}
+                  labelFormatter={(label: string) => label}
                 />
                 <Line type="monotone" dataKey="carryAvg" stroke={T.brand} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No session data available.</div>}
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No daily data available.</div>}
       </Card>
     </div>
   );
