@@ -1,9 +1,14 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { LIGHT, DARK, Theme } from "./theme";
+import FiltersPanel from "./Filters";
+import DashboardCards from "./Dashboard";
+import InsightsView from "./Insights";
+import JournalView from "./Journal";
+import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
-  Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
+  Shot, Msg, ViewKey, mean, stddev, isoDate,
   XLSX, orderIndex, ClubRow,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV,
 } from "./utils";
 
 /* =========================
@@ -11,8 +16,10 @@ import {
 ========================= */
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const push = (text: string) => setMsgs((m) => [...m, { id: Date.now(), text } as Msg]);
-  const remove = (id: number) => setMsgs((m) => m.filter(x => x.id !== id));
+  const push = (text: string) =>
+    setMsgs((m) => [...m, { id: Math.random().toString(36).slice(2), text } as Msg]);
+  const remove = (id: string) =>
+    setMsgs((m) => m.filter((x) => x.id !== id));
   return { msgs, push, remove };
 }
 
@@ -20,20 +27,23 @@ function useToasts() {
    Helpers
 ========================= */
 const isNum = (x: any): x is number => typeof x === "number" && Number.isFinite(x);
+const clampNumber = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-const applyDerived = (s: Shot): Shot => {
-  const s2 = { ...s } as Shot;
-  // Compute SmashFactor if missing and speeds available
-  if (!isNum(s2.SmashFactor) && isNum(s2.BallSpeed_mph) && isNum(s2.ClubSpeed_mph) && s2.ClubSpeed_mph) {
-    const Sm = s2.BallSpeed_mph / s2.ClubSpeed_mph;
-    s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+function applyDerived(s: Shot): Shot {
+  const out = { ...s };
+
+  // Smash factor if missing and both speeds present
+  if (!isNum(out.SmashFactor) && isNum(out.BallSpeed_mph) && isNum(out.ClubSpeed_mph) && out.ClubSpeed_mph > 0) {
+    out.SmashFactor = clampNumber(out.BallSpeed_mph / out.ClubSpeed_mph, 0.5, 1.95);
   }
-  // Compute Face-to-Path if missing and face/path available
-  if (!isNum(s2.FaceToPath_deg) && isNum(s2.ClubFace_deg) && isNum(s2.ClubPath_deg)) {
-    s2.FaceToPath_deg = (s2.ClubFace_deg as number) - (s2.ClubPath_deg as number);
+
+  // Face-to-Path if missing and both angles present
+  if (!isNum(out.FaceToPath_deg) && isNum(out.ClubFace_deg) && isNum(out.ClubPath_deg)) {
+    out.FaceToPath_deg = out.ClubFace_deg - out.ClubPath_deg;
   }
-  return s2;
-};
+
+  return out;
+}
 
 /* =========================
    App
@@ -41,39 +51,67 @@ const applyDerived = (s: Shot): Shot => {
 export default function App() {
   // Theme
   const [theme, setTheme] = useState<Theme>(() => {
-    try { return (localStorage.getItem("launch-tracker:theme") || "dark") === "light" ? LIGHT : DARK; } catch { return DARK; }
+    try {
+      return (localStorage.getItem("launch-tracker:theme") || "dark") === "light" ? LIGHT : DARK;
+    } catch {
+      return DARK;
+    }
   });
   useEffect(() => {
-    try { localStorage.setItem("launch-tracker:theme", theme === LIGHT ? "light" : "dark"); } catch {}
+    try {
+      localStorage.setItem("launch-tracker:theme", theme === LIGHT ? "light" : "dark");
+    } catch {}
     document.documentElement.style.setProperty("color-scheme", theme === LIGHT ? "light" : "dark");
   }, [theme]);
 
   // View
   const [tab, setTab] = useState<ViewKey>(() => {
-    try { return (localStorage.getItem("launch-tracker:tab") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
+    try {
+      return (localStorage.getItem("launch-tracker:tab") as ViewKey) || "dashboard";
+    } catch {
+      return "dashboard";
+    }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:tab", tab); } catch {} }, [tab]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("launch-tracker:tab", tab);
+    } catch {}
+  }, [tab]);
 
   // Toasts
   const { msgs, push: toast, remove: removeToast } = useToasts();
 
   // Data
   const [shots, setShots] = useState<Shot[]>(() => {
-    try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try {
+      const raw = localStorage.getItem("launch-tracker:shots");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("launch-tracker:shots", JSON.stringify(shots));
+    } catch {}
+  }, [shots]);
 
   // Sessions
-  const sessions = useMemo(() => Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session")).values()).sort(), [shots]);
+  const sessions = useMemo(
+    () => Array.from(new Set(shots.map((s) => s.SessionId ?? "Unknown Session")).values()).sort(),
+    [shots]
+  );
 
   // Clubs & bounds
   const clubs = useMemo(
-    () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
+    () => Array.from(new Set(shots.map((s) => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
   );
   const carryBounds = useMemo(() => {
-    const xs = shots.map(s => s.CarryDistance_yds).filter(isNum);
-    return xs.length ? { min: Math.floor(Math.min(...xs)), max: Math.ceil(Math.max(...xs)) } : { min: 0, max: 0 };
+    const xs = shots.map((s) => s.CarryDistance_yds).filter(isNum);
+    return xs.length
+      ? { min: Math.floor(Math.min(...xs)), max: Math.ceil(Math.max(...xs)) }
+      : { min: 0, max: 0 };
   }, [shots]);
 
   /* =========================
@@ -82,13 +120,16 @@ export default function App() {
   function mergeImportedShots(newShots: Shot[], filename: string) {
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
-    const existing = new Map(shots.map(s => [keyOf(s), s]));
+    const existing = new Map(shots.map((s) => [keyOf(s), s]));
     const merged: Shot[] = [];
     for (const s of newShots) {
       const key = keyOf(s);
       if (!existing.has(key)) merged.push(applyDerived(s));
     }
-    if (!merged.length) { toast(`No new shots found in ${filename}.`); return; }
+    if (!merged.length) {
+      toast(`No new shots found in ${filename}.`);
+      return;
+    }
     setShots([...shots, ...merged]);
     toast(`Imported ${merged.length} new shots from ${filename}.`);
   }
@@ -99,31 +140,37 @@ export default function App() {
       if (ext === "csv") {
         const text = await file.text();
         const parsed = parseWeirdLaunchCSV(text);
-        if (!parsed) { toast("CSV format not recognized (no club column?)"); return; }
-        const shots = weirdRowsToShots(parsed.header, parsed.dataRows, "Imported").map(applyDerived);
-        mergeImportedShots(shots, file.name);
+        if (!parsed) {
+          toast("CSV format not recognized (no club column?)");
+          return;
+        }
+        const imported = weirdRowsToShots(parsed.header, parsed.dataRows, "Imported").map(applyDerived);
+        mergeImportedShots(imported, file.name);
         return;
       }
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       processWorkbook(wb, file.name);
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       toast(`Failed to import ${file.name}`);
     }
   }
 
   function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    const valid = wb.SheetNames.find(n => {
+    const valid = wb.SheetNames.find((n) => {
       const ws = wb.Sheets[n];
       const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
       return rr && rr.length > 0 && rr[0] && rr[0].length > 3;
     });
-    if (!valid) { toast(`No data in ${filename}`); return; }
+    if (!valid) {
+      toast(`No data in ${filename}`);
+      return;
+    }
     const ws = wb.Sheets[valid!];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    const header = (rows[0] || []).map(x => String(x ?? ""));
-    const idx = (key: string) => header.findIndex(h => normalizeHeader(h) === key);
+    const header = (rows[0] || []).map((x) => String(x ?? ""));
+    const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
     const data = rows.slice(1);
 
     const numOrUndef = (v: any) => {
@@ -133,28 +180,41 @@ export default function App() {
 
     const shots2: Shot[] = data.map((row) => {
       const s: Shot = {
-        SessionId:           (row[idx("session")] ?? undefined) as any,
-        Timestamp:           (() => { const v = row[idx("timestamp")]; if (v instanceof Date) return v.toISOString(); try { const d = new Date(v); return isNaN(d as any) ? undefined : d.toISOString(); } catch { return undefined; } })(),
-        Club:                (row[idx("club")] ?? undefined) as any,
-        ClubSpeed_mph:      numOrUndef(row[idx("club speed")]),
-        AttackAngle_deg:    numOrUndef(row[idx("attack angle")]),
-        ClubPath_deg:       numOrUndef(row[idx("club path")]),
-        ClubFace_deg:       numOrUndef(row[idx("club face")]),
-        FaceToPath_deg:     numOrUndef(row[idx("face to path")]),
-        BallSpeed_mph:      numOrUndef(row[idx("ball speed")]),
-        SmashFactor:        numOrUndef(row[idx("smash factor")]),
-        LaunchAngle_deg:    numOrUndef(row[idx("launch angle")]),
-        LaunchDirection_deg:numOrUndef(row[idx("launch direction")]),
-        ApexHeight_yds:     numOrUndef(row[idx("apex height")]),
-        CarryDistance_yds:  numOrUndef(row[idx("carry distance")]),
+        SessionId: (row[idx("session")] ?? undefined) as any,
+        Timestamp: (() => {
+          const v = row[idx("timestamp")];
+          if (v instanceof Date) return v.toISOString();
+          try {
+            const d = new Date(v);
+            return isNaN(d as any) ? undefined : d.toISOString();
+          } catch {
+            return undefined;
+          }
+        })(),
+        Club: (row[idx("club")] ?? undefined) as any,
+        ClubSpeed_mph: numOrUndef(row[idx("club speed")]),
+        AttackAngle_deg: numOrUndef(row[idx("attack angle")]),
+        ClubPath_deg: numOrUndef(row[idx("club path")]),
+        ClubFace_deg: numOrUndef(row[idx("club face")]),
+        FaceToPath_deg: numOrUndef(row[idx("face to path")]),
+        BallSpeed_mph: numOrUndef(row[idx("ball speed")]),
+        SmashFactor: numOrUndef(row[idx("smash factor")]),
+        LaunchAngle_deg: numOrUndef(row[idx("launch angle")]),
+        LaunchDirection_deg: numOrUndef(row[idx("launch direction")]),
+        ApexHeight_yds: numOrUndef(row[idx("apex height")]),
+        CarryDistance_yds: numOrUndef(row[idx("carry distance")]),
         CarryDeviationDistance_yds: numOrUndef(row[idx("carry deviation distance")]),
         TotalDeviationDistance_yds: numOrUndef(row[idx("total deviation distance")]),
-        TotalDistance_yds:  numOrUndef(row[idx("total distance")]),
-        Backspin_rpm:       numOrUndef(row[idx("backspin")]),
-        Sidespin_rpm:       numOrUndef(row[idx("sidespin")]),
-        SpinRate_rpm:       numOrUndef(row[idx("spin rate")]),
-        SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
-        SpinAxis_deg:       numOrUndef(row[idx("spin axis")]),
+        TotalDistance_yds: numOrUndef(row[idx("total distance")]),
+        Backspin_rpm: numOrUndef(row[idx("backspin")]),
+        Sidespin_rpm: numOrUndef(row[idx("sidespin")]),
+        SpinRate_rpm: numOrUndef(row[idx("spin rate")]),
+        SpinRateType: (() => {
+          const i = idx("spin rate type");
+          const v = i >= 0 ? row[i] : undefined;
+          return v == null ? undefined : String(v);
+        })(),
+        SpinAxis_deg: numOrUndef(row[idx("spin axis")]),
       };
 
       return applyDerived(s);
@@ -170,7 +230,7 @@ export default function App() {
     const rand = (a: number, b: number) => a + Math.random() * (b - a);
     const shots2: Shot[] = Array.from({ length: 80 }, (_, i) => {
       const c = clubsDemo[i % clubsDemo.length];
-      const t = new Date(now - (i * 3600 * 1000 * 6)).toISOString();
+      const t = new Date(now - i * 3600 * 1000 * 6).toISOString();
       const cs = rand(70, 115);
       const bs = cs * rand(1.35, 1.52);
       const ca = cs * rand(2.1, 2.6);
@@ -197,7 +257,7 @@ export default function App() {
   }
 
   function exportShotsCSV() {
-    const rows: any[] = shots.map(s => ({
+    const rows: any[] = shots.map((s) => ({
       session: s.SessionId,
       timestamp: s.Timestamp,
       club: s.Club,
@@ -207,7 +267,7 @@ export default function App() {
       clubSpeed: s.ClubSpeed_mph,
       smash: s.SmashFactor,
     }));
-    exportCSV(rows);
+    exportCSV(rows); // utils.exportCSV expects one arg
   }
 
   // Mobile drawer state
@@ -239,17 +299,17 @@ export default function App() {
       const first = rows[0] || {};
       const colDefs: { key: string; label: string; align?: "left" | "right" }[] = (
         [
-          { key: "club",      label: "Club", align: "left" as const },
-          { key: "count",     label: "Shots" },
-          { key: "avgCarry",  label: "Avg Carry (yds)" },
-          { key: "avgTotal",  label: "Avg Total (yds)" },
-          { key: "avgBall",   label: "Avg Ball (mph)" },
-          { key: "avgClub",   label: "Avg Club (mph)" },
-          { key: "avgSmash",  label: "Smash" },
+          { key: "club", label: "Club", align: "left" as const },
+          { key: "count", label: "Shots" },
+          { key: "avgCarry", label: "Avg Carry (yds)" },
+          { key: "avgTotal", label: "Avg Total (yds)" },
+          { key: "avgBall", label: "Avg Ball (mph)" },
+          { key: "avgClub", label: "Avg Club (mph)" },
+          { key: "avgSmash", label: "Smash" },
           { key: "avgLaunch", label: "Launch (°)" },
-          { key: "avgF2P",    label: "Face-to-Path (°)" },
+          { key: "avgF2P", label: "Face-to-Path (°)" },
         ] as const
-      ).filter(c => c.key in first) as { key: string; label: string; align?: "left" | "right" }[];
+      ).filter((c) => c.key in first) as { key: string; label: string; align?: "left" | "right" }[];
 
       const fmt = (k: string, v: any) => {
         if (v == null || v === "") return "";
@@ -261,17 +321,21 @@ export default function App() {
         return String(v);
       };
 
-      const tableHead = colDefs.map(c => 
-        `<th style="text-align:${c.align === "left" ? "left" : "right"}">${c.label}</th>`
-      ).join("");
+      const tableHead = colDefs
+        .map((c) => `<th style="text-align:${c.align === "left" ? "left" : "right"}">${c.label}</th>`)
+        .join("");
 
-      const rowsHtml = rows.map(r => {
-        const cells = colDefs.map(c => {
-          const raw = (r as any)[c.key];
-          return `<td style="text-align:${c.align === "left" ? "left" : "right"}">${fmt(c.key, raw)}</td>`;
-        }).join("");
-        return `<tr>${cells}</tr>`;
-      }).join("");
+      const rowsHtml = rows
+        .map((r) => {
+          const cells = colDefs
+            .map((c) => {
+              const raw = (r as any)[c.key];
+              return `<td style="text-align:${c.align === "left" ? "left" : "right"}">${fmt(c.key, raw)}</td>`;
+            })
+            .join("");
+          return `<tr>${cells}</tr>`;
+        })
+        .join("");
 
       const now = new Date().toLocaleString();
       const html = `<!doctype html>
@@ -300,8 +364,13 @@ export default function App() {
 </body></html>`;
 
       const w = window.open("", "_blank", "noopener,noreferrer");
-      if (!w) { alert("Pop-up blocked. Please allow pop-ups to print."); return; }
-      w.document.open(); w.document.write(html); w.document.close();
+      if (!w) {
+        alert("Pop-up blocked. Please allow pop-ups to print.");
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
     } catch (e) {
       console.error(e);
       alert("Unable to generate printable averages.");
@@ -310,7 +379,7 @@ export default function App() {
   function onDeleteSession() {
     if (!shots.length || sessionFilter === "ALL") return;
     if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
-    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
+    const keep = shots.filter((s) => (s.SessionId ?? "Unknown Session") !== sessionFilter);
     setShots(keep);
   }
   function onDeleteAll() {
@@ -331,10 +400,18 @@ export default function App() {
     const min = carryMin ? Number(carryMin) : null;
     const max = carryMax ? Number(carryMax) : null;
 
-    return shots.filter(s => {
+    return shots.filter((s) => {
       if (!inClubs(s) || !inSession(s)) return false;
-      if (from) { try { if (new Date(s.Timestamp || "") < from) return false; } catch {} }
-      if (to)   { try { if (new Date(s.Timestamp || "") > to)   return false; } catch {} }
+      if (from) {
+        try {
+          if (new Date(s.Timestamp || "") < from) return false;
+        } catch {}
+      }
+      if (to) {
+        try {
+          if (new Date(s.Timestamp || "") > to) return false;
+        } catch {}
+      }
       if (isNum(s.CarryDistance_yds)) {
         if (min != null && (s.CarryDistance_yds ?? 0) < min) return false;
         if (max != null && (s.CarryDistance_yds ?? 0) > max) return false;
@@ -345,7 +422,8 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    return filteredBase; // plug in IQR trimming per club in a later pass
+    // todo: per-club IQR trim etc.
+    return filteredBase;
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
@@ -353,14 +431,14 @@ export default function App() {
   ========================= */
   const hasData = filteredBase.length > 0;
   const kpis = useMemo(() => {
-    const vCarry = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum);
-    const vBall  = filteredOutliers.map(s => s.BallSpeed_mph).filter(isNum);
-    const vClub  = filteredOutliers.map(s => s.ClubSpeed_mph).filter(isNum);
-    const vSmash = filteredOutliers.map(s => s.SmashFactor).filter(isNum);
+    const vCarry = filteredOutliers.map((s) => s.CarryDistance_yds).filter(isNum);
+    const vBall = filteredOutliers.map((s) => s.BallSpeed_mph).filter(isNum);
+    const vClub = filteredOutliers.map((s) => s.ClubSpeed_mph).filter(isNum);
+    const vSmash = filteredOutliers.map((s) => s.SmashFactor).filter(isNum);
     return {
       carry: { mean: mean(vCarry), n: vCarry.length, std: stddev(vCarry) },
-      ball:  { mean: mean(vBall),  n: vBall.length,  std: stddev(vBall)  },
-      club:  { mean: mean(vClub),  n: vClub.length,  std: stddev(vClub)  },
+      ball: { mean: mean(vBall), n: vBall.length, std: stddev(vBall) },
+      club: { mean: mean(vClub), n: vClub.length, std: stddev(vClub) },
       smash: { mean: mean(vSmash), n: vSmash.length, std: stddev(vSmash) },
     } as any;
   }, [filteredOutliers]);
@@ -373,14 +451,26 @@ export default function App() {
       byClub.get(k)!.push(s);
     }
     const rows: ClubRow[] = [];
-    Array.from(byClub.keys()).sort((a,b)=>orderIndex(a)-orderIndex(b)).forEach(club => {
-      const arr = byClub.get(club)!;
-      const avg = (key: keyof Shot) => {
-        const xs = arr.map(r => r[key]).filter(isNum) as number[];
-        return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
-      };
-      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"), avgBall: avg("BallSpeed_mph"), avgClub: avg("ClubSpeed_mph"), avgSmash: avg("SmashFactor"), avgLaunch: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
-    });
+    Array.from(byClub.keys())
+      .sort((a, b) => orderIndex(a) - orderIndex(b))
+      .forEach((club) => {
+        const arr = byClub.get(club)!;
+        const avg = (key: keyof Shot) => {
+          const xs = arr.map((r) => r[key]).filter(isNum) as number[];
+          return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+        };
+        rows.push({
+          club,
+          count: arr.length,
+          avgCarry: avg("CarryDistance_yds"),
+          avgTotal: avg("TotalDistance_yds"),
+          avgBall: avg("BallSpeed_mph"),
+          avgClub: avg("ClubSpeed_mph"),
+          avgSmash: avg("SmashFactor"),
+          avgLaunch: avg("LaunchAngle_deg"),
+          avgF2P: avg("FaceToPath_deg"),
+        } as any);
+      });
     return rows;
   }, [filteredOutliers]);
 
@@ -390,11 +480,18 @@ export default function App() {
     try {
       const raw = localStorage.getItem("launch-tracker:card-order");
       const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
+      if (Array.isArray(saved) && saved.length)
+        return Array.from(new Set([...saved, ...DEFAULT])).filter((k) => DEFAULT.includes(k));
       return DEFAULT;
-    } catch { return DEFAULT; }
+    } catch {
+      return DEFAULT;
+    }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder));
+    } catch {}
+  }, [cardOrder]);
 
   // Insights ordering
   const INSIGHTS_DEFAULT = ["dist", "high", "records", "gaps", "progress"];
@@ -404,21 +501,31 @@ export default function App() {
       const saved = raw ? JSON.parse(raw) : null;
       if (Array.isArray(saved) && saved.length) return saved;
       return INSIGHTS_DEFAULT;
-    } catch { return INSIGHTS_DEFAULT; }
+    } catch {
+      return INSIGHTS_DEFAULT;
+    }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder));
+    } catch {}
+  }, [insightsOrder]);
 
   // Journal height measurement (match filters)
-  const [filtersHeight, setFiltersHeight] = useState(420);
+  const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
-    const el = filtersRef.current;
-    if (!el) return;
+    const node = filtersRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+
+    // seed once
+    const seed = node.getBoundingClientRect?.().height;
+    if (typeof seed === "number" && Number.isFinite(seed)) setFiltersHeight(seed);
+
     const ro = new ResizeObserver((entries) => {
-      const cr = entries[0]?.contentRect;
-      if (!cr) return;
-      setFiltersHeight(Math.max(320, Math.floor(cr.height)));
+      const h = entries?.[0]?.contentRect?.height;
+      if (typeof h === "number" && Number.isFinite(h)) setFiltersHeight(h);
     });
-    ro.observe(el);
+    ro.observe(node);
     return () => ro.disconnect();
   }, []);
 
@@ -435,14 +542,16 @@ export default function App() {
               style={{ background: theme.panelAlt, borderColor: theme.border, color: theme.text }}
               onClick={() => setFiltersOpen(true)}
               title="Filters"
-            >Filters</button>
+            >
+              Filters
+            </button>
             <div className="text-lg font-semibold">Launch Tracker</div>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2">
               <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={theme} />
-              <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={theme} />
-              <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={theme} />
+              <TopTab label="Insights" active={tab === "insights"} onClick={() => setTab("insights")} theme={theme} />
+              <TopTab label="Journal" active={tab === "journal"} onClick={() => setTab("journal")} theme={theme} />
             </div>
             <button
               className="px-2 py-1 rounded-md border text-xs"
@@ -450,7 +559,7 @@ export default function App() {
               onClick={() => setTheme(theme === LIGHT ? DARK : LIGHT)}
               title="Toggle theme"
             >
-              {theme === LIGHT ? <IconMoon/> : <IconSun/>}
+              {theme === LIGHT ? <IconMoon /> : <IconSun />}
             </button>
           </div>
         </div>
@@ -460,18 +569,32 @@ export default function App() {
       <div className="md:hidden border-b" style={{ borderColor: theme.border, background: theme.panel }}>
         <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
           <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={theme} />
-          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={theme} />
-          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={theme} />
+          <TopTab label="Insights" active={tab === "insights"} onClick={() => setTab("insights")} theme={theme} />
+          <TopTab label="Journal" active={tab === "journal"} onClick={() => setTab("journal")} theme={theme} />
         </div>
       </div>
 
       {/* Mobile filters drawer */}
       {filtersOpen ? (
-        <div className="md:hidden fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setFiltersOpen(false)}>
-          <div className="absolute left-0 top-0 bottom-0 w-[85%] max-w-sm" style={{ background: theme.panel, color: theme.text }} onClick={(e) => e.stopPropagation()}>
+        <div
+          className="md:hidden fixed inset-0 z-50"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setFiltersOpen(false)}
+        >
+          <div
+            className="absolute left-0 top-0 bottom-0 w-[85%] max-w-sm"
+            style={{ background: theme.panel, color: theme.text }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: theme.border }}>
               <div className="text-sm">Filters</div>
-              <button className="text-xs underline" style={{ color: theme.brand }} onClick={() => setFiltersOpen(false)}>Close</button>
+              <button
+                className="text-xs underline"
+                style={{ color: theme.brand }}
+                onClick={() => setFiltersOpen(false)}
+              >
+                Close
+              </button>
             </div>
             <div className="p-3">
               <FiltersPanel
@@ -552,7 +675,7 @@ export default function App() {
                   e.preventDefault();
                   const sourceKey = e.dataTransfer.getData("text/plain");
                   if (!sourceKey || sourceKey === targetKey) return;
-                  setCardOrder(prev => {
+                  setCardOrder((prev) => {
                     const cur = [...prev];
                     const si = cur.indexOf(sourceKey);
                     const ti = cur.indexOf(targetKey);
@@ -576,25 +699,17 @@ export default function App() {
                 theme={theme}
                 tableRows={tableRows as any}
                 filteredOutliers={filteredOutliers}
-                filteredNoClubOutliers={filteredOutliers}
-                filteredNoClubRaw={filteredBase}
+                filteredNoClubOutliers={filteredOutliers /* if you later add true no-club set, pass it here */}
+                filteredNoClubRaw={filteredBase /* raw-ish base; respects current filters */}
                 allClubs={clubs}
-                insightsOrder={insightsOrder}
+                insightsOrder={["distanceBox", "highlights", "swingMetrics", "personalRecords", "progress", "weaknesses"]}
                 onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
                 onDragOver={(_key) => (e) => e.preventDefault()}
                 onDrop={(targetKey) => (e) => {
                   e.preventDefault();
                   const sourceKey = e.dataTransfer.getData("text/plain");
                   if (!sourceKey || sourceKey === targetKey) return;
-                  setInsightsOrder(prev => {
-                    const cur = [...prev];
-                    const si = cur.indexOf(sourceKey);
-                    const ti = cur.indexOf(targetKey);
-                    if (si < 0 || ti < 0) return cur;
-                    cur.splice(si, 1);
-                    cur.splice(ti, 0, sourceKey);
-                    return cur;
-                  });
+                  // If you want persistent order, store to localStorage as you do elsewhere
                 }}
               />
             )}
@@ -602,8 +717,18 @@ export default function App() {
               <JournalView
                 theme={theme}
                 editorRef={useRef(null)}
-                value={(() => { try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; } })()}
-                onInputHTML={(html) => { try { localStorage.setItem("launch-tracker:journal", html); } catch {} }}
+                value={(() => {
+                  try {
+                    return localStorage.getItem("launch-tracker:journal") || "";
+                  } catch {
+                    return "";
+                  }
+                })()}
+                onInputHTML={(html) => {
+                  try {
+                    localStorage.setItem("launch-tracker:journal", html);
+                  } catch {}
+                }}
                 sessionLabel={`Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`}
                 defaultHeightPx={filtersHeight}
               />
@@ -614,11 +739,21 @@ export default function App() {
 
       {/* Toasts */}
       <div className="fixed bottom-3 right-3 flex flex-col gap-2">
-        {msgs.map(m => (
-          <div key={m.id} className="rounded-md border px-3 py-2 text-sm shadow-sm" style={{ background: theme.panel, color: theme.text, borderColor: theme.border }}>
+        {msgs.map((m) => (
+          <div
+            key={m.id}
+            className="rounded-md border px-3 py-2 text-sm shadow-sm"
+            style={{ background: theme.panel, color: theme.text, borderColor: theme.border }}
+          >
             <div className="flex items-center gap-2">
               <div>{m.text}</div>
-              <button className="text-xs underline" onClick={() => removeToast(m.id)} style={{ color: theme.textDim }}>Dismiss</button>
+              <button
+                className="text-xs underline"
+                onClick={() => removeToast(m.id)}
+                style={{ color: theme.textDim }}
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         ))}
@@ -630,7 +765,14 @@ export default function App() {
             © {year} Launch Tracker
           </div>
           <nav className="flex items-center gap-3 text-xs" style={{ color: theme.textDim }}>
-            <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
+            <a
+              href="https://github.com/mcgonzalez79/launch-tracker"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Repo
+            </a>
             <span>·</span>
             <span>v1.0.0+</span>
           </nav>
