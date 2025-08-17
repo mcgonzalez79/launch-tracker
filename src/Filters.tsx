@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Theme } from "./theme";
 import type { Shot } from "./utils";
 
@@ -66,6 +66,7 @@ export default function FiltersPanel(props: Props) {
 
   const hasClubs = clubs && clubs.length > 0;
 
+  // ---- Quick date range helpers
   const onPickRange = (days: number) => {
     const to = new Date();
     const from = new Date();
@@ -75,6 +76,7 @@ export default function FiltersPanel(props: Props) {
     setDateTo(iso(to));
   };
 
+  // ---- Import launcher
   const onImportClick = () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -86,11 +88,7 @@ export default function FiltersPanel(props: Props) {
     input.click();
   };
 
-  const allSelected = useMemo(
-    () => selectedClubs.length > 0 && selectedClubs.length === clubs.length,
-    [selectedClubs, clubs]
-  );
-
+  // ---- Clubs selection
   const toggleClub = (c: string) => {
     if (selectedClubs.includes(c)) {
       setSelectedClubs(selectedClubs.filter(x => x !== c));
@@ -98,9 +96,22 @@ export default function FiltersPanel(props: Props) {
       setSelectedClubs([...selectedClubs, c]);
     }
   };
-
   const selectAllClubs = () => setSelectedClubs(clubs.slice());
   const clearClubs = () => setSelectedClubs([]);
+
+  // ---- Carry range: "Use bounds" helper
+  const [useBounds, setUseBounds] = useState(false);
+  useEffect(() => {
+    if (useBounds) {
+      const min = Number.isFinite(carryBounds.min) ? String(carryBounds.min) : "";
+      const max = Number.isFinite(carryBounds.max) ? String(carryBounds.max) : "";
+      setCarryMin(min);
+      setCarryMax(max);
+    }
+    // keep in sync when bounds change
+  }, [useBounds, carryBounds.min, carryBounds.max]);
+
+  const disableCarryInputs = useBounds;
 
   return (
     <section
@@ -146,12 +157,12 @@ export default function FiltersPanel(props: Props) {
           </button>
         </div>
 
-        {/* 3) Date range (same row) + 4) Quick selects */}
+        {/* 3) Date range (one row) + 4) Quick selects */}
         <div className="mb-3">
           <label className="text-xs block mb-1" style={{ color: T.textDim }}>Date range</label>
 
-          {/* force single row inside sidebar */}
-          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
+          {/* force single row, no wrap */}
+          <div className="flex items-center gap-2 whitespace-nowrap" style={{ flexWrap: "nowrap" }}>
             <input
               type="date"
               className="rounded-md px-2 py-1 border"
@@ -184,16 +195,18 @@ export default function FiltersPanel(props: Props) {
           </div>
         </div>
 
-        {/* 5) Exclude outliers — simple row */}
+        {/* 5) Exclude outliers — single row (aligned) */}
         <div className="mb-3">
-          <label className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm">
             <input
+              id="exclude-outliers"
               type="checkbox"
               checked={excludeOutliers}
               onChange={(e) => setExcludeOutliers(e.target.checked)}
+              style={{ accentColor: T.brand }}
             />
-            <span>Exclude outliers</span>
-          </label>
+            <label htmlFor="exclude-outliers">Exclude outliers</label>
+          </div>
         </div>
 
         {/* 6) Clubs */}
@@ -251,32 +264,60 @@ export default function FiltersPanel(props: Props) {
           )}
         </div>
 
-        {/* 3b) Carry distance range — below Clubs */}
+        {/* 3b) Carry distance range — below Clubs, with "Use bounds" */}
         <div className="mb-3">
-          <label className="text-xs block mb-1" style={{ color: T.textDim }}>
-            Carry distance range (yds)
-          </label>
-          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs" style={{ color: T.textDim }}>Carry distance range (yds)</label>
+            <div className="flex items-center gap-2 text-xs">
+              <input
+                id="use-bounds"
+                type="checkbox"
+                checked={useBounds}
+                onChange={(e) => setUseBounds(e.target.checked)}
+                style={{ accentColor: T.brand }}
+              />
+              <label htmlFor="use-bounds">Use bounds</label>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 whitespace-nowrap" style={{ flexWrap: "nowrap" }}>
             <input
               type="number"
               inputMode="decimal"
               className="rounded-md px-2 py-1 border"
-              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
+              style={{
+                background: T.bg,
+                color: T.text,
+                borderColor: T.border,
+                width: "50%",
+                opacity: disableCarryInputs ? 0.7 : 1,
+                cursor: disableCarryInputs ? "not-allowed" : "auto",
+              }}
               placeholder={Number.isFinite(carryBounds.min) ? String(carryBounds.min) : "min"}
               value={carryMin}
               onChange={(e) => setCarryMin(e.target.value)}
+              disabled={disableCarryInputs}
             />
             <span className="text-xs" style={{ color: T.textDim }}>to</span>
             <input
               type="number"
               inputMode="decimal"
               className="rounded-md px-2 py-1 border"
-              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
+              style={{
+                background: T.bg,
+                color: T.text,
+                borderColor: T.border,
+                width: "50%",
+                opacity: disableCarryInputs ? 0.7 : 1,
+                cursor: disableCarryInputs ? "not-allowed" : "auto",
+              }}
               placeholder={Number.isFinite(carryBounds.max) ? String(carryBounds.max) : "max"}
               value={carryMax}
               onChange={(e) => setCarryMax(e.target.value)}
+              disabled={disableCarryInputs}
             />
           </div>
+
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs" style={{ color: T.textDim }}>
               Bounds: {Number.isFinite(carryBounds.min) ? carryBounds.min : "—"}–{Number.isFinite(carryBounds.max) ? carryBounds.max : "—"} yds
@@ -284,7 +325,7 @@ export default function FiltersPanel(props: Props) {
             <button
               className="ml-auto text-xs underline underline-offset-2"
               style={{ color: T.textDim }}
-              onClick={() => { setCarryMin(""); setCarryMax(""); }}
+              onClick={() => { setUseBounds(false); setCarryMin(""); setCarryMax(""); }}
               title="Clear carry range"
             >
               Clear
