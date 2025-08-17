@@ -1,605 +1,445 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { Theme } from "./theme";
+import React, { useMemo } from "react";
+import type { Theme } from "./theme";
+import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
-import { Shot, ClubRow, orderIndex, mean } from "./utils";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
-  ComposedChart, ErrorBar, Line, Label
+  ResponsiveContainer,
+  LineChart, Line,
+  ScatterChart, Scatter,
+  BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ReferenceLine
 } from "recharts";
 
-/* ================== Benchmarks for proficiency ================== */
-type Skill = "Beginner" | "Average" | "Good" | "Advanced" | "PGATour";
+/* =========================
+   Props
+========================= */
+type Props = {
+  theme: Theme;
 
-const BENCHMARKS: Record<string, Record<Skill, number>> = {
-  "Driver":           { Beginner: 170, Average: 200, Good: 230, Advanced: 260, PGATour: 295 },
-  "3 Wood":           { Beginner: 155, Average: 180, Good: 205, Advanced: 230, PGATour: 260 },
-  "4 Hybrid":         { Beginner: 145, Average: 170, Good: 190, Advanced: 210, PGATour: 230 },
-  "5 Hybrid (5 Iron)":{"Beginner": 135, "Average": 160, "Good": 180, "Advanced": 200, "PGATour": 220 },
-  "6 Iron":           { Beginner: 125, Average: 150, Good: 170, Advanced: 185, PGATour: 205 },
-  "7 Iron":           { Beginner: 115, Average: 140, Good: 160, Advanced: 175, PGATour: 195 },
-  "8 Iron":           { Beginner: 105, Average: 130, Good: 150, Advanced: 165, PGATour: 180 },
-  "9 Iron":           { Beginner: 95,  Average: 120, Good: 140, Advanced: 155, PGATour: 170 },
-  "Pitching Wedge":   { Beginner: 85,  Average: 110, Good: 130, Advanced: 145, PGATour: 160 },
-  "60 (LW)":          { Beginner: 65,  Average: 85,  Good: 100, Advanced: 110, PGATour: 120 },
+  // from App.tsx
+  tableRows: ClubRow[];                 // (may be empty — we compute inside as needed)
+  filteredOutliers: Shot[];             // outliers removed
+  filteredNoClubOutliers: Shot[];       // alias of filteredOutliers in your App
+  filteredNoClubRaw: Shot[];            // raw (no outlier removal)
+  allClubs: string[];                   // full club list (ordered)
+  insightsOrder: string[];
+
+  onDragStart: (key: string) => (e: React.DragEvent) => void;
+  onDragOver: (key: string) => (e: React.DragEvent) => void;
+  onDrop: (_key: string) => (_: React.DragEvent) => void;
 };
 
-function benchmarksToRows(clubsOrdered: string[]) {
-  return clubsOrdered
-    .filter(c => BENCHMARKS[c])
-    .map(club => ({
-      club,
-      ...BENCHMARKS[club]
-    }));
+/* =========================
+   Helpers
+========================= */
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+function domainOf(vals: number[], pad = 0): [number, number] {
+  if (!vals.length) return [0, 0];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  return [Math.floor(min - pad), Math.ceil(max + pad)];
 }
 
-/* ================== Helpers (stats & fmt) ================== */
-function quantile(sorted: number[], q: number): number {
-  if (!sorted.length) return NaN;
-  const pos = (sorted.length - 1) * q;
-  const base = Math.floor(pos);
-  const rest = pos - base;
-  if (sorted[base + 1] !== undefined) {
-    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
-  } else {
-    return sorted[base];
+function groupBy<T>(rows: T[], keyFn: (x: T) => string) {
+  const m = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = keyFn(r);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(r);
   }
-}
-function fiveNumSummary(vals: number[]) {
-  if (!vals.length) return { min: NaN, q1: NaN, med: NaN, q3: NaN, max: NaN };
-  const a = vals.slice().sort((x, y) => x - y);
-  return {
-    min: a[0],
-    q1: quantile(a, 0.25),
-    med: quantile(a, 0.50),
-    q3: quantile(a, 0.75),
-    max: a[a.length - 1]
-  };
+  return m;
 }
 
-function safeFmtDate(ts?: string): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString();
-}
-
-function avgOrNaN(values: Array<number | undefined>): number | undefined {
-  const nums = values.filter((v): v is number => v != null && Number.isFinite(v));
-  if (!nums.length) return undefined;
+function avg(nums: number[]) {
+  if (!nums.length) return null;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-/* ===== Proficiency score (0..100) vs. benchmark table ===== */
-function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score: number; label: string } {
-  const byClub = new Map<string, number[]>();
-  pool.forEach(s => {
-    const v = (s.TotalDistance_yds ?? s.CarryDistance_yds);
-    if (v == null) return;
-    if (selectedClubs && selectedClubs.length && !selectedClubs.includes(s.Club)) return;
-    if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-    byClub.get(s.Club)!.push(v);
-  });
-  if (!byClub.size) return { score: 0, label: "Beginner" };
-
-  const clubScores: number[] = [];
-  byClub.forEach((arr, club) => {
-    const avg = arr.reduce((a,b)=>a+b, 0) / arr.length;
-    const ref = BENCHMARKS[club];
-    if (!ref) return;
-    const b = ref.Beginner, p = ref.PGATour;
-    const sc = Math.max(0, Math.min(100, ((avg - b) / (p - b)) * 100));
-    clubScores.push(sc);
-  });
-
-  if (!clubScores.length) return { score: 0, label: "Beginner" };
-
-  const overall = clubScores.reduce((a,b)=>a+b, 0) / clubScores.length;
-  const label =
-    overall < 20 ? "Beginner" :
-    overall < 40 ? "Average"  :
-    overall < 60 ? "Good"     :
-    overall < 80 ? "Advanced" : "PGA Tour";
-  return { score: overall, label };
-}
-
-/* ===== PRs (best) ===== */
-function personalRecords(pool: Shot[]) {
-  let bestCarry: Shot | null = null;
-  let bestTotal: Shot | null = null;
-  for (const s of pool) {
-    if (s.CarryDistance_yds != null) {
-      if (!bestCarry || s.CarryDistance_yds > (bestCarry.CarryDistance_yds ?? -Infinity)) bestCarry = s;
-    }
-    if (s.TotalDistance_yds != null) {
-      if (!bestTotal || s.TotalDistance_yds > (bestTotal.TotalDistance_yds ?? -Infinity)) bestTotal = s;
+function maxBy<T>(rows: T[], val: (x: T) => number | null) {
+  let best: T | null = null;
+  let bestV = -Infinity;
+  for (const r of rows) {
+    const v = val(r);
+    if (v != null && v > bestV) {
+      bestV = v;
+      best = r;
     }
   }
-  return { bestCarry, bestTotal };
+  return best;
 }
 
-/* ===== Gapping Warnings (always all clubs) ===== */
-function gapWarnings(allShotsNoClub: Shot[], thresholdTight = 12, thresholdWide = 30) {
-  const byClub = new Map<string, number[]>();
-  allShotsNoClub.forEach(s => {
-    if (s.CarryDistance_yds == null) return;
-    if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-    byClub.get(s.Club)!.push(s.CarryDistance_yds);
-  });
+/* =========================
+   Component
+========================= */
+export default function InsightsView(props: Props) {
+  const {
+    theme: T,
+    filteredOutliers,
+    filteredNoClubOutliers,
+    filteredNoClubRaw,
+    allClubs,
+    insightsOrder,
+    onDragStart, onDragOver, onDrop,
+  } = props;
 
-  const rows: { club: string; avgCarry: number }[] = [];
-  byClub.forEach((arr, club) => {
-    const avg = arr.reduce((a,b)=>a+b, 0) / arr.length;
-    rows.push({ club, avgCarry: avg });
-  });
+  /* ---------- Distance Box (histogram of carry) ---------- */
+  const distanceBins = useMemo(() => {
+    const vals = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum);
+    if (!vals.length) return [];
+    // bin width = 5 yds
+    const w = 5;
+    const map = new Map<number, number>();
+    for (const v of vals) {
+      const b = Math.round(v / w) * w;
+      map.set(b, (map.get(b) ?? 0) + 1);
+    }
+    const rows = Array.from(map.entries()).map(([bin, count]) => ({ bin, count }));
+    rows.sort((a, b) => a.bin - b.bin);
+    return rows;
+  }, [filteredOutliers]);
 
-  rows.sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
+  const distDomain = useMemo(() => domainOf(distanceBins.map(d => d.bin), 5), [distanceBins]);
 
-  const tight: string[] = [];
-  const wide: string[] = [];
-  for (let i=1;i<rows.length;i++){
-    const gap = Math.abs(rows[i].avgCarry - rows[i-1].avgCarry);
-    if (gap < thresholdTight) tight.push(`${rows[i-1].club} ↔ ${rows[i].club} (${gap.toFixed(1)} yds)`);
-    if (gap > thresholdWide)  wide.push(`${rows[i-1].club} ↔ ${rows[i].club} (${gap.toFixed(1)} yds)`);
-  }
-  return { tight, wide, totalTight: tight.length };
-}
-
-/* ================== Modal ================== */
-function Modal({
-  theme, title, open, onClose, children, width = 760
-}: { theme: Theme; title: string; open: boolean; onClose: () => void; children: React.ReactNode; width?: number }) {
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    if (open) document.addEventListener("keydown", onEsc);
-    return () => document.removeEventListener("keydown", onEsc);
-  }, [open, onClose]);
-
-  if (!open) return null;
-  return (
-    <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: "#fff", width, maxWidth: "95vw", maxHeight: "85vh", borderRadius: 12, overflow: "hidden", boxShadow: "0 15px 40px rgba(0,0,0,0.25)" }}
-      >
-        <div style={{ padding: "12px 16px", background: theme.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 600 }}>{title}</div>
-          <button
-            onClick={onClose}
-            style={{ background: "#ffffff22", color: "#fff", border: "1px solid #ffffff55", borderRadius: 8, padding: "4px 8px" }}
-          >
-            Close
-          </button>
-        </div>
-        <div style={{ padding: 16 }}>{children}</div>
-      </div>
+  const distanceBox = (
+    <div key="distanceBox" draggable onDragStart={onDragStart("distanceBox")} onDragOver={onDragOver("distanceBox")} onDrop={onDrop("distanceBox")}>
+      <Card title="Distance Distribution (Carry)" theme={T}>
+        {distanceBins.length ? (
+          <div style={{ height: 260 }}>
+            <ResponsiveContainer>
+              <BarChart data={distanceBins} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="bin"
+                  type="number"
+                  domain={distDomain as any}
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Carry (yds)", position: "insideBottom", offset: -2, fill: T.textDim, fontSize: 12 }}
+                />
+                <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  formatter={(v: any, _n: string, p: any) => [`${v}`, `${p?.payload?.bin} yds`]}
+                />
+                <Bar dataKey="count" fill={T.brand} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No carry data available.</div>}
+      </Card>
     </div>
   );
-}
 
-/* ================== Insights View ================== */
-type Props = {
-  theme: Theme;
-  tableRows: ClubRow[];
-  filteredOutliers: Shot[];
-  filteredNoClubOutliers: Shot[];
-  filteredNoClubRaw?: Shot[];
-  allClubs: string[];
-  insightsOrder: string[];
-  onDragStart: (k: string) => (e: React.DragEvent) => void;
-  onDragOver: (k: string) => (e: React.DragEvent) => void;
-  onDrop: (k: string) => (e: React.DragEvent) => void;
-};
+  /* ---------- Highlights (best ball speed & carry per club) ---------- */
+  const highlightsData = useMemo(() => {
+    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    const out: { club: string; bestCarry?: number; bestBall?: number }[] = [];
+    for (const [club, shots] of groups.entries()) {
+      const bestCarry = maxBy(shots, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
+      const bestBall = maxBy(shots, s => isNum(s.BallSpeed_mph) ? s.BallSpeed_mph! : null);
+      out.push({
+        club,
+        bestCarry: bestCarry && isNum(bestCarry.CarryDistance_yds) ? bestCarry.CarryDistance_yds! : undefined,
+        bestBall: bestBall && isNum(bestBall.BallSpeed_mph) ? bestBall.BallSpeed_mph! : undefined,
+      });
+    }
+    // order by your allClubs order
+    const order = new Map(allClubs.map((c, i) => [c, i]));
+    out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return out;
+  }, [filteredOutliers, allClubs]);
 
-export default function InsightsView({
-  theme, tableRows, filteredOutliers, filteredNoClubOutliers, filteredNoClubRaw, allClubs,
-  insightsOrder, onDragStart, onDragOver, onDrop
-}: Props) {
+  const highlights = (
+    <div key="highlights" draggable onDragStart={onDragStart("highlights")} onDragOver={onDragOver("highlights")} onDrop={onDrop("highlights")}>
+      <Card title="Highlights (Best per Club)" theme={T}>
+        {highlightsData.length ? (
+          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">Best Carry (yds)</th>
+                  <th className="text-right px-2 py-1">Best Ball (mph)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {highlightsData.map((r) => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{r.bestCarry != null ? r.bestCarry.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.bestBall != null ? r.bestBall.toFixed(1) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No club highlights yet.</div>}
+      </Card>
+    </div>
+  );
 
-  /* ======= Global (independent of selection) ======= */
-  const globalPoolForPR = filteredNoClubRaw && filteredNoClubRaw.length ? filteredNoClubRaw : filteredNoClubOutliers;
-  const globalPR = useMemo(() => personalRecords(globalPoolForPR), [globalPoolForPR]);
+  /* ---------- Swing Metrics (per-club averages: AoA, Path, Face, F2P) ---------- */
+  const swingRows = useMemo(() => {
+    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    const out: { club: string; aoa?: number; path?: number; face?: number; f2p?: number }[] = [];
+    for (const [club, rows] of groups.entries()) {
+      const aoa = avg(rows.map(s => s.AttackAngle_deg).filter(isNum));
+      const path = avg(rows.map(s => s.ClubPath_deg).filter(isNum));
+      const face = avg(rows.map(s => s.ClubFace_deg).filter(isNum));
+      const f2p = avg(rows.map(s => s.FaceToPath_deg).filter(isNum));
+      out.push({ club, aoa: aoa ?? undefined, path: path ?? undefined, face: face ?? undefined, f2p: f2p ?? undefined });
+    }
+    const order = new Map(allClubs.map((c, i) => [c, i]));
+    out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return out;
+  }, [filteredOutliers, allClubs]);
 
-  const globalConsistency = useMemo(() => {
-    const byClub = new Map<string, number[]>();
-    filteredNoClubOutliers.forEach(s => {
-      if (s.CarryDistance_yds == null) return;
-      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
-      byClub.get(s.Club)!.push(s.CarryDistance_yds);
-    });
-    let bestClub = ""; let bestSd = Infinity; let avgCarry = 0;
-    byClub.forEach((arr, club) => {
-      if (arr.length < 5) return;
-      const m = mean(arr);
-      const sd = Math.sqrt(arr.reduce((a,b)=>a+(b-m)*(b-m), 0) / arr.length);
-      if (sd < bestSd) { bestSd = sd; bestClub = club; avgCarry = m; }
-    });
-    return { bestClub, bestSd, avgCarry };
+  const swingMetrics = (
+    <div key="swingMetrics" draggable onDragStart={onDragStart("swingMetrics")} onDragOver={onDragOver("swingMetrics")} onDrop={onDrop("swingMetrics")}>
+      <Card title="Swing Metrics (Avg per Club)" theme={T}>
+        {swingRows.length ? (
+          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">AoA (°)</th>
+                  <th className="text-right px-2 py-1">Path (°)</th>
+                  <th className="text-right px-2 py-1">Face (°)</th>
+                  <th className="text-right px-2 py-1">F2P (°)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {swingRows.map((r) => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{r.aoa != null ? r.aoa.toFixed(2) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.path != null ? r.path.toFixed(2) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.face != null ? r.face.toFixed(2) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.f2p != null ? r.f2p.toFixed(2) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No swing metrics calculated.</div>}
+      </Card>
+    </div>
+  );
+
+  /* ---------- Warnings (basic heuristics) ---------- */
+  const warningsList = useMemo(() => {
+    const items: string[] = [];
+    // Low smash overall
+    const smashVals = filteredOutliers.map(s => s.SmashFactor).filter(isNum);
+    const smashAvg = avg(smashVals);
+    if (smashAvg != null && smashAvg < 1.40) {
+      items.push(`Average smash factor is low (${smashAvg.toFixed(3)}). Consider contact quality drills.`);
+    }
+    // Excess lateral dispersion (IQR over 20 yds)
+    const lateral = filteredOutliers.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
+    if (lateral.length >= 8) {
+      const q1 = lateral[Math.floor(lateral.length * 0.25)];
+      const q3 = lateral[Math.floor(lateral.length * 0.75)];
+      if (q3 - q1 > 20) items.push(`High lateral dispersion (IQR ${(q3 - q1).toFixed(1)} yds). Work on start-line control.`);
+    }
+    // AoA driver hint (if driver exists): if avg AoA < -1 with driver
+    const driverRows = filteredOutliers.filter(s => (s.Club || "").toLowerCase().includes("driver"));
+    if (driverRows.length) {
+      const aoa = avg(driverRows.map(s => s.AttackAngle_deg).filter(isNum));
+      if (aoa != null && aoa < -1) items.push(`Driver AoA averages ${aoa.toFixed(2)}° down. Try tee height/ball position for upward hit.`);
+    }
+    return items;
+  }, [filteredOutliers]);
+
+  const warnings = (
+    <div key="warnings" draggable onDragStart={onDragStart("warnings")} onDragOver={onDragOver("warnings")} onDrop={onDrop("warnings")}>
+      <Card title="Warnings" theme={T}>
+        {warningsList.length ? (
+          <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
+            {warningsList.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings triggered.</div>}
+      </Card>
+    </div>
+  );
+
+  /* ---------- Personal Records (per-club PRs) ---------- */
+  const prs = useMemo(() => {
+    const groups = groupBy(filteredNoClubRaw, s => s.Club || "Unknown");
+    const out: { club: string; carry?: number; ball?: number; clubspd?: number }[] = [];
+    for (const [club, rows] of groups.entries()) {
+      const bestCarry = maxBy(rows, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
+      const bestBall = maxBy(rows, s => isNum(s.BallSpeed_mph) ? s.BallSpeed_mph! : null);
+      const bestClub = maxBy(rows, s => isNum(s.ClubSpeed_mph) ? s.ClubSpeed_mph! : null);
+      out.push({
+        club,
+        carry: bestCarry && isNum(bestCarry.CarryDistance_yds) ? bestCarry.CarryDistance_yds! : undefined,
+        ball: bestBall && isNum(bestBall.BallSpeed_mph) ? bestBall.BallSpeed_mph! : undefined,
+        clubspd: bestClub && isNum(bestClub.ClubSpeed_mph) ? bestClub.ClubSpeed_mph! : undefined,
+      });
+    }
+    // keep club order
+    const order = new Map(allClubs.map((c, i) => [c, i]));
+    out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return out;
+  }, [filteredNoClubRaw, allClubs]);
+
+  const personalRecords = (
+    <div key="personalRecords" draggable onDragStart={onDragStart("personalRecords")} onDragOver={onDragOver("personalRecords")} onDrop={onDrop("personalRecords")}>
+      <Card title="Personal Records" theme={T}>
+        {prs.length ? (
+          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">Max Carry (yds)</th>
+                  <th className="text-right px-2 py-1">Max Ball (mph)</th>
+                  <th className="text-right px-2 py-1">Max Club (mph)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prs.map((r) => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{r.carry != null ? r.carry.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.ball != null ? r.ball.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.clubspd != null ? r.clubspd.toFixed(1) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No records yet.</div>}
+      </Card>
+    </div>
+  );
+
+  /* ---------- Progress (average carry per day/session) ---------- */
+  const progressData = useMemo(() => {
+    // aggregate by SessionId (which you set to yyyy-mm-dd)
+    const groups = groupBy(filteredNoClubOutliers, s => s.SessionId || "Unknown");
+    const out: { session: string; carryAvg: number }[] = [];
+    for (const [session, rows] of groups.entries()) {
+      const carries = rows.map(s => s.CarryDistance_yds).filter(isNum);
+      const a = avg(carries);
+      if (a != null) out.push({ session, carryAvg: a });
+    }
+    // sort sessions by date string asc (yyyy-mm-dd sorts lexicographically)
+    out.sort((a, b) => a.session.localeCompare(b.session));
+    return out;
   }, [filteredNoClubOutliers]);
 
-  /* ======= Distance Distribution (box & whisker) ======= */
-  const clubsOrdered = useMemo(
-    () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
-    [filteredOutliers]
+  const progress = (
+    <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
+      <Card title="Progress (Avg Carry by Session)" theme={T}>
+        {progressData.length ? (
+          <div style={{ height: 260 }}>
+            <ResponsiveContainer>
+              <LineChart data={progressData} margin={{ top: 8, right: 16, bottom: 24, left: 0 }}>
+                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="session"
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  interval={Math.max(0, Math.floor(progressData.length / 8) - 1)}
+                  angle={-20}
+                  textAnchor="end"
+                />
+                <YAxis
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Avg Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  formatter={(v: any) => [`${(v as number).toFixed?.(1)} yds`, "Avg Carry"]}
+                />
+                <Legend wrapperStyle={{ color: T.text }} />
+                <Line type="monotone" dataKey="carryAvg" stroke={T.brand} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No sessions to chart.</div>}
+      </Card>
+    </div>
   );
-  type BoxRow = {
-    club: string;
-    Q1Carry: number; iqrCarry: number; whiskerCarry: [number, number];
-    Q1Total: number; iqrTotal: number; whiskerTotal: [number, number];
-  };
-  const boxRows: BoxRow[] = useMemo(() => {
-    const rows: BoxRow[] = [];
-    clubsOrdered.forEach(club => {
-      const shotsClub = filteredOutliers.filter(s => s.Club === club);
-      const carryVals = shotsClub.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-      const totalVals = shotsClub.map(s => s.TotalDistance_yds).filter((x): x is number => x != null);
 
-      const c = fiveNumSummary(carryVals);
-      const t = fiveNumSummary(totalVals);
-
-      rows.push({
-        club,
-        Q1Carry: Number.isFinite(c.q1) ? c.q1 : 0,
-        iqrCarry: (Number.isFinite(c.q3) && Number.isFinite(c.q1)) ? (c.q3 - c.q1) : 0,
-        whiskerCarry: [Number.isFinite(c.min) ? c.min : 0, Number.isFinite(c.max) ? c.max : 0],
-
-        Q1Total: Number.isFinite(t.q1) ? t.q1 : 0,
-        iqrTotal: (Number.isFinite(t.q3) && Number.isFinite(t.q1)) ? (t.q3 - t.q1) : 0,
-        whiskerTotal: [Number.isFinite(t.min) ? t.min : 0, Number.isFinite(t.max) ? t.max : 0],
-      });
+  /* ---------- Weaknesses (clubs with low smash or high lateral) ---------- */
+  const weaknessesData = useMemo(() => {
+    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    type Row = { club: string; smashAvg?: number; lateralIQR?: number };
+    const rows: Row[] = [];
+    for (const [club, list] of groups.entries()) {
+      const smash = list.map(s => s.SmashFactor).filter(isNum);
+      const lateral = list.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
+      const smashAvg = avg(smash) ?? undefined;
+      let lateralIQR: number | undefined;
+      if (lateral.length >= 8) {
+        const q1 = lateral[Math.floor(lateral.length * 0.25)];
+        const q3 = lateral[Math.floor(lateral.length * 0.75)];
+        lateralIQR = q3 - q1;
+      }
+      rows.push({ club, smashAvg, lateralIQR });
+    }
+    // sort by smash ascending, then lateral IQR descending
+    rows.sort((a, b) => {
+      const sA = a.smashAvg ?? Infinity;
+      const sB = b.smashAvg ?? Infinity;
+      if (sA !== sB) return sA - sB;
+      const lA = a.lateralIQR ?? -Infinity;
+      const lB = b.lateralIQR ?? -Infinity;
+      return lB - lA;
     });
     return rows;
-  }, [filteredOutliers, clubsOrdered]);
-
-  const selectedPR = useMemo(() => personalRecords(filteredOutliers), [filteredOutliers]);
-  const selectedProf = useMemo(() => proficiencyScore(filteredOutliers, null), [filteredOutliers]);
-
-  const gw = useMemo(() => gapWarnings(filteredNoClubOutliers), [filteredNoClubOutliers]);
-
-  const [showBench, setShowBench] = useState(false);
-  const benches = useMemo(() => benchmarksToRows([...allClubs].sort((a,b)=>orderIndex(a)-orderIndex(b))), [allClubs]);
-
-  const selectedClubName = useMemo(() => {
-    const set = new Set(filteredOutliers.map(s => s.Club));
-    return set.size === 1 ? Array.from(set)[0] : null;
   }, [filteredOutliers]);
 
-  const progressRows = useMemo(() => {
-    if (!selectedClubName) return [];
-    const pool = filteredOutliers
-      .filter(s => s.Club === selectedClubName && s.CarryDistance_yds != null)
-      .map((s, i) => ({
-        t: s.Timestamp ? new Date(s.Timestamp).getTime() : i,
-        label: s.Timestamp ? new Date(s.Timestamp).toLocaleString() : `Shot ${i + 1}`,
-        carry: s.CarryDistance_yds as number,
-      }))
-      .sort((a, b) => a.t - b.t);
-    return pool;
-  }, [filteredOutliers, selectedClubName]);
+  const weaknesses = (
+    <div key="weaknesses" draggable onDragStart={onDragStart("weaknesses")} onDragOver={onDragOver("weaknesses")} onDrop={onDrop("weaknesses")}>
+      <Card title="Weaknesses (Heuristics)" theme={T}>
+        {weaknessesData.length ? (
+          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">Avg Smash</th>
+                  <th className="text-right px-2 py-1">Lateral IQR (yds)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weaknessesData.map((r) => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{r.smashAvg != null ? r.smashAvg.toFixed(3) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.lateralIQR != null ? r.lateralIQR.toFixed(1) : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No weaknesses detected.</div>}
+      </Card>
+    </div>
+  );
 
-  const progressHeight = useMemo(() => {
-    if (!selectedClubName || progressRows.length <= 1) return undefined;
-    const grow = 240 + (progressRows.length * 6);
-    return Math.max(260, Math.min(420, grow));
-  }, [selectedClubName, progressRows.length]);
-
-  /* ======= Swing Metrics (current selection) ======= */
-  const swingMetrics = useMemo(() => {
-    const path = avgOrNaN(filteredOutliers.map(s => s.ClubPath_deg));
-    // AoA can be named differently depending on source → read defensively via `any`
-    const aoa = avgOrNaN(
-      filteredOutliers.map(s =>
-        (s as any).AngleOfAttack_deg ?? (s as any).AttackAngle_deg ?? (s as any).AoA_deg
-      )
-    );
-    const face = avgOrNaN(filteredOutliers.map(s => s.ClubFace_deg));
-    return { path, aoa, face };
-  }, [filteredOutliers]);
+  /* ---------- Assemble by order ---------- */
+  const cardMap: Record<string, JSX.Element> = {
+    distanceBox,
+    highlights,
+    swingMetrics,
+    warnings,
+    personalRecords,
+    progress,
+    weaknesses,
+  };
 
   return (
-    <div className="grid grid-cols-1 gap-8">
-      {insightsOrder.map((key) => {
-        if (key === "distanceBox") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)" dragHandle>
-              <div style={{ width: "100%", height: 480 }}>
-                <ResponsiveContainer>
-                  <ComposedChart
-                    layout="vertical"
-                    data={boxRows}
-                    margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickMargin={8} minTickGap={6}>
-                      <Label value="Distance (yds)" position="bottom" offset={20} />
-                    </XAxis>
-                    <YAxis dataKey="club" type="category" />
-                    <Tooltip
-                      formatter={(_, __, p: any) => {
-                        const d = p && p.payload ? p.payload : {};
-                        const lines = [
-                          `Carry min/Q1/Q3/max: ${d.whiskerCarry?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Carry?.toFixed?.(1) ?? "-"} / ${(d.Q1Carry + d.iqrCarry)?.toFixed?.(1) ?? "-"} / ${d.whiskerCarry?.[1]?.toFixed?.(1) ?? "-"}`,
-                          `Total min/Q1/Q3/max: ${d.whiskerTotal?.[0]?.toFixed?.(1) ?? "-"} / ${d.Q1Total?.toFixed?.(1) ?? "-"} / ${(d.Q1Total + d.iqrTotal)?.toFixed?.(1) ?? "-"} / ${d.whiskerTotal?.[1]?.toFixed?.(1) ?? "-"}`,
-                        ];
-                        return [lines.join("\n"), "Stats"];
-                      }}
-                      labelFormatter={(l) => `Club: ${l}`}
-                    />
-                    <Legend />
-                    {/* Carry box (horizontal) */}
-                    <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
-                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
-                    </Bar>
-                    {/* Total box (horizontal) */}
-                    <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
-                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
-                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
-                    </Bar>
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
-        );
-
-        if (key === "highlights") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Highlights (independent of club selection)" dragHandle>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry (with date) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Carry</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {globalPR.bestCarry?.CarryDistance_yds ? `${globalPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
-                  </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {globalPR.bestCarry?.Club ? `(${globalPR.bestCarry.Club})` : ""}
-                    {globalPR.bestCarry?.Timestamp ? ` — ${safeFmtDate(globalPR.bestCarry.Timestamp)}` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
-
-                {/* PR Total (with date) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Total</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {globalPR.bestTotal?.TotalDistance_yds ? `${globalPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
-                  </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {globalPR.bestTotal?.Club ? `(${globalPR.bestTotal.Club})` : ""}
-                    {globalPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(globalPR.bestTotal.Timestamp)}` : ""}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-500">Note: includes outliers.</div>
-                </div>
-
-                {/* Most Consistent (global) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Most Consistent Club</div>
-                  {globalConsistency.bestClub
-                    ? (
-                      <>
-                        <div className="mt-1 text-2xl font-semibold">{globalConsistency.bestClub}</div>
-                        <div className="text-slate-600 mt-1 text-sm">Avg carry {globalConsistency.avgCarry.toFixed(1)} yds, SD {globalConsistency.bestSd.toFixed(1)} yds</div>
-                      </>
-                    )
-                    : <div className="mt-1 text-slate-600 text-sm">Need ≥ 5 shots per club.</div>
-                  }
-                </div>
-              </div>
-            </Card>
-          </div>
-        );
-
-        if (key === "warnings") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Gapping Warnings" dragHandle>
-              {gw.tight.length === 0 && gw.wide.length === 0 ? (
-                <div className="text-sm">No warnings.</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                  <div>
-                    <div className="font-semibold mb-1">Too Tight (&lt; 12 yds)</div>
-                    {gw.tight.length > 0 ? (
-                      <ul className="list-disc pl-6">{gw.tight.map((t,i)=><li key={i}>{t}</li>)}</ul>
-                    ) : <div className="text-slate-500">None</div>}
-                  </div>
-                  <div>
-                    <div className="font-semibold mb-1">Too Wide (&gt; 30 yds)</div>
-                    {gw.wide.length > 0 ? (
-                      <ul className="list-disc pl-6">{gw.wide.map((t,i)=><li key={i}>{t}</li>)}</ul>
-                    ) : <div className="text-slate-500">None</div>}
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-        );
-
-        if (key === "personalRecords") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Personal Records (current selection)" dragHandle>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* PR Carry (with date) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Carry</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {selectedPR.bestCarry?.CarryDistance_yds ? `${selectedPR.bestCarry.CarryDistance_yds.toFixed(1)} yds` : "-"}
-                  </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {selectedPR.bestCarry?.Club ? `(${selectedPR.bestCarry.Club})` : ""}
-                    {selectedPR.bestCarry?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestCarry.Timestamp)}` : ""}
-                  </div>
-                </div>
-
-                {/* PR Total (with date) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Total</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {selectedPR.bestTotal?.TotalDistance_yds ? `${selectedPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
-                  </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
-                    {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
-                  </div>
-                </div>
-
-                 {/* Proficiency Rating */}
-                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                 <div className="text-sm text-slate-500">Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b></div>
-                 <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
-                 <div className="mt-2 text-xs text-slate-500">
-                  Benchmarks are generalized carry/total distances by skill level for common clubs.
-                 </div>
-              <div className="mt-3">
-                <button
-                  onClick={() => setShowBench(true)}
-                  className="px-3 py-2 rounded-lg text-sm border"
-                  style={{ borderColor: "#e5e7eb", color: "#111827", background: "#fff" }}
-                >
-                  View Benchmarks
-                </button>
-              </div>
-              <Modal theme={theme} title="Benchmarks" open={showBench} onClose={() => setShowBench(false)}>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-left pr-4">Club</th>
-                        <th className="text-left pr-4">Beginner</th>
-                        <th className="text-left pr-4">Average</th>
-                        <th className="text-left pr-4">Good</th>
-                        <th className="text-left pr-4">Advanced</th>
-                        <th className="text-left pr-4">PGA Tour</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {benches.map(r => (
-                        <tr key={r.club}>
-                          <td className="pr-4">{r.club}</td>
-                          <td className="pr-4">{r.Beginner}</td>
-                          <td className="pr-4">{r.Average}</td>
-                          <td className="pr-4">{r.Good}</td>
-                          <td className="pr-4">{r.Advanced}</td>
-                          <td className="pr-4">{r.PGATour}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Modal>
-              </div>
-                
-              </div>
-            </Card>
-          </div>
-        );
-
-        if (key === "progress") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Club Progress (single-club selection)" dragHandle>
-              {selectedClubName && progressRows.length > 1 ? (
-                <div style={{ width: "100%", height: progressHeight }}>
-                  <ResponsiveContainer>
-                    <ComposedChart data={progressRows} margin={{ top: 10, right: 16, bottom: 20, left: 40 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line dataKey="carry" name={`${selectedClubName} Carry`} stroke="#2563eb" dot={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="text-sm" style={{ color: "#64748b" }}>Select exactly one club to see progress.</div>
-              )}
-            </Card>
-          </div>
-        );
-
-   
-
-        /* ===== New: Swing Metrics (current selection) ===== */
-        if (key === "swingMetrics") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >
-            <Card theme={theme} title="Swing Metrics (current selection)" dragHandle>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Club Path (°)</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {swingMetrics.path != null ? swingMetrics.path.toFixed(2) : "–"}
-                  </div>
-                </div>
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Angle of Attack (°)</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {swingMetrics.aoa != null ? swingMetrics.aoa.toFixed(2) : "–"}
-                  </div>
-                </div>
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">Face Angle (°)</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {swingMetrics.face != null ? swingMetrics.face.toFixed(2) : "–"}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
-        );
-
-        return null;
-      })}
+    <div className="grid gap-4">
+      {insightsOrder.map((key) => cardMap[key] ?? null)}
     </div>
   );
 }
