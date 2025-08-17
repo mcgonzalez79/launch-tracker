@@ -35,7 +35,7 @@ export default function App() {
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("launch-tracker:card-order") || "[]"); } catch { return []; }
   });
-  useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "launchspin", "table"]); } }, []);
+  useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights order (merge-safe)
