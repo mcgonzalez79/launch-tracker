@@ -125,3 +125,19 @@ button, input, select, textarea {
     background: transparent !important;
   }
 }
+
+/* Sidebar width safety so large selects/inputs don't overflow */
+.sidebar-fix select,
+.sidebar-fix input,
+.sidebar-fix .field,
+.sidebar-fix .control,
+.sidebar-fix .w-full {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* If a row uses flex without wrapping, allow wrap in the sidebar */
+.sidebar-fix .flex {
+  flex-wrap: wrap;
+}
+
