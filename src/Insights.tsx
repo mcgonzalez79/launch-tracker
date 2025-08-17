@@ -293,6 +293,59 @@ export default function InsightsView(props: Props) {
       <Card title="Swing Metrics" theme={T}>
         {singleSelectedClub ? (() => {
           const rows = filteredOutliers.filter(s => (s.Club || "Unknown") === singleSelectedClub);
+          const aoa = avg(rows.map(s => s.AttackAngle_deg).filter(isNum));
+          const path = avg(rows.map(s => s.ClubPath_deg).filter(isNum));
+          const face = avg(rows.map(s => s.ClubFace_deg).filter(isNum));
+          const f2p = avg(rows.map(s => s.FaceToPath_deg).filter(isNum));
+          const cells: { label: string; val: number | null }[] = [
+            { label: "Attack Angle (°)", val: aoa },
+            { label: "Club Path (°)", val: path },
+            { label: "Club Face (°)", val: face },
+            { label: "Face to Path (°)", val: f2p },
+          ];
+          return (
+            <div className="text-sm">
+              <div className="mb-2" style={{ color: T.textDim }}>Club: {singleSelectedClub}</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {cells.map((c) => (
+                  <div key={c.label} className="rounded-lg border p-3" style={{ borderColor: T.border }}>
+                    <div className="font-semibold" style={{ color: T.textDim }}>{c.label}</div>
+                    <div className="text-xl font-bold">{c.val != null ? c.val.toFixed(2) : "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })() : (() => {
+          // Aggregate over all currently loaded data (ignores club selection)
+          const rows = filteredNoClubOutliers;
+          const aoa = avg(rows.map(s => s.AttackAngle_deg).filter(isNum));
+          const path = avg(rows.map(s => s.ClubPath_deg).filter(isNum));
+          const face = avg(rows.map(s => s.ClubFace_deg).filter(isNum));
+          const f2p = avg(rows.map(s => s.FaceToPath_deg).filter(isNum));
+          const cells: { label: string; val: number | null }[] = [
+            { label: "Attack Angle (°)", val: aoa },
+            { label: "Club Path (°)", val: path },
+            { label: "Club Face (°)", val: face },
+            { label: "Face to Path (°)", val: f2p },
+          ];
+          return (
+            <div className="text-sm">
+              <div className="mb-2" style={{ color: T.textDim }}>Scope: All currently loaded data</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {cells.map((c) => (
+                  <div key={c.label} className="rounded-lg border p-3" style={{ borderColor: T.border }}>
+                    <div className="font-semibold" style={{ color: T.textDim }}>{c.label}</div>
+                    <div className="text-xl font-bold">{c.val != null ? c.val.toFixed(2) : "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </Card>
+    </div>
+  );
 
   /* ---------- Warnings (unchanged basic heuristics, still respects selection) ---------- */
   const warningsList = useMemo(() => {
