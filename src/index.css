@@ -1,49 +1,122 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html, body, #root { height: 100%; }
-body { margin: 0; }
-
-/* Light variables */
-:root {
-  --bg: #DBE8E1;
-  --panel: #FFFFFF;
-  --text: #13202E;
-  --text-dim: #4B5563;
-  --border: #C5C8DF;
-  --kpi-border: #E5E7EB;
-  --brand: #076652;
-  --brand-tint: #10B981;
-  --brand-accent: #099D00;
-  --white: #FFFFFF;
-  --blue-soft: #E8F1FF;
+/* ---- Basic reset & typography ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-/* Dark variables */
-.dark :root {
-  --bg: #13202E;
-  --panel: #1A2A3A;
-  --text: #DBE8E1;
-  --text-dim: #A7B0B8;
-  --border: #2C3B4B;
-  --kpi-border: #314355;
-  --brand: #099D00;
-  --brand-tint: #34D399;
-  --brand-accent: #076652;
-  --white: #FFFFFF;
-  --blue-soft: #0B2239;
+html, body, #root {
+  height: 100%;
 }
 
-/* Useful utility mappings (optional) */
-.bg-app   { background-color: var(--bg); }
-.bg-panel { background-color: var(--panel); }
-.text-app { color: var(--text); }
-.border-app { border-color: var(--border); }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+    Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-/* Journal placeholder text */
-[contenteditable="true"]:empty:before {
-  content: attr(data-placeholder);
-  color: #94a3b8;           /* slate-400 */
-  white-space: pre-wrap;
+/* Links inherit color; hover underline handled inline in components */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Buttons inherit font */
+button, input, select, textarea {
+  font: inherit;
+}
+
+/* ---- Utility helpers ---- */
+.hide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.25) transparent;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.hide-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(0,0,0,0.25);
+}
+.hide-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Selection color — a soft brand tint (works in both light & dark) */
+::selection {
+  background: rgba(7, 102, 82, 0.25); /* ~theme.brand at 25% */
+}
+
+/* ---- Prose area (journal editor) ---- */
+.prose-area {
+  line-height: 1.5;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.prose-area:focus {
+  outline: 2px solid transparent; /* rely on border + bg change */
+}
+
+.prose-area h1,
+.prose-area h2,
+.prose-area h3,
+.prose-area h4 {
+  margin: 0.6em 0 0.4em;
+  line-height: 1.25;
+}
+
+.prose-area h1 { font-size: 1.4rem; }
+.prose-area h2 { font-size: 1.25rem; }
+.prose-area h3 { font-size: 1.125rem; }
+.prose-area h4 { font-size: 1rem; }
+
+.prose-area p { margin: 0.5em 0; }
+.prose-area ul,
+.prose-area ol { margin: 0.5em 0 0.5em 1.25em; }
+
+.prose-area blockquote {
+  margin: 0.8em 0;
+  padding: 0.6em 0.8em;
+  border-left: 3px solid rgba(0,0,0,0.2);
+  opacity: 0.9;
+}
+
+.prose-area code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.06);
+}
+
+/* Tables in editor */
+.prose-area table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+.prose-area th, .prose-area td {
+  padding: 6px 8px;
+  border: 1px solid rgba(0,0,0,0.18);
+}
+
+/* ---- Print tweaks (for Print club averages) ---- */
+@media print {
+  body {
+    color: #000;
+    background: #fff;
+  }
+
+  /* Avoid background colors and borders when printing */
+  .no-print-border {
+    border: none !important;
+  }
+  .no-print-bg {
+    background: transparent !important;
+  }
 }
