@@ -384,25 +384,26 @@ function exportShotsCSV() {
   /* =========================
      KPIs
   ========================= */
-  const kCarry = useMemo(() => {
-    const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
-    return { mean: mean(v), n: n(v), std: stddev(v) };
-  }, [filteredOutliers]);
+ const kCarry = useMemo(() => {
+  const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => Number.isFinite(x));
+  return { mean: mean(v), n: v.length, std: stddev(v) };
+}, [filteredOutliers]);
 
-  const kBall = useMemo(() => {
-    const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => x != null);
-    return { mean: mean(v), n: n(v), std: stddev(v) };
-  }, [filteredOutliers]);
+const kBall = useMemo(() => {
+  const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => Number.isFinite(x));
+  return { mean: mean(v), n: v.length, std: stddev(v) };
+}, [filteredOutliers]);
 
-  const kClub = useMemo(() => {
-    const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => x != null);
-    return { mean: mean(v), n: n(v), std: stddev(v) };
-  }, [filteredOutliers]);
+const kClub = useMemo(() => {
+  const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => Number.isFinite(x));
+  return { mean: mean(v), n: v.length, std: stddev(v) };
+}, [filteredOutliers]);
 
-  const kSmash = useMemo(() => {
-    const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => x != null);
-    return { mean: mean(v), n: n(v), std: stddev(v) };
-  }, [filteredOutliers]);
+const kSmash = useMemo(() => {
+  const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => Number.isFinite(x));
+  return { mean: mean(v), n: v.length, std: stddev(v) };
+}, [filteredOutliers]);
+
 
   const hasData = filteredOutliers.length > 0;
   const kpis = { carry: kCarry, ball: kBall, club: kClub, smash: kSmash };
