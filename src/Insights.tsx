@@ -217,7 +217,9 @@ export default function InsightsView(props: Props) {
 
   /* ---------- Highlights (global PRs + most consistent; ignores club selection) ---------- */
   const highlightsInfo = useMemo(() => {
-    const rows = filteredNoClubOutliers;
+    // Use raw, no-club data so Highlights never changes when a specific club is selected.
+    // (Still respects current date/session filters since App builds these arrays accordingly.)
+    const rows = filteredNoClubRaw.length ? filteredNoClubRaw : filteredNoClubOutliers;
     const bestCarry = maxBy(rows, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
     const bestTotal = maxBy(rows, s => isNum(s.TotalDistance_yds) ? s.TotalDistance_yds! : null);
 
@@ -246,7 +248,7 @@ export default function InsightsView(props: Props) {
       } : null,
       mostConsistent,
     };
-  }, [filteredNoClubOutliers]);
+  }, [filteredNoClubOutliers, filteredNoClubRaw]);
 
   const highlights = (
     <div key="highlights" draggable onDragStart={onDragStart("highlights")} onDragOver={onDragOver("highlights")} onDrop={onDrop("highlights")}>
