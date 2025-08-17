@@ -156,30 +156,38 @@ export default function App() {
     };
 
     const newShots: Shot[] = dataRows.map((r) => {
+  // helpers
+  const dateRaw = String(get(r, ["date"]) ?? "").trim();
+  const sessionByDay = dateRaw.split(" ")[0] || "Unknown Session";
+  const clubName = String(get(r, ["club name"]) ?? "").trim();
+  const clubType = String(get(r, ["club type"]) ?? "").trim();
+
   const s: Shot = {
     // strings
-    SessionId: String(get(r, ["sessionid", "session id", "session"]) ?? "Unknown Session"),
-    Club: String(get(r, ["club", "club type", "clubname", "club name"]) ?? "Unknown Club"),
-    Timestamp: isoDate(get(r, ["timestamp", "date", "datetime"])),
+    SessionId: sessionByDay,
+    Club: clubName || clubType || "Unknown Club",
+    Timestamp: isoDate(dateRaw),
 
-    // numbers (Shot expects number)
-    CarryDistance_yds: num(get(r, ["carry distance", "carry (yds)", "carry", "carryyds"])),
-    TotalDistance_yds: num(get(r, ["total distance", "total (yds)", "total", "totalyds"])),
-    BallSpeed_mph:      num(get(r, ["ball speed"])),
+    // numbers (ensure number type with `num`)
     ClubSpeed_mph:      num(get(r, ["club speed"])),
-    LaunchAngle_deg:    num(get(r, ["launch angle", "launch"])),
-    // Use the name your Shot actually has:
-    //DescentAngle_deg:   num(get(r, ["descent angle", "landing angle"])),
-    ApexHeight_yds:     num(get(r, ["apex", "apex height", "peak height", "peakheight"])),
-    //Offline_yds:        num(get(r, ["offline", "offline yds"])),
-    Side_deg:           num(get(r, ["face angle", "face", "side", "sidedeg"])),
-    Path_deg:           num(get(r, ["club path", "path", "pathdeg"])),
-    AttackAngle_deg:    num(get(r, ["attack angle", "aoa", "attackangle"])),
-    SmashFactor:        num(get(r, ["smash factor", "smash"])),
-    FaceToPath_deg:     num(get(r, ["face to path", "f2p", "facetopath"]))
+    AttackAngle_deg:    num(get(r, ["attack angle"])),
+    Path_deg:           num(get(r, ["club path"])),
+    Side_deg:           num(get(r, ["club face"])),
+    FaceToPath_deg:     num(get(r, ["face to path"])),
+    BallSpeed_mph:      num(get(r, ["ball speed"])),
+    SmashFactor:        num(get(r, ["smash factor"])),
+    LaunchAngle_deg:    num(get(r, ["launch angle"])),
+    // CSV has "Launch Direction" and "Spin Axis" if you add them to Shot later.
+    ApexHeight_yds:     num(get(r, ["apex height"])),
+    CarryDistance_yds:  num(get(r, ["carry distance"])),
+    // Treat lateral miss at carry as offline
+    Offline_yds:        num(get(r, ["carry deviation distance"])),
+    TotalDistance_yds:  num(get(r, ["total distance"])),
   };
+
   return applyDerived(s);
 });
+
 
 
     // Merge & de-dupe by (Timestamp+Club+Carry+Ball+ClubSpeed)
