@@ -1,135 +1,176 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import type { Theme } from "./theme";
 
+/* =========================
+   Props
+========================= */
 type Props = {
   theme: Theme;
   editorRef: React.RefObject<HTMLDivElement>;
-  value: string;                       // HTML
-  onInputHTML: (html: string) => void;
+  value: string;                       // HTML string
+  onInputHTML: (html: string) => void; // upstream state setter in App.tsx
   sessionLabel: string;                // e.g., "Journal — All Sessions"
-  defaultHeightPx: number;             // from Filters panel height for a good starting size
+  defaultHeightPx: number;             // desired default height (match Filters panel)
 };
 
-export default function JournalView({
-  theme: T,
-  editorRef,
-  value,
-  onInputHTML,
-  sessionLabel,
-  defaultHeightPx,
-}: Props) {
-  const localRef = useRef<HTMLDivElement | null>(null);
+/* =========================
+   Component
+========================= */
+export default function JournalView({ theme: T, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx }: Props) {
+  const internalRef = useRef<HTMLDivElement | null>(null);
 
-  // keep internal ref synced with external
-  useEffect(() => {
-    if (editorRef && "current" in editorRef) {
-      (editorRef as any).current = localRef.current;
-    }
-  }, [editorRef]);
+  // keep a stable pointer to the editable element
+  const getEditor = () => (editorRef?.current ?? internalRef.current)!;
 
-  // keep HTML in sync when session changes
+  /* ---------- Sync incoming value → DOM ---------- */
   useEffect(() => {
-    if (localRef.current && localRef.current.innerHTML !== value) {
-      localRef.current.innerHTML = value || "";
+    const el = getEditor();
+    if (!el) return;
+    // only update DOM when incoming value differs to avoid resetting caret unexpectedly
+    if (el.innerHTML !== value) {
+      el.innerHTML = value || "";
     }
   }, [value]);
 
-  const exec = (cmd: string, val?: string) => {
-    document.execCommand(cmd, false, val);
-    if (localRef.current) {
-      onInputHTML(localRef.current.innerHTML);
+  /* ---------- Utilities ---------- */
+  const selectionInsideEditor = useCallback(() => {
+    const el = getEditor();
+    const sel = window.getSelection?.();
+    if (!el || !sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    let node: Node | null = range.commonAncestorContainer;
+    while (node) {
+      if (node === el) return true;
+      node = node.parentNode;
     }
+    return false;
+  }, []);
+
+  const focusEditor = useCallback(() => {
+    const el = getEditor();
+    if (!el) return;
+    el.focus();
+    // place caret at end if nothing selected inside
+    const sel = window.getSelection?.();
+    if (sel && sel.rangeCount === 0) {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }, []);
+
+  const exec = useCallback((command: string, value?: string) => {
+    const el = getEditor();
+    if (!el) return;
+    if (!selectionInsideEditor()) focusEditor();
+    // document.execCommand is deprecated but still broadly supported in contentEditable contexts
+    try {
+      document.execCommand(command, false, value ?? undefined);
+      // after formatting, emit updated HTML
+      onInputHTML(el.innerHTML);
+      el.focus();
+    } catch {
+      // no-op
+    }
+  }, [onInputHTML, selectionInsideEditor, focusEditor]);
+
+  const clearEditor = useCallback(() => {
+    const el = getEditor();
+    if (!el) return;
+    el.innerHTML = "";
+    onInputHTML("");
+    el.focus();
+  }, [onInputHTML]);
+
+  /* ---------- Input handler ---------- */
+  const handleInput: React.FormEventHandler<HTMLDivElement> = (e) => {
+    onInputHTML((e.target as HTMLDivElement).innerHTML);
   };
 
-  const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    // paste as plain text -> minimal formatting
-    e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text);
+  /* ---------- Styles ---------- */
+  const sectionStyle: React.CSSProperties = {
+    background: T.panel,
+    color: T.text,
+    borderColor: T.border,
+    minHeight: Math.max(320, Math.floor(defaultHeightPx)), // match Filters default height
+  };
+
+  const headerStyle: React.CSSProperties = {
+    background: T.panelAlt,
+    borderBottom: `1px solid ${T.border}`,
+    color: T.text,
+  };
+
+  const buttonCommon: React.CSSProperties = {
+    background: T.panel,
+    color: T.text,
+    borderColor: T.border,
   };
 
   return (
-    <section
-      className="rounded-xl border shadow-sm"
-      style={{ background: T.panel, color: T.text, borderColor: T.border }}
-    >
-      <header
-        className="px-4 py-2 flex items-center justify-between gap-3 rounded-t-xl"
-        style={{ background: T.panelAlt, borderBottom: `1px solid ${T.border}`, color: T.text }}
-      >
+    <section className="rounded-xl border shadow-sm" style={sectionStyle}>
+      <header className="px-4 py-2 rounded-t-xl" style={headerStyle}>
         <div className="text-sm font-medium">{sessionLabel}</div>
-        <div className="flex flex-wrap items-center gap-1">
-          <ToolbarButton label="B" title="Bold" onClick={() => exec("bold")} T={T} />
-          <ToolbarButton label="I" title="Italic" onClick={() => exec("italic")} T={T} />
-          <ToolbarButton label="U" title="Underline" onClick={() => exec("underline")} T={T} />
-          <ToolbarDivider T={T} />
-          <ToolbarButton label="• List" title="Bulleted list" onClick={() => exec("insertUnorderedList")} T={T} />
-          <ToolbarButton label="1. List" title="Numbered list" onClick={() => exec("insertOrderedList")} T={T} />
-          <ToolbarDivider T={T} />
-          <ToolbarButton label="H1" title="Heading" onClick={() => exec("formatBlock", "<h3>")} T={T} />
-          <ToolbarButton label="P" title="Paragraph" onClick={() => exec("formatBlock", "<p>")} T={T} />
-          <ToolbarDivider T={T} />
-          <ToolbarButton
-            label="Clear"
-            title="Clear formatting"
-            onClick={() => exec("removeFormat")}
-            T={T}
-          />
-        </div>
       </header>
 
-      <div className="px-4 pb-4">
+      {/* Toolbar */}
+      <div className="px-3 py-2 border-b flex items-center gap-1" style={{ borderColor: T.border }}>
+        <ToolbarButton label="H1" title="Heading 1" onClick={() => exec("formatBlock", "H1")} T={T} style={buttonCommon} />
+        <ToolbarButton label="P" title="Paragraph" onClick={() => exec("formatBlock", "P")} T={T} style={buttonCommon} />
+        <ToolbarDivider T={T} />
+        <ToolbarButton label="B" title="Bold" onClick={() => exec("bold")} T={T} style={buttonCommon} />
+        <ToolbarButton label="I" title="Italic" onClick={() => exec("italic")} T={T} style={buttonCommon} />
+        <ToolbarDivider T={T} />
+        <ToolbarButton label="• List" title="Bulleted list" onClick={() => exec("insertUnorderedList")} T={T} style={buttonCommon} />
+        <ToolbarButton label="1. List" title="Numbered list" onClick={() => exec("insertOrderedList")} T={T} style={buttonCommon} />
+        <ToolbarDivider T={T} />
+        <ToolbarButton label="Clear" title="Clear all" onClick={clearEditor} T={T} style={buttonCommon} />
+      </div>
+
+      {/* Editor */}
+      <div className="p-3">
         <div
-          ref={localRef}
-          role="textbox"
-          aria-label="Journal editor"
+          ref={editorRef ?? internalRef}
+          className="prose max-w-none outline-none"
           contentEditable
           suppressContentEditableWarning
-          onInput={(e) => onInputHTML((e.target as HTMLDivElement).innerHTML)}
-          onPaste={onPaste}
-          className="rounded-lg outline-none prose-area"
+          onInput={handleInput}
           style={{
-            minHeight: Math.max(220, Math.round(defaultHeightPx * 0.8)),
-            padding: "12px",
-            background: T.mode === "light" ? T.panel : T.panel,
-            color: T.text,
+            minHeight: Math.max(200, Math.floor(defaultHeightPx) - 90), // leave room for header+toolbar
+            padding: 8,
             border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            background: T.panel,
+            color: T.text,
+            overflowY: "auto",
           }}
         />
-        {/* Subtle tip */}
-        <div className="mt-2 text-xs" style={{ color: T.textDim }}>
-          Tip: notes auto-save per session. Use the toolbar or <kbd>Ctrl/Cmd+B</kbd>, <kbd>I</kbd>, <kbd>U</kbd>.
+        {/* Hint */}
+        <div className="text-xs mt-2" style={{ color: T.textDim }}>
+          Tip: Use the toolbar or keyboard shortcuts (Ctrl/Cmd+B, Ctrl/Cmd+I). Lists and headings apply to the current selection.
         </div>
       </div>
     </section>
   );
 }
 
-/* ---------- Toolbar bits ---------- */
-function ToolbarButton({
-  label,
-  title,
-  onClick,
-  T,
-}: {
-  label: string;
-  title: string;
-  onClick: () => void;
-  T: Theme;
-}) {
+/* =========================
+   Toolbar bits
+========================= */
+function ToolbarButton({ label, title, onClick, T, style }: { label: string; title: string; onClick: () => void; T: Theme; style?: React.CSSProperties; }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
       className="px-2 py-1 rounded-md text-xs border"
-      style={{
-        background: T.panel,
-        color: T.text,
-        borderColor: T.border,
-      }}
+      style={style}
       onMouseOver={(e) => (e.currentTarget.style.backgroundColor = T.panelAlt)}
-      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = T.panel)}
+      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = (style && style.background) ? String(style.background) : T.panel)}
+      onFocus={(e) => (e.currentTarget.style.boxShadow = `0 0 0 2px ${T.brandMuted}`)}
+      onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
       {label}
     </button>
