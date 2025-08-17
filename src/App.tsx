@@ -488,6 +488,11 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="text-lg font-semibold">Launch Tracker</div>
           <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+              <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+              <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+              <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+            </div>
             <button
               className="px-2 py-1 rounded-md border text-xs"
               style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
@@ -500,15 +505,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-2 mb-3">
-          <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
+      {/* Tabs removed from body; now in header */}
+<div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
           {/* Left rail */}
           <div ref={filtersRef}>
             <FiltersPanel
