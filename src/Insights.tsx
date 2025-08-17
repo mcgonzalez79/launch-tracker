@@ -60,7 +60,6 @@ function safeFmtDate(ts?: string): string {
   if (!ts) return "";
   const d = new Date(ts);
   if (isNaN(d.getTime())) return "";
-  // short locale date; tweak if you prefer time: d.toLocaleString()
   return d.toLocaleDateString();
 }
 
@@ -289,7 +288,12 @@ export default function InsightsView({
   /* ======= Swing Metrics (current selection) ======= */
   const swingMetrics = useMemo(() => {
     const path = avgOrNaN(filteredOutliers.map(s => s.ClubPath_deg));
-    const aoa  = avgOrNaN(filteredOutliers.map(s => s.AngleOfAttack_deg));
+    // AoA can be named differently depending on source → read defensively via `any`
+    const aoa = avgOrNaN(
+      filteredOutliers.map(s =>
+        (s as any).AngleOfAttack_deg ?? (s as any).AttackAngle_deg ?? (s as any).AoA_deg
+      )
+    );
     const face = avgOrNaN(filteredOutliers.map(s => s.ClubFace_deg));
     return { path, aoa, face };
   }, [filteredOutliers]);
