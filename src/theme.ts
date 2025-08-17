@@ -1,93 +1,76 @@
-// theme.ts
+// Huemint-derived palette (light/dark)
+// Light seeds: #DBE8E1 (bg tint), #FFFFFF (paper), #13202E (ink), #076652 (brand),
+//               #099D00 (accent-green), #C5C8DF (lavender-gray)
 export type Theme = {
   mode: "light" | "dark";
-  // surfaces & text
-  bg: string;
-  panel: string;
-  text: string;
-  textDim: string;
-  border: string;
-  kpiBorder: string;
-  // brand
-  brand: string;
-  brandTint: string;
-  brandAccent: string;
-  // misc commonly used colors
-  white: string;
-  blueSoft: string;
+
+  // basics
+  bg: string;          // page background
+  panel: string;       // cards/panels
+  panelAlt: string;    // subtle alt fill for chips/sliders
+  text: string;        // primary text
+  textDim: string;     // secondary text
+  border: string;      // hairline borders
+  brand: string;       // primary action color (buttons, active tabs)
+  brandHover: string;  // hover state
+  brandMuted: string;  // subtle brand tint
+  accent: string;      // secondary accent
+  white: string;       // pure white for contrast
+
+  // status
+  success: string;
+  warn: string;
+  error: string;
+
+  // charts
+  grid: string;
+  tick: string;
 };
 
-// ------------------------------
-// Club colors (kept stable)
-// If you previously had a custom palette, paste it here to preserve exact colors.
-// ------------------------------
-export const clubPalette: string[] = [
-  // These are sane defaults; replace with your previous values if needed.
-  "#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED",
-  "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#9333EA",
-  "#22C55E", "#3B82F6"
-];
-
-/**
- * Stable per-club color selector. Works with Filters (color chips) and charts that rely on club color.
- * If the club order changes, the same club still hashes to the same color.
- */
-export function colorForClub(club: string, clubs?: string[], palette: string[] = clubPalette): string {
-  // Prefer index within the current "clubs" list for stability across a page load,
-  // otherwise fall back to a deterministic hash of the club name.
-  let idx = -1;
-  if (clubs && clubs.length) idx = clubs.indexOf(club);
-  if (idx < 0) {
-    let h = 0;
-    for (let i = 0; i < club.length; i++) h = (h * 31 + club.charCodeAt(i)) >>> 0;
-    idx = h;
-  }
-  return palette[Math.abs(idx) % palette.length];
-}
-
-// ------------------------------
-// Huemint palette mapping
-// https://huemint.com/bootstrap-basic/#palette=dbe8e1-ffffff-13202e-076652-099d00-c5c8df
-// ------------------------------
-const H = {
-  mint:  "#DBE8E1", // soft mint background
-  white: "#FFFFFF",
-  navy:  "#13202E", // deep navy for text/dark bg
-  teal:  "#076652", // primary brand in light
-  green: "#099D00", // accent brand
-  grayL: "#C5C8DF"  // cool gray-lavender for borders
-};
-
-// LIGHT: mint wash background + white cards, navy text, teal primary, green accent
+// Light
 export const LIGHT: Theme = {
   mode: "light",
-  bg: H.mint,
-  panel: H.white,
-  text: H.navy,
-  textDim: "#4B5563",       // slate-ish for secondary text
-  border: H.grayL,
-  kpiBorder: "#E5E7EB",     // subtle KPI borders (tailwind slate-200-ish)
-  brand: H.teal,
-  brandTint: "#10B981",     // soft tint used in Card header accent bars, etc.
-  brandAccent: H.green,
-  white: H.white,
-  blueSoft: "#E8F1FF",      // gentle info stripe for Journal help
+  bg: "#f5f8f6",                 // lifted from #DBE8E1
+  panel: "#ffffff",              // #FFFFFF
+  panelAlt: "#eef2f0",           // light tint of bg
+  text: "#13202e",               // ink
+  textDim: "#445263",            // dimmed ink
+  border: "#d6ded9",             // subtle border
+  brand: "#076652",              // brand teal
+  brandHover: "#0b7b64",
+  brandMuted: "#bfe3dc",
+  accent: "#099d00",             // green accent
+  white: "#ffffff",
+
+  success: "#0b9a4a",
+  warn: "#b88000",
+  error: "#c0362c",
+
+  grid: "#e7ece9",
+  tick: "#9aa7b5",
 };
 
-// DARK: deep navy background + slightly lighter panels, minty text, flip brand emphasis
+// Dark
 export const DARK: Theme = {
   mode: "dark",
-  bg: H.navy,
-  panel: "#1A2A3A",
-  text: H.mint,
-  textDim: "#A7B0B8",
-  border: "#2C3B4B",
-  kpiBorder: "#314355",
-  brand: H.green,           // a touch brighter in dark for contrast
-  brandTint: "#34D399",     // tint used in small accents
-  brandAccent: H.teal,
-  white: H.white,
-  blueSoft: "#0B2239",      // subtle dark info stripe
+  bg: "#0f1720",                 // deepened from #13202E
+  panel: "#152232",
+  panelAlt: "#1a2a3d",
+  text: "#eaf0ff",
+  textDim: "#a9b6c6",
+  border: "#27384d",
+  brand: "#0d8a72",              // lifted brand to pop on dark
+  brandHover: "#10a386",
+  brandMuted: "#1f3f51",
+  accent: "#38b000",             // readable green
+  white: "#ffffff",
+
+  success: "#2ddc83",
+  warn: "#e0a94f",
+  error: "#ef6a5a",
+
+  grid: "#233449",
+  tick: "#8aa0b8",
 };
 
 // Natural club ordering helper for sorting (Driver -> woods -> hybrids -> irons -> wedges -> putter)
@@ -100,7 +83,6 @@ export function orderIndex(club: string): number {
     "pw","gw","aw","sw","lw",
     "putter","pt"
   ];
-  // Common aliases
   const alias: Record<string,string> = {
     "3wood":"3w","5wood":"5w","7wood":"7w","9wood":"9w",
     "3hybrid":"3h","4hybrid":"4h","5hybrid":"5h",
@@ -109,6 +91,5 @@ export function orderIndex(club: string): number {
   };
   const key = alias[name] || name;
   const idx = table.indexOf(key);
-  return idx >= 0 ? idx : 100 + key.charCodeAt(0); // fallback groups unknowns at the end
+  return idx >= 0 ? idx : 100 + (key[0]?.charCodeAt(0) ?? 0);
 }
-
