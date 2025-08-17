@@ -4,7 +4,7 @@ import FiltersPanel from "./Filters";
 import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
-import { Card, TopTab, IconSun, IconMoon } from "./components/UI";
+import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow
@@ -35,7 +35,7 @@ function idxOf(headers: string[], variants: string[]): number {
 }
 
 /* =========================
-   Footer (new)
+   Footer
 ========================= */
 function Footer({ T }: { T: Theme }) {
   const year = new Date().getFullYear();
@@ -156,42 +156,37 @@ export default function App() {
     };
 
     const newShots: Shot[] = dataRows.map((r) => {
-  // helpers
-  const dateRaw = String(get(r, ["date"]) ?? "").trim();
-  const sessionByDay = dateRaw.split(" ")[0] || "Unknown Session";
-  const clubName = String(get(r, ["club name"]) ?? "").trim();
-  const clubType = String(get(r, ["club type"]) ?? "").trim();
+      // helpers
+      const dateRaw = String(get(r, ["date"]) ?? "").trim();
+      const sessionByDay = dateRaw.split(" ")[0] || "Unknown Session";
+      const clubName = String(get(r, ["club name"]) ?? "").trim();
+      const clubType = String(get(r, ["club type"]) ?? "").trim();
 
-  const s: Shot = {
-    // strings
-    SessionId: sessionByDay,
-    Club: clubName || clubType || "Unknown Club",
-    Timestamp: isoDate(dateRaw),
+      const s: Shot = {
+        // strings
+        SessionId: sessionByDay,
+        Club: clubName || clubType || "Unknown Club",
+        Timestamp: isoDate(dateRaw),
 
-    // numbers (ensure number type with `num`)
-    ClubSpeed_mph:      num(get(r, ["club speed"])),
-    AttackAngle_deg:    num(get(r, ["attack angle"])),
-    ClubPath_deg:       num(get(r, ["club path"])),
-    ClubFace_deg:       num(get(r, ["club face"])),
-    FaceToPath_deg:     num(get(r, ["face to path"])),
-    BallSpeed_mph:      num(get(r, ["ball speed"])),
-    SmashFactor:        num(get(r, ["smash factor"])),
-    LaunchAngle_deg:    num(get(r, ["launch angle"])),
-    // CSV has "Launch Direction" and "Spin Axis" if you add them to Shot later.
-    ApexHeight_yds:     num(get(r, ["apex height"])),
-    CarryDistance_yds:  num(get(r, ["carry distance"])),
-    // Treat lateral miss at carry as offline
-    CarryDeviationDistance_yds: num(get(r, ["carry deviation distance"])),
-    TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
-    TotalDistance_yds:  num(get(r, ["total distance"])),
-    LaunchDirection_deg: num(get(r, ["launch direction"])),
+        // numbers (ensure number type with `num`)
+        ClubSpeed_mph:      num(get(r, ["club speed"])),
+        AttackAngle_deg:    num(get(r, ["attack angle"])),
+        ClubPath_deg:       num(get(r, ["club path"])),
+        ClubFace_deg:       num(get(r, ["club face"])),
+        FaceToPath_deg:     num(get(r, ["face to path"])),
+        BallSpeed_mph:      num(get(r, ["ball speed"])),
+        SmashFactor:        num(get(r, ["smash factor"])),
+        LaunchAngle_deg:    num(get(r, ["launch angle"])),
+        ApexHeight_yds:     num(get(r, ["apex height"])),
+        CarryDistance_yds:  num(get(r, ["carry distance"])),
+        CarryDeviationDistance_yds: num(get(r, ["carry deviation distance"])),
+        TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
+        TotalDistance_yds:  num(get(r, ["total distance"])),
+        LaunchDirection_deg: num(get(r, ["launch direction"])),
+      };
 
-  };
-
-  return applyDerived(s);
-});
-
-
+      return applyDerived(s);
+    });
 
     // Merge & de-dupe by (Timestamp+Club+Carry+Ball+ClubSpeed)
     const keyOf = (s: Shot) =>
@@ -212,43 +207,39 @@ export default function App() {
     toast({ type: "success", text: `Imported ${added} new shots from ${filename}` });
   }
 
- /* =========================
-   Export (CSV aligned to Shot)
-========================= */
-function exportShotsCSV() {
-  // Keep this list in sync with your Shot interface & the fields you actually populate in processWorkbook
-  const headers = [
-    "Timestamp", "SessionId", "Club",
-    "CarryDistance_yds", "TotalDistance_yds",
-    "BallSpeed_mph", "ClubSpeed_mph",
-    "LaunchAngle_deg", "LaunchDirection_deg",
-    "ApexHeight_yds",
-    "CarryDeviationDistance_yds", "TotalDeviationDistance_yds",
-    "ClubFace_deg", "ClubPath_deg", "AttackAngle_deg",
-    "SmashFactor", "FaceToPath_deg"
-  ];
-
-  const esc = (v: any) => {
-    if (v == null) return "";
-    const s = String(v).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
-
-  const lines = [
-    headers.join(","),
-    ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
-  ];
-
-  const csv = lines.join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  a.download = `launch-tracker_${stamp}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
+  /* =========================
+     Export (CSV aligned to Shot)
+  ========================= */
+  function exportShotsCSV() {
+    // Keep this list in sync with your Shot interface & the fields you populate
+    const headers = [
+      "Timestamp", "SessionId", "Club",
+      "CarryDistance_yds", "TotalDistance_yds",
+      "BallSpeed_mph", "ClubSpeed_mph",
+      "LaunchAngle_deg", "LaunchDirection_deg",
+      "ApexHeight_yds",
+      "CarryDeviationDistance_yds", "TotalDeviationDistance_yds",
+      "ClubFace_deg", "ClubPath_deg", "AttackAngle_deg",
+      "SmashFactor", "FaceToPath_deg"
+    ];
+    const esc = (v: any) => {
+      if (v == null) return "";
+      const s = String(v).replace(/"/g, '""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    };
+    const lines = [
+      headers.join(","),
+      ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
+    ];
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.download = `launch-tracker_${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   /* =========================
      Filters state (names match Filters.tsx)
@@ -266,7 +257,7 @@ function exportShotsCSV() {
   const carryMinNum = useMemo(() => (carryMin ? parseFloat(carryMin) : undefined), [carryMin]);
   const carryMaxNum = useMemo(() => (carryMax ? parseFloat(carryMax) : undefined), [carryMax]);
 
-  // Filters panel size → for Journal default height
+  // Sticky sidebar needs a measured height for journal default height (keep this)
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
@@ -360,9 +351,9 @@ function exportShotsCSV() {
         try { if (new Date(s.Timestamp) > to) return false; } catch {}
       }
 
-      if (s.CarryDistance_yds != null) {
-        if (carryMinNum != null && s.CarryDistance_yds < carryMinNum) return false;
-        if (carryMaxNum != null && s.CarryDistance_yds > carryMaxNum) return false;
+      if (Number.isFinite(s.CarryDistance_yds)) {
+        if (carryMinNum != null && s.CarryDistance_yds! < carryMinNum) return false;
+        if (carryMaxNum != null && s.CarryDistance_yds! > carryMaxNum) return false;
       }
       return true;
     });
@@ -384,26 +375,25 @@ function exportShotsCSV() {
   /* =========================
      KPIs
   ========================= */
- const kCarry = useMemo(() => {
-  const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => Number.isFinite(x));
-  return { mean: mean(v), n: v.length, std: stddev(v) };
-}, [filteredOutliers]);
+  const kCarry = useMemo(() => {
+    const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
 
-const kBall = useMemo(() => {
-  const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => Number.isFinite(x));
-  return { mean: mean(v), n: v.length, std: stddev(v) };
-}, [filteredOutliers]);
+  const kBall = useMemo(() => {
+    const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
 
-const kClub = useMemo(() => {
-  const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => Number.isFinite(x));
-  return { mean: mean(v), n: v.length, std: stddev(v) };
-}, [filteredOutliers]);
+  const kClub = useMemo(() => {
+    const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
 
-const kSmash = useMemo(() => {
-  const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => Number.isFinite(x));
-  return { mean: mean(v), n: v.length, std: stddev(v) };
-}, [filteredOutliers]);
-
+  const kSmash = useMemo(() => {
+    const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => Number.isFinite(x));
+    return { mean: mean(v), n: v.length, std: stddev(v) };
+  }, [filteredOutliers]);
 
   const hasData = filteredOutliers.length > 0;
   const kpis = { carry: kCarry, ball: kBall, club: kClub, smash: kSmash };
@@ -480,6 +470,11 @@ const kSmash = useMemo(() => {
   const onDrop2 = (_key: string) => (_: React.DragEvent) => { dragKey2.current = null; };
 
   /* =========================
+     Sidebar (left) collapse for small screens
+  ========================= */
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+
+  /* =========================
      Render
   ========================= */
   return (
@@ -487,6 +482,15 @@ const kSmash = useMemo(() => {
       {/* Top bar */}
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <button
+            className="md:hidden rounded-md px-2 py-1 border"
+            style={{ background: T.panel, borderColor: T.border, color: T.text }}
+            onClick={() => setSidebarOpen(s => !s)}
+            aria-label="Toggle filters"
+            title="Toggle filters"
+          >
+            ☰
+          </button>
           <div className="text-lg font-semibold">Launch Tracker</div>
           <div className="hidden md:block text-xs" style={{ color: T.textDim }}>
             Analyze carry, dispersion, efficiency, and progress
@@ -527,95 +531,103 @@ const kSmash = useMemo(() => {
         </div>
       </div>
 
-      {/* Content area */}
-      <div className="max-w-6xl mx-auto px-4 pb-6">
-        {/* Filters panel (props match Filters.tsx) */}
-        <div ref={filtersRef}>
-          <FiltersPanel
-            theme={T}
-            shots={shots}
-            sessions={sessions}
-            clubs={clubs}
-            selectedClubs={selectedClubs}
-            setSelectedClubs={setSelectedClubs}
-            sessionFilter={sessionFilter}
-            setSessionFilter={setSessionFilter}
-            excludeOutliers={excludeOutliers}
-            setExcludeOutliers={setExcludeOutliers}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            setDateFrom={setDateFrom}
-            setDateTo={setDateTo}
-            carryMin={carryMin}
-            carryMax={carryMax}
-            setCarryMin={setCarryMin}
-            setCarryMax={setCarryMax}
-            carryBounds={carryBounds}
-            onImportFile={onImportFile}
-            onLoadSample={onLoadSample}
-            onExportCSV={exportShotsCSV}
-            onPrintClubAverages={onPrintClubAverages}
-            onDeleteSession={onDeleteSession}
-            onDeleteAll={onDeleteAll}
-          />
-        </div>
-
-        {/* Tabs */}
-        <div className="mt-4">
-          <div className="flex gap-2 items-center">
-            <TopTab label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} theme={T} />
-            <TopTab label="Insights" active={view === "insights"} onClick={() => setView("insights")} theme={T} />
-            <TopTab label="Journal" active={view === "journal"} onClick={() => setView("journal")} theme={T} />
+      {/* Main layout: sidebar + content */}
+      <div className="max-w-6xl mx-auto px-4 pb-6 md:flex md:gap-4">
+        {/* Sidebar (Filters) */}
+        <aside
+          className={`md:sticky md:top-4 md:self-start md:w-[280px] md:shrink-0 ${sidebarOpen ? "" : "hidden"} md:block`}
+          aria-label="Filters"
+        >
+          <div ref={filtersRef}>
+            <FiltersPanel
+              theme={T}
+              shots={shots}
+              sessions={sessions}
+              clubs={clubs}
+              selectedClubs={selectedClubs}
+              setSelectedClubs={setSelectedClubs}
+              sessionFilter={sessionFilter}
+              setSessionFilter={setSessionFilter}
+              excludeOutliers={excludeOutliers}
+              setExcludeOutliers={setExcludeOutliers}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              setDateFrom={setDateFrom}
+              setDateTo={setDateTo}
+              carryMin={carryMin}
+              carryMax={carryMax}
+              setCarryMin={setCarryMin}
+              setCarryMax={setCarryMax}
+              carryBounds={carryBounds}
+              onImportFile={onImportFile}
+              onLoadSample={onLoadSample}
+              onExportCSV={exportShotsCSV}
+              onPrintClubAverages={onPrintClubAverages}
+              onDeleteSession={onDeleteSession}
+              onDeleteAll={onDeleteAll}
+            />
           </div>
+        </aside>
 
+        {/* Content area */}
+        <main className="flex-1">
+          {/* Tabs */}
           <div className="mt-4">
-            {view === "dashboard" && (
-              <DashboardCards
-                theme={T}
-                cardOrder={cardOrder}
-                setCardOrder={setCardOrder}
-                onDragStart={onDragStart}
-                onDragOver={onDragOver}
-                onDrop={onDrop}
-                hasData={hasData}
-                kpis={kpis}
-                filteredOutliers={filteredOutliers}
-                filtered={filtered}
-                shots={shots}
-                tableRows={tableRows}
-                clubs={clubs}
-              />
-            )}
+            <div className="flex gap-2 items-center">
+              <TopTab label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} theme={T} />
+              <TopTab label="Insights" active={view === "insights"} onClick={() => setView("insights")} theme={T} />
+              <TopTab label="Journal" active={view === "journal"} onClick={() => setView("journal")} theme={T} />
+            </div>
 
-            {view === "insights" && (
-              <InsightsView
-                theme={T}
-                tableRows={tableRows}
-                filteredOutliers={filteredOutliers}
-                filteredNoClubOutliers={filteredOutliers}
-                filteredNoClubRaw={filtered}
-                allClubs={clubs}
-                insightsOrder={insightsOrder}
-                onDragStart={onDragStart2}
-                onDragOver={onDragOver2}
-                onDrop={onDrop2}
-              />
-            )}
+            <div className="mt-4">
+              {view === "dashboard" && (
+                <DashboardCards
+                  theme={T}
+                  cardOrder={cardOrder}
+                  setCardOrder={setCardOrder}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDrop={onDrop}
+                  hasData={hasData}
+                  kpis={kpis}
+                  filteredOutliers={filteredOutliers}
+                  filtered={filtered}
+                  shots={shots}
+                  tableRows={tableRows}
+                  clubs={clubs}
+                />
+              )}
 
-            {view === "journal" && (
-              <JournalView
-                theme={T}
-                editorRef={editorRef}
-                value={journalHTML}
-                onInputHTML={setJournalHTML}
-                sessionLabel={journalKey}
-                defaultHeightPx={filtersHeight}
-              />
-            )}
+              {view === "insights" && (
+                <InsightsView
+                  theme={T}
+                  tableRows={tableRows}
+                  filteredOutliers={filteredOutliers}
+                  filteredNoClubOutliers={filteredOutliers}
+                  filteredNoClubRaw={filtered}
+                  allClubs={clubs}
+                  insightsOrder={insightsOrder}
+                  onDragStart={onDragStart2}
+                  onDragOver={onDragOver2}
+                  onDrop={onDrop2}
+                />
+              )}
 
-            <Footer T={T} />
+              {view === "journal" && (
+                <JournalView
+                  theme={T}
+                  editorRef={editorRef}
+                  value={journalHTML}
+                  onInputHTML={setJournalHTML}
+                  sessionLabel={journalKey}
+                  defaultHeightPx={filtersHeight}
+                />
+              )}
+            </div>
           </div>
-        </div>
+
+          <Footer T={T} />
+        </main>
       </div>
     </div>
   );
