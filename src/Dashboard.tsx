@@ -153,7 +153,6 @@ export default function DashboardCards(props: Props) {
       </Card>
     </div>
   );
-);
 
   /* ---------- Dispersion (Carry Deviation vs Carry Distance) ---------- */
   const dispersionData = useMemo(
