@@ -4,7 +4,7 @@ import { Card } from "./components/UI";
 import { Shot, ClubRow, orderIndex, mean } from "./utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ResponsiveContainer,
-  ComposedChart, ErrorBar, Line, Label, Cell
+  ComposedChart, ErrorBar, Line, Label
 } from "recharts";
 
 /* ================== Benchmarks for proficiency ================== */
@@ -68,26 +68,6 @@ function avgOrNaN(values: Array<number | undefined>): number | undefined {
   if (!nums.length) return undefined;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
-
-// Very light hex → rgba for translucent fills
-function rgbaFromHex(hex: string, alpha: number): string {
-  const h = hex.replace("#", "");
-  const bigint = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
-  // eslint-disable-next-line no-bitwise
-  const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-// Club palette (match Dashboard)
-const CLUB_PALETTE = [
-  "#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED",
-  "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#9333EA",
-  "#22C55E", "#3B82F6"
-];
-const colorFor = (club: string) => {
-  const idx = Math.abs(orderIndex(club)) % CLUB_PALETTE.length;
-  return CLUB_PALETTE[idx];
-};
 
 /* ===== Proficiency score (0..100) vs. benchmark table ===== */
 function proficiencyScore(pool: Shot[], selectedClubs: string[] | null): { score: number; label: string } {
@@ -239,7 +219,7 @@ export default function InsightsView({
     return { bestClub, bestSd, avgCarry };
   }, [filteredNoClubOutliers]);
 
-  /* ======= Distance Distribution (box & whisker — per-club colors) ======= */
+  /* ======= Distance Distribution (box & whisker) ======= */
   const clubsOrdered = useMemo(
     () => [...new Set(filteredOutliers.map(s => s.Club))].sort((a,b)=>orderIndex(a)-orderIndex(b)),
     [filteredOutliers]
@@ -308,7 +288,7 @@ export default function InsightsView({
   /* ======= Swing Metrics (current selection) ======= */
   const swingMetrics = useMemo(() => {
     const path = avgOrNaN(filteredOutliers.map(s => s.ClubPath_deg));
-    // AoA can be named differently depending on source → read defensively
+    // AoA can be named differently depending on source → read defensively via `any`
     const aoa = avgOrNaN(
       filteredOutliers.map(s =>
         (s as any).AngleOfAttack_deg ?? (s as any).AttackAngle_deg ?? (s as any).AoA_deg
@@ -337,7 +317,7 @@ export default function InsightsView({
                   <ComposedChart
                     layout="vertical"
                     data={boxRows}
-                    margin={{ top: 10, right: 16, bottom: 10, left: 90 }}
+                    margin={{ top: 10, right: 16, bottom: 10, left: 80 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" tickMargin={8} minTickGap={6}>
@@ -356,37 +336,15 @@ export default function InsightsView({
                       labelFormatter={(l) => `Club: ${l}`}
                     />
                     <Legend />
-
                     {/* Carry box (horizontal) */}
-                    <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)">
-                      {boxRows.map((row, i) => <Cell key={`c-base-${i}`} fill="rgba(0,0,0,0)" />)}
+                    <Bar dataKey="Q1Carry" stackId="carry" fill="rgba(0,0,0,0)" />
+                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)" fill="#3A86FF">
+                      <ErrorBar dataKey="whiskerCarry" direction="x" width={10} stroke="#1e40af" />
                     </Bar>
-                    <Bar dataKey="iqrCarry" stackId="carry" name="Carry (IQR)">
-                      {boxRows.map((row, i) => (
-                        <Cell key={`c-iqr-${i}`} fill={rgbaFromHex(colorFor(row.club), 0.85)} />
-                      ))}
-                      <ErrorBar
-                        dataKey="whiskerCarry"
-                        direction="x"
-                        width={10}
-                        stroke="#1f2937"
-                      />
-                    </Bar>
-
                     {/* Total box (horizontal) */}
-                    <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)">
-                      {boxRows.map((row, i) => <Cell key={`t-base-${i}`} fill="rgba(0,0,0,0)" />)}
-                    </Bar>
-                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)">
-                      {boxRows.map((row, i) => (
-                        <Cell key={`t-iqr-${i}`} fill={rgbaFromHex(colorFor(row.club), 0.45)} />
-                      ))}
-                      <ErrorBar
-                        dataKey="whiskerTotal"
-                        direction="x"
-                        width={10}
-                        stroke="#334155"
-                      />
+                    <Bar dataKey="Q1Total" stackId="total" fill="rgba(0,0,0,0)" />
+                    <Bar dataKey="iqrTotal" stackId="total" name="Total (IQR)" fill="#2ECC71">
+                      <ErrorBar dataKey="whiskerTotal" direction="x" width={10} stroke="#166534" />
                     </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -494,7 +452,7 @@ export default function InsightsView({
             style={{ cursor: "grab" }}
             title="Drag to reorder"
           >
-            <Card theme={theme} title="Personal Records & Proficiency (current selection)" dragHandle>
+            <Card theme={theme} title="Personal Records (current selection)" dragHandle>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* PR Carry (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
@@ -519,14 +477,6 @@ export default function InsightsView({
                     {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
                   </div>
                 </div>
-              </div>
-
-              {/* Proficiency moved inside this card */}
-              <div className="mt-4 text-sm">
-                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Benchmarks are generalized carry/total distances by skill level for common clubs.
               </div>
             </Card>
           </div>
@@ -559,6 +509,64 @@ export default function InsightsView({
               ) : (
                 <div className="text-sm" style={{ color: "#64748b" }}>Select exactly one club to see progress.</div>
               )}
+            </Card>
+          </div>
+        );
+
+        if (key === "weaknesses") return (
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Proficiency (normalized to benchmarks)" dragHandle>
+              <div className="text-sm">
+                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Benchmarks are generalized carry/total distances by skill level for common clubs.
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowBench(true)}
+                  className="px-3 py-2 rounded-lg text-sm border"
+                  style={{ borderColor: "#e5e7eb", color: "#111827", background: "#fff" }}
+                >
+                  View Benchmarks
+                </button>
+              </div>
+              <Modal theme={theme} title="Benchmarks" open={showBench} onClose={() => setShowBench(false)}>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left pr-4">Club</th>
+                        <th className="text-left pr-4">Beginner</th>
+                        <th className="text-left pr-4">Average</th>
+                        <th className="text-left pr-4">Good</th>
+                        <th className="text-left pr-4">Advanced</th>
+                        <th className="text-left pr-4">PGA Tour</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {benches.map(r => (
+                        <tr key={r.club}>
+                          <td className="pr-4">{r.club}</td>
+                          <td className="pr-4">{r.Beginner}</td>
+                          <td className="pr-4">{r.Average}</td>
+                          <td className="pr-4">{r.Good}</td>
+                          <td className="pr-4">{r.Advanced}</td>
+                          <td className="pr-4">{r.PGATour}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Modal>
             </Card>
           </div>
         );
