@@ -6,6 +6,7 @@ import {
   ResponsiveContainer,
   ScatterChart, Scatter,
   BarChart, Bar,
+  ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine
 } from "recharts";
@@ -40,53 +41,37 @@ type Props = {
    Small helpers
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-
-/** Safe average by club */
-function averageBy<T extends keyof Shot>(rows: Shot[], key: T): number | null {
-  const vals = rows.map(r => r[key]).filter(isNum) as number[];
-  if (!vals.length) return null;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
-}
-
-/** Group shots by club name */
-function groupByClub(rows: Shot[]) {
-  const map = new Map<string, Shot[]>();
-  for (const s of rows) {
-    const k = s.Club || "Unknown";
-    if (!map.has(k)) map.set(k, []);
-    map.get(k)!.push(s);
-  }
-  return map;
-}
-
-/** Nice axis domain helper */
-function domainOf(vals: number[], pad = 0): [number, number] {
-  if (!vals.length) return [0, 0];
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  return [Math.floor(min - pad), Math.ceil(max + pad)];
+function average(nums: number[]): number { return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0; }
+function domainOf(vals: number[], pad = 0) {
+  if (!vals.length) return [0, 1];
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  return [Math.floor(lo - pad), Math.ceil(hi + pad)];
 }
 
 /* =========================
-   Dashboard
+   Component
 ========================= */
 export default function DashboardCards(props: Props) {
   const {
     theme: T,
     cardOrder,
-    onDragStart,
-    onDragOver,
-    onDrop,
+    onDragStart, onDragOver, onDrop,
     hasData,
     kpis,
     filteredOutliers,
     filtered,
-    // shots,
-    // tableRows,
+    shots,
+    tableRows,
     clubs,
   } = props;
 
-  /* ---------- KPI Card ---------- */
+  /* ---------- KPIs ---------- */
+  const avgTotalDistance = useMemo(() => {
+    const xs = filteredOutliers.map(s => s.TotalDistance_yds).filter(isNum) as number[];
+    return average(xs);
+  }, [filteredOutliers]);
+
   const KpiCell = ({ label, value, unit }: { label: string; value: string; unit?: string }) => (
     <div className="p-3 rounded-lg border" style={{ background: T.panelAlt, borderColor: T.border }}>
       <div className="text-xs" style={{ color: T.textDim }}>{label}</div>
@@ -100,11 +85,12 @@ export default function DashboardCards(props: Props) {
     <div key="kpis" draggable onDragStart={onDragStart("kpis")} onDragOver={onDragOver("kpis")} onDrop={onDrop("kpis")}>
       <Card title="KPIs" theme={T}>
         {hasData ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <KpiCell label="Carry (avg)" value={kpis.carry.mean.toFixed(1)} unit="yds" />
             <KpiCell label="Ball speed (avg)" value={kpis.ball.mean.toFixed(1)} unit="mph" />
             <KpiCell label="Club speed (avg)" value={kpis.club.mean.toFixed(1)} unit="mph" />
             <KpiCell label="Smash (avg)" value={kpis.smash.mean.toFixed(3)} />
+            <KpiCell label="Total (avg)" value={avgTotalDistance.toFixed(1)} unit="yds" />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>Import some shots to see KPIs.</div>
@@ -113,16 +99,12 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  
-  
-  
-  /* ---------- Shot Shape KPIs (percentages) ---------- */
-  const shapeAngles = useMemo(() => (
-    filteredOutliers
-      .map(s => (typeof s.LaunchDirection_deg === "number" ? s.LaunchDirection_deg : (typeof s.ClubFace_deg === "number" ? s.ClubFace_deg : null)))
-      .filter((v): v is number => typeof v === "number")
-  ), [filteredOutliers]);
-
+  /* ---------- Shot Shape KPIs ---------- */
+  const shapeAngles = useMemo(() => {
+    return filteredOutliers
+      .map(s => (isNum(s.LaunchDirection_deg) ? s.LaunchDirection_deg! : (isNum(s.ClubFace_deg) ? s.ClubFace_deg! : null)))
+      .filter(isNum) as number[];
+  }, [filteredOutliers]);
   const shapePercents = useMemo(() => {
     const total = shapeAngles.length || 1;
     let hook = 0, draw = 0, straight = 0, fade = 0, slice = 0;
@@ -132,7 +114,8 @@ export default function DashboardCards(props: Props) {
     const pct = (n: number) => Math.round((n * 100) / total);
     return { hook: pct(hook), draw: pct(draw), straight: pct(straight), fade: pct(fade), slice: pct(slice) };
   }, [shapeAngles]);
-const shapeCard = (
+
+  const shapeCard = (
     <div key="shape" draggable onDragStart={onDragStart("shape")} onDragOver={onDragOver("shape")} onDrop={onDrop("shape")}>
       <Card title="Shot Shape (percent of shots)" theme={T}>
         {shapeAngles.length ? (
@@ -150,21 +133,20 @@ const shapeCard = (
     </div>
   );
 
-  /* ---------- Dispersion (Carry Deviation vs Carry Distance) ---------- */
+  /* ---------- Dispersion ---------- */
   const dispersionData = useMemo(
     () =>
       filteredOutliers
         .filter(s => isNum(s.CarryDeviationDistance_yds) && isNum(s.CarryDistance_yds))
         .map(s => ({
-          x: s.CarryDeviationDistance_yds!, // lateral (yds, left - / right +)
-          y: s.CarryDistance_yds!,
+          x: (s.CarryDeviationDistance_yds as number) * -1, // left negative, right positive
+          y: s.CarryDistance_yds as number,
           Club: s.Club,
           SessionId: s.SessionId,
           Timestamp: s.Timestamp,
         })),
     [filteredOutliers]
   );
-
   const dispXDomain = useMemo(() => domainOf(dispersionData.map(d => d.x), 5), [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 5), [dispersionData]);
 
@@ -174,15 +156,15 @@ const shapeCard = (
         {dispersionData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
-              <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
+              <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis
                   dataKey="x"
                   type="number"
                   domain={dispXDomain as any}
                   tick={{ fill: T.tick, fontSize: 12 }}
                   stroke={T.tick}
-                  label={{ value: "Lateral @ carry (yds, − left / + right)", position: "insideBottom", offset: -2, fill: T.textDim, fontSize: 12 }}
+                  label={{ value: "Lateral (yds, left - / right +)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }}
                 />
                 <YAxis
                   dataKey="y"
@@ -192,10 +174,10 @@ const shapeCard = (
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
                 />
+                <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  // Use formatter's 3rd arg (item) to read item.payload safely, and avoid labelFormatter typing issues
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
                     if (name === "x") return [`${val?.toFixed?.(1)} yds`, `Lateral${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -203,28 +185,31 @@ const shapeCard = (
                     return [val, name];
                   }}
                 />
-                <Legend wrapperStyle={{ color: T.text }} />
-                <ReferenceLine x={0} stroke={T.border} />
-                <Scatter name="Shots" data={dispersionData} fill={T.brand} />
+                <Scatter name="Shots" data={dispersionData} fill={T.accent} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>No dispersion data available.</div>
+          <div className="text-sm" style={{ color: T.textDim }}>No dispersion data.</div>
         )}
       </Card>
     </div>
   );
 
-  /* ---------- Gapping (avg carry per club) ---------- */
+  /* ---------- Gapping ---------- */
   const gapData = useMemo(() => {
-    const groups = groupByClub(filteredOutliers);
-    const rows: { club: string; carry: number }[] = [];
-    for (const [club, list] of groups.entries()) {
-      const avgCarry = averageBy(list, "CarryDistance_yds");
-      if (avgCarry != null) rows.push({ club, carry: avgCarry });
+    const byClub = new Map<string, Shot[]>();
+    for (const s of filteredOutliers) {
+      const k = s.Club || "Unknown";
+      if (!byClub.has(k)) byClub.set(k, []);
+      byClub.get(k)!.push(s);
     }
-    // keep the order the parent derived (clubs prop)
+    const rows: { club: string; carry: number }[] = [];
+    for (const [club, arr] of Array.from(byClub.entries())) {
+      const xs = arr.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+      const avgCarry = average(xs);
+      if (!Number.isNaN(avgCarry)) rows.push({ club, carry: avgCarry });
+    }
     const order = new Map(clubs.map((c, i) => [c, i]));
     rows.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
     return rows;
@@ -236,83 +221,65 @@ const shapeCard = (
         {gapData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
-              <BarChart data={gapData} margin={{ top: 8, right: 16, bottom: 24, left: 0 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="club"
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  interval={0}
-                  angle={-20}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                />
-                <Tooltip
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(v: any) => [`${(v as number)?.toFixed?.(1)} yds`, "Avg Carry"]}
-                />
-                <Bar dataKey="carry" fill={T.brand} />
+              <BarChart data={gapData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
+                <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
+                <Bar dataKey="carry" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>No gapping data available.</div>
+          <div className="text-sm" style={{ color: T.textDim }}>No gapping data.</div>
         )}
       </Card>
     </div>
   );
 
-  /* ---------- Efficiency (Ball vs Club speed scatter) ---------- */
+  /* ---------- Efficiency (Ball vs Club speed scatter + smash trend) ---------- */
   const efficiencyData = useMemo(
     () =>
       filteredOutliers
         .filter(s => isNum(s.ClubSpeed_mph) && isNum(s.BallSpeed_mph))
         .map(s => ({
-          x: s.ClubSpeed_mph!,
-          y: s.BallSpeed_mph!,
+          x: s.ClubSpeed_mph as number,
+          y: s.BallSpeed_mph as number,
           Club: s.Club,
           Timestamp: s.Timestamp,
         })),
     [filteredOutliers]
   );
 
-  const effXMin = 50; // floor at 50 mph
+  const effXMin = 50;
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
+  const smashMean = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return 1.45;
+    const ratios = pairs.map(p => p.y / p.x);
+    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  }, [efficiencyData]);
+
+  const trendData = useMemo(() => ([
+    { x: effXMin, y: smashMean * effXMin },
+    { x: effXMax, y: smashMean * effXMax }
+  ]), [smashMean, effXMin, effXMax]);
+
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
-      <Card title="Efficiency (Ball vs Club speed)" theme={T}>
+      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Trend ≈ ${smashMean.toFixed(3)} smash`}>
         {efficiencyData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
-              <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="x"
-                  type="number"
-                  domain={[effXMin, effXMax]}
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Club speed (mph)", position: "insideBottom", offset: -2, fill: T.textDim, fontSize: 12 }}
-                />
-                <YAxis
-                  dataKey="y"
-                  type="number"
-                  domain={["dataMin - 2", "dataMax + 2"] as any}
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                />
-                <Tooltip
-                  cursor={{ strokeDasharray: "3 3" }}
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+              <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
+                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -322,6 +289,7 @@ const shapeCard = (
                 />
                 <Legend wrapperStyle={{ color: T.text }} />
                 <Scatter name="Shots" data={efficiencyData} fill={T.accent} />
+                <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -332,16 +300,15 @@ const shapeCard = (
     </div>
   );
 
-  /* ---------- Table (compact) ---------- */
-  
+  /* ---------- Club Averages (replace recent shots) ---------- */
   const clubAvgData = useMemo(() => (
-    tableRows.map(r => ({
-      club: (r as any).club,
-      avgCarry: Number((r as any).avgCarry || 0),
-      avgTotal: Number((r as any).avgTotal || 0),
-      avgSmash: Number((r as any).avgSmash || 0),
-      avgCS: Number((r as any).avgCS || 0),
-      avgBS: Number((r as any).avgBS || 0),
+    tableRows.map((r: any) => ({
+      club: r.club,
+      avgCarry: Number(r.avgCarry || 0),
+      avgTotal: Number(r.avgTotal || 0),
+      avgSmash: Number(r.avgSmash || 0),
+      avgCS: Number(r.avgCS || 0),
+      avgBS: Number(r.avgBS || 0),
     }))
   ), [tableRows]);
 
@@ -354,11 +321,10 @@ const shapeCard = (
               <ComposedChart data={clubAvgData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
-                <YAxis yAxisId="left" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Distance / Speed", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Distance (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Smash", angle: 90, position: "insideRight", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(val:any, name:string)=>[typeof val==='number'? (name==='avgSmash'? val.toFixed(3): val.toFixed(1)) : val, name.replace('avg','')]}
-                />
+                  formatter={(val:any, name:string)=>[typeof val==='number'? (name==='avgSmash'? val.toFixed(3): val.toFixed(1)) : val, name.replace('avg','')]} />
                 <Legend />
                 <Bar yAxisId="left" dataKey="avgCarry" name="Carry" />
                 <Bar yAxisId="left" dataKey="avgTotal" name="Total" />
@@ -371,5 +337,20 @@ const shapeCard = (
         )}
       </Card>
     </div>
-  )
+  );
+
+  const cardMap: Record<string, JSX.Element> = {
+    kpis: kpiCard,
+    shape: shapeCard,
+    dispersion: dispersionCard,
+    gap: gapCard,
+    eff: effCard,
+    table: tableCard,
+  };
+
+  return (
+    <div className="grid gap-4">
+      {cardOrder.map((key) => cardMap[key] ?? null)}
+    </div>
+  );
 }
