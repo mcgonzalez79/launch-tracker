@@ -107,6 +107,24 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
+  const kpiCard = (
+    <div key="kpis" draggable onDragStart={onDragStart("kpis")} onDragOver={onDragOver("kpis")} onDrop={onDrop("kpis")}>
+      <Card title="KPIs" theme={T}>
+        {hasData ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <KpiCell label="Carry (avg)" value=${shapePercents.draw}% draw />
+            <KpiCell label="Ball speed (avg)" value={kpis.ball.mean.toFixed(1)} unit="mph" />
+            <KpiCell label="Club speed (avg)" value={kpis.club.mean.toFixed(1)} unit="mph" />
+            <KpiCell label="Smash (avg)" value={kpis.smash.mean.toFixed(3)} />
+            <KpiCell label="Total (avg)" value={avgTotalDistance.toFixed(1)} unit="yds" />
+          </div>
+        ) : (
+          <div className="text-sm" style={{ color: T.textDim }}>Import some shots to see KPIs.</div>
+        )}
+      </Card>
+    </div>
+  );
+
   /* ---------- Shot Shape (hist + percentages) ---------- */
   const shapeAngles = useMemo(() => {
     return filteredOutliers
