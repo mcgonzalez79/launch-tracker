@@ -347,7 +347,7 @@ export default function DashboardCards(props: Props) {
 
   const tableCard = (
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
-      <Card title="Recent Shots" theme={T} right={<button className="text-xs underline" onClick={() => setShowRecent(true)} style={{ color: T.link }}>Open</button>}>
+      <Card title="Recent Shots" theme={T} right={<button className="text-xs underline" onClick={() => setShowRecent(true)} style={{ color: T.brand }}>Open</button>}>
         <div className="text-sm" style={{ color: T.textDim }}>Open to view chart of the last 50 shots.</div>
       </Card>
       {showRecent ? (
@@ -355,7 +355,7 @@ export default function DashboardCards(props: Props) {
           <div className="rounded-xl border shadow-lg max-w-3xl w-[90%]" style={{ background: T.panel, borderColor: T.border }} onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-2 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.border}` }}>
               <div className="text-sm" style={{ color: T.text }}>Recent Shots — Carry vs Time</div>
-              <button className="text-xs underline" onClick={() => setShowRecent(false)} style={{ color: T.link }}>Close</button>
+              <button className="text-xs underline" onClick={() => setShowRecent(false)} style={{ color: T.brand }}>Close</button>
             </div>
             <div style={{ height: 360 }} className="p-3">
               <ResponsiveContainer>
