@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
@@ -6,7 +6,7 @@ import {
   ResponsiveContainer,
   ScatterChart, Scatter,
   BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line,
   ReferenceLine
 } from "recharts";
 
@@ -137,38 +137,31 @@ export default function DashboardCards(props: Props) {
 
   const shapeCard = (
     <div key="shape" draggable onDragStart={onDragStart("shape")} onDragOver={onDragOver("shape")} onDrop={onDrop("shape")}>
-      <Card title="Shot Shape (Launch Direction / Face)" theme={T}>
+      <Card title="Shot Shape (Launch Direction / Face)" theme={T} right={`${pct(buckets.hook)}% hook · ${pct(buckets.draw)}% draw · ${pct(buckets.straight)}% straight · ${pct(buckets.fade)}% fade · ${pct(buckets.slice)}% slice`}>
         {shapeData.length ? (
-          <div style={{ height: 260 }}>
-            <ResponsiveContainer>
-              <BarChart data={shapeData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="bin"
-                  type="number"
-                  domain={shapeDomain as any}
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Degrees (− left / + right)", position: "insideBottom", offset: -3, fill: T.textDim, fontSize: 12 }}
-                />
-                <YAxis
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(v: any, _name: string, _item: any) => [`${v}`, "Count"]}
-                />
-                <ReferenceLine x={0} stroke={T.border} />
-                <Bar dataKey="count" fill={T.brand} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>No directional data available.</div>
-        )}
+          <div className="text-sm" style={{ color: T.textDim }}>Open to view chart of the last 50 shots.</div>
       </Card>
+      {showRecent ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={()=>setShowRecent(false)}>
+          <div className="rounded-xl border shadow-lg max-w-3xl w-[90%]" style={{ background: T.panel, borderColor: T.border }} onClick={(e)=>e.stopPropagation()}>
+            <div className="px-4 py-2 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.border}` }}>
+              <div className="text-sm" style={{ color: T.text }}>Recent Shots — Carry vs Time</div>
+              <button className="text-xs underline" onClick={()=>setShowRecent(false)} style={{ color: T.link }}>Close</button>
+            </div>
+            <div style={{ height: 360 }} className="p-3">
+              <ResponsiveContainer>
+                <LineChart data={recentData as any} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                  <XAxis dataKey="x" type="number" domain={['dataMin','dataMax']} tickFormatter={(v)=> new Date(v).toLocaleString()} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
+                  <YAxis dataKey="y" type="number" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} labelFormatter={(v)=> new Date(Number(v)).toLocaleString()} formatter={(val:any, name:string, item:any)=> [typeof val==='number'? val.toFixed(1): val, name==='y'?'Carry':''] }/>
+                  <Line dataKey="y" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      ) : null
     </div>
   );
 
@@ -214,6 +207,7 @@ export default function DashboardCards(props: Props) {
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
                 />
+                <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
@@ -273,6 +267,7 @@ export default function DashboardCards(props: Props) {
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
                 />
+                <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(v: any) => [`${(v as number)?.toFixed?.(1)} yds`, "Avg Carry"]}
@@ -308,7 +303,17 @@ export default function DashboardCards(props: Props) {
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
-  const effCard = (
+  
+  const smashMean = useMemo(() => {
+    const pairs = efficiencyData.filter(d => typeof d.x === "number" && typeof d.y === "number");
+    if (!pairs.length) return 1.45;
+    const ratios = pairs.map(p => p.y / p.x);
+    return ratios.reduce((a,b)=>a+b,0)/ratios.length;
+  }, [efficiencyData]);
+  const trendData = useMemo(() => {
+    return [{ x: effXMin, y: smashMean * effXMin }, { x: effXMax, y: smashMean * effXMax }];
+  }, [smashMean, effXMin, effXMax]);
+const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
       <Card title="Efficiency (Ball vs Club speed)" theme={T}>
         {efficiencyData.length ? (
@@ -332,6 +337,7 @@ export default function DashboardCards(props: Props) {
                   stroke={T.tick}
                   label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
                 />
+                <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
@@ -344,6 +350,7 @@ export default function DashboardCards(props: Props) {
                 />
                 <Legend wrapperStyle={{ color: T.text }} />
                 <Scatter name="Shots" data={efficiencyData} fill={T.accent} />
+                <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -355,6 +362,14 @@ export default function DashboardCards(props: Props) {
   );
 
   /* ---------- Table (compact) ---------- */
+  const [showRecent, setShowRecent] = useState(false);
+  const recentData = useMemo(() => (filteredOutliers.slice(0, 50).map(s => ({
+      x: new Date(s.Timestamp || Date.now()).getTime(),
+      y: s.CarryDistance_yds ?? 0,
+      Club: s.Club,
+      SessionId: s.SessionId,
+    }))), [filteredOutliers]);
+
   const tableCard = (
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Recent Shots (first 50)" theme={T}>
@@ -405,6 +420,13 @@ export default function DashboardCards(props: Props) {
     eff: effCard,
     table: tableCard,
   };
+  const totalAngles = angles.length || 1;
+  const buckets = { hook:0, draw:0, straight:0, fade:0, slice:0 };
+  for (const a of angles) {
+    if (a <= -6) buckets.hook++; else if (a < -2) buckets.draw++; else if (a <= 2) buckets.straight++; else if (a < 6) buckets.fade++; else buckets.slice++;
+  }
+  const pct = (n:number)=> Math.round((n*100)/totalAngles);
+
 
   return (
     <div className="grid gap-4">
