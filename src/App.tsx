@@ -168,7 +168,7 @@ export default function App() {
         BallSpeed_mph:      num(get(r, ["ball speed"])),
         ClubSpeed_mph:      num(get(r, ["club speed"])),
         LaunchAngle_deg:    num(get(r, ["launch angle", "launch"])),
-        Spin_rpm:           num(get(r, ["spin", "spin rpm", "spinrate"])),
+        //Spin_rpm:           num(get(r, ["spin", "spin rpm", "spinrate"])),
         PeakHeight_yds:     num(get(r, ["apex", "apex height", "peak height", "peakheight"])),
         LandingAngle_deg:   num(get(r, ["landing angle", "descent angle"])),
         Offline_yds:        num(get(r, ["offline", "offline yds"])),
