@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useRef, useState } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
@@ -216,10 +216,23 @@ export default function InsightsView(props: Props) {
   );
 
   /* ---------- Highlights (global PRs + most consistent; ignores club selection) ---------- */
-  const highlightsInfo = useMemo(() => {
-    // Use raw, no-club data so Highlights never changes when a specific club is selected.
-    // (Still respects current date/session filters since App builds these arrays accordingly.)
-    const rows = filteredNoClubRaw.length ? filteredNoClubRaw : filteredNoClubOutliers;
+  // Compute once per actual dataset change (date/session/outlier), not when club selection changes.
+  const makeSignature = (rows: Shot[]) => {
+    const n = rows.length;
+    let minTS = Infinity, maxTS = -Infinity, sumCarry = 0;
+    for (const s of rows) {
+      const t = Date.parse((s as any).Timestamp || "");
+      if (!Number.isNaN(t)) {
+        if (t < minTS) minTS = t;
+        if (t > maxTS) maxTS = t;
+      }
+      const c = (typeof s.CarryDistance_yds === "number" && Number.isFinite(s.CarryDistance_yds)) ? s.CarryDistance_yds : 0;
+      sumCarry += c;
+    }
+    return `${n}|${minTS}|${maxTS}|${Math.round(sumCarry)}`;
+  };
+
+  const computeHighlights = (rows: Shot[]) => {
     const bestCarry = maxBy(rows, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
     const bestTotal = maxBy(rows, s => isNum(s.TotalDistance_yds) ? s.TotalDistance_yds! : null);
 
@@ -239,16 +252,42 @@ export default function InsightsView(props: Props) {
       prCarry: bestCarry ? {
         value: bestCarry.CarryDistance_yds!,
         club: bestCarry.Club || "",
-        date: shortDate(bestCarry.Timestamp),
+        date: shortDate((bestCarry as any).Timestamp),
       } : null,
       prTotal: bestTotal ? {
         value: bestTotal.TotalDistance_yds!,
         club: bestTotal.Club || "",
-        date: shortDate(bestTotal.Timestamp),
+        date: shortDate((bestTotal as any).Timestamp),
       } : null,
       mostConsistent,
-    };
-  }, [filteredNoClubOutliers, filteredNoClubRaw]);
+    } as const;
+  };
+
+  const candidateRows = (filteredNoClubRaw && filteredNoClubRaw.length) ? filteredNoClubRaw : filteredNoClubOutliers;
+  const [highlightsInfo, setHighlightsInfo] = useState(() => computeHighlights(candidateRows));
+  const prevSigRef = useRef<string>(makeSignature(candidateRows));
+  const prevAllClubsKeyRef = useRef<string>(allClubs.join("|"));
+  const prevSelectedClubsKeyRef = useRef<string>(selectedClubs.slice().sort().join("|"));
+
+  useEffect(() => {
+    const rows = (filteredNoClubRaw && filteredNoClubRaw.length) ? filteredNoClubRaw : filteredNoClubOutliers;
+    const newSig = makeSignature(rows);
+    const clubsKey = selectedClubs.slice().sort().join("|");
+    const allClubsKey = allClubs.join("|");
+
+    const datasetChanged = newSig !== prevSigRef.current;
+    const clubsChanged = clubsKey !== prevSelectedClubsKeyRef.current;
+    const allClubsChanged = allClubsKey !== prevAllClubsKeyRef.current;
+
+    // If only the club selection changed, ignore; otherwise update.
+    if (datasetChanged && (!clubsChanged || allClubsChanged)) {
+      setHighlightsInfo(computeHighlights(rows));
+      prevSigRef.current = newSig;
+    }
+
+    prevSelectedClubsKeyRef.current = clubsKey;
+    prevAllClubsKeyRef.current = allClubsKey;
+  }, [filteredNoClubRaw, filteredNoClubOutliers, allClubs, selectedClubs]);
 
   const highlights = (
     <div key="highlights" draggable onDragStart={onDragStart("highlights")} onDragOver={onDragOver("highlights")} onDrop={onDrop("highlights")}>
