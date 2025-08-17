@@ -113,30 +113,26 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Shot Shape (distribution by LaunchDirection/ClubFace) ---------- */
-  const shapeData = useMemo(() => {
-    const angles = filteredOutliers
-      .map(s => isNum(s.LaunchDirection_deg) ? s.LaunchDirection_deg! : (isNum(s.ClubFace_deg) ? s.ClubFace_deg! : null))
-      .filter(isNum);
-
-    const binSize = 2;
-    const map = new Map<number, number>();
-    for (const a of angles) {
-      const bin = Math.round(a / binSize) * binSize;
-      map.set(bin, (map.get(bin) ?? 0) + 1);
-    }
-    const arr = Array.from(map.entries()).map(([bin, count]) => ({ bin, count }));
-    arr.sort((a, b) => a.bin - b.bin);
-    return arr;
-  }, [filteredOutliers]);
-
-  const shapeDomain = useMemo(() => {
-    const xs = shapeData.map(d => d.bin);
-    return domainOf(xs, 2);
-  }, [shapeData]);
-
   
-  const shapeCard = (
+  
+  
+  /* ---------- Shot Shape KPIs (percentages) ---------- */
+  const shapeAngles = useMemo(() => (
+    filteredOutliers
+      .map(s => (typeof s.LaunchDirection_deg === "number" ? s.LaunchDirection_deg : (typeof s.ClubFace_deg === "number" ? s.ClubFace_deg : null)))
+      .filter((v): v is number => typeof v === "number")
+  ), [filteredOutliers]);
+
+  const shapePercents = useMemo(() => {
+    const total = shapeAngles.length || 1;
+    let hook = 0, draw = 0, straight = 0, fade = 0, slice = 0;
+    for (const a of shapeAngles) {
+      if (a <= -6) hook++; else if (a < -2) draw++; else if (a <= 2) straight++; else if (a < 6) fade++; else slice++;
+    }
+    const pct = (n: number) => Math.round((n * 100) / total);
+    return { hook: pct(hook), draw: pct(draw), straight: pct(straight), fade: pct(fade), slice: pct(slice) };
+  }, [shapeAngles]);
+const shapeCard = (
     <div key="shape" draggable onDragStart={onDragStart("shape")} onDragOver={onDragOver("shape")} onDrop={onDrop("shape")}>
       <Card title="Shot Shape (percent of shots)" theme={T}>
         {shapeAngles.length ? (
