@@ -17,8 +17,8 @@ import {
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const push = (text: string) =>
-    setMsgs((m) => [...m, { id: Math.random().toString(36).slice(2), text } as Msg]);
-  const remove = (id: string) =>
+    setMsgs((m) => [...m, { id: Date.now(), text } as Msg]);
+  const remove = (id: number) =>
     setMsgs((m) => m.filter((x) => x.id !== id));
   return { msgs, push, remove };
 }
@@ -158,8 +158,9 @@ export default function App() {
   }
 
   function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    const valid = wb.SheetNames.find((n) => {
-      const ws = wb.Sheets[n];
+    const valid = wb.SheetNames.find((name) => {
+      const ws = wb.Sheets[name];
+      if (!ws) return false; // guard: sheet might not exist
       const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
       return rr && rr.length > 0 && rr[0] && rr[0].length > 3;
     });
@@ -167,7 +168,11 @@ export default function App() {
       toast(`No data in ${filename}`);
       return;
     }
-    const ws = wb.Sheets[valid!];
+    const ws = wb.Sheets[valid];
+    if (!ws) {
+      toast(`Unable to read sheet in ${filename}`);
+      return;
+    }
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
     const header = (rows[0] || []).map((x) => String(x ?? ""));
     const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
@@ -699,7 +704,7 @@ export default function App() {
                 theme={theme}
                 tableRows={tableRows as any}
                 filteredOutliers={filteredOutliers}
-                filteredNoClubOutliers={filteredOutliers /* if you later add true no-club set, pass it here */}
+                filteredNoClubOutliers={filteredOutliers /* replace with no-club if you add it */}
                 filteredNoClubRaw={filteredBase /* raw-ish base; respects current filters */}
                 allClubs={clubs}
                 insightsOrder={["distanceBox", "highlights", "swingMetrics", "personalRecords", "progress", "weaknesses"]}
@@ -709,7 +714,7 @@ export default function App() {
                   e.preventDefault();
                   const sourceKey = e.dataTransfer.getData("text/plain");
                   if (!sourceKey || sourceKey === targetKey) return;
-                  // If you want persistent order, store to localStorage as you do elsewhere
+                  // persist order if desired
                 }}
               />
             )}
