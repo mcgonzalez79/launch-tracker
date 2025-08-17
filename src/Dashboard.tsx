@@ -146,7 +146,7 @@ function RangeDispersion({ theme, shots, clubs }:{
               x2={xMax}
               y1={yMin}
               y2={yMax}
-              fill={rgbaFromHex("#16a34a", 0.12)}  // emerald-600-ish with low opacity
+              fill={rgbaFromHex("#16a34a", 0.12)}  // emerald-ish with low opacity
             />
 
             <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.18)} />
@@ -177,7 +177,6 @@ function RangeDispersion({ theme, shots, clubs }:{
                 strokeDasharray="6 6"
               >
                 <Label value={`${d} yds`} position="right" offset={6} fill={T.text} />
-              </Label>
               </ReferenceLine>
             ))}
 
