@@ -45,7 +45,10 @@ function idxOf(headers: string[], variants: string[]): number {
 ========================= */
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const push = (m: Msg) => setMsgs((prev) => [...prev, m]);
+  const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
+    const id = m.id ?? Date.now() + Math.random();
+    setMsgs((prev) => [...prev, { id, text: m.text, type: m.type }]);
+  };
   const remove = (id: number) => setMsgs((prev) => prev.filter((x) => x.id !== id));
   return { msgs, push, remove };
 }
@@ -337,6 +340,73 @@ export default function App() {
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
+     Derived for child views
+  ========================= */
+  const hasData = filteredBase.length > 0;
+
+  const kpis = useMemo(() => {
+    const vals = (key: keyof Shot) => filteredOutliers.map(s => s[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    const kpi = (arr: number[]) => ({ mean: arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0, n: arr.length, std: arr.length ? Math.sqrt(arr.reduce((a,b)=>a+(b-(arr.reduce((a,c)=>a+c,0)/arr.length))**2,0)/arr.length) : 0 });
+    return {
+      carry: kpi(vals("CarryDistance_yds")),
+      ball:  kpi(vals("BallSpeed_mph")),
+      club:  kpi(vals("ClubSpeed_mph")),
+      smash: kpi(vals("SmashFactor")),
+    };
+  }, [filteredOutliers]);
+
+  const filteredNoClubRaw = filteredBase;
+  const filteredNoClubOutliers = filteredOutliers;
+
+  const tableRows: ClubRow[] = useMemo(() => {
+    const byClub = new Map<string, Shot[]>();
+    for (const s of filteredOutliers) {
+      const k = s.Club || "Unknown";
+      if (!byClub.has(k)) byClub.set(k, []);
+      byClub.get(k)!.push(s);
+    }
+    const rows: ClubRow[] = [];
+    Array.from(byClub.keys()).sort((a,b)=>orderIndex(a)-orderIndex(b)).forEach(club => {
+      const arr = byClub.get(club)!;
+      const avg = (key: keyof Shot) => {
+        const xs = arr.map(r => r[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+        return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
+      };
+      rows.push({
+        club, count: arr.length,
+        avgCarry: avg("CarryDistance_yds"),
+        avgTotal: avg("TotalDistance_yds"),
+        avgSmash: avg("SmashFactor"),
+        avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"),
+        avgCS: avg("ClubSpeed_mph"),
+        avgBS: avg("BallSpeed_mph"),
+        avgLA: avg("LaunchAngle_deg"),
+        avgF2P: avg("FaceToPath_deg"),
+      } as any);
+    });
+    return rows;
+  }, [filteredOutliers]);
+
+  // Drag handlers (no-op placeholders to satisfy props; your Dashboard/Insights read them for ordering if needed)
+  const onDragStart = (key: string) => (e: React.DragEvent) => { e.dataTransfer.setData("text/plain", key); };
+  const onDragOver = (_key: string) => (e: React.DragEvent) => { e.preventDefault(); };
+  const onDrop = (targetKey: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const sourceKey = e.dataTransfer.getData("text/plain");
+    if (!sourceKey || sourceKey === targetKey) return;
+    setCardOrder(prev => {
+      const cur = [...prev];
+      const si = cur.indexOf(sourceKey);
+      const ti = cur.indexOf(targetKey);
+      if (si < 0 || ti < 0) return cur;
+      cur.splice(si, 1);
+      cur.splice(ti, 0, sourceKey);
+      return cur;
+    });
+  };
+
+
+  /* =========================
      Layout helpers
   ========================= */
   const filtersRef = useRef<HTMLDivElement | null>(null);
@@ -377,7 +447,19 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
+  
   /* =========================
+     Journal state
+  ========================= */
+  const journalRef = useRef<HTMLDivElement>(null);
+  const [journalHTML, setJournalHTML] = useState<string>(() => {
+    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
+
+  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
+
+/* =========================
      Handlers wired to Filters
   ========================= */
   const onExportCSV = () => exportShotsCSV();
@@ -463,21 +545,43 @@ export default function App() {
             {tab === "dashboard" && (
               <DashboardCards
                 theme={T}
-                shots={filteredOutliers}
                 cardOrder={cardOrder}
-                setCardOrder={setCardOrder}
+                setCardOrder={(v)=>setCardOrder(v)}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+                hasData={hasData}
+                kpis={kpis as any}
+                filteredOutliers={filteredOutliers}
+                filtered={filteredBase}
+                shots={shots}
+                tableRows={tableRows as any}
+                clubs={clubs}
               />
             )}
             {tab === "insights" && (
               <InsightsView
                 theme={T}
-                shots={filteredOutliers}
-                order={insightsOrder}
-                setOrder={setInsightsOrder}
+                tableRows={tableRows as any}
+                filteredOutliers={filteredOutliers}
+                filteredNoClubOutliers={filteredOutliers}
+                filteredNoClubRaw={filteredBase}
+                allClubs={clubs}
+                insightsOrder={insightsOrder}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
               />
             )}
             {tab === "journal" && (
-              <JournalView theme={T} />
+              <JournalView
+                theme={T}
+                editorRef={journalRef}
+                value={journalHTML}
+                onInputHTML={setJournalHTML}
+                sessionLabel={sessionLabel}
+                defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
+              />
             )}
           </div>
         </div>
