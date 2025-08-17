@@ -283,7 +283,13 @@ function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
         <ResponsiveContainer>
           <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
             <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
-            <XAxis type="number" dataKey="x" tick={{ fill: T.text }} label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }} />
+            <XAxis
+              type="number"
+              dataKey="x"
+              domain={[50, 'auto']}
+              tick={{ fill: T.text }}
+              label={{ value: "Club Speed (mph)", position: "insideBottom", dy: 10, fill: T.text }}
+            />            
             <YAxis type="number" dataKey="y" tick={{ fill: T.text }} label={{ value: "Ball Speed (mph)", angle: -90, position: "insideLeft", fill: T.text }} />
             <Tooltip />
             {presentClubs.map((club) => (
