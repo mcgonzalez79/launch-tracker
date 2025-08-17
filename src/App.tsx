@@ -7,14 +7,14 @@ import JournalView from "./Journal";
 import { Card, TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, ClubRow, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, fpOf, exportCSV, XLSX, orderIndex
+  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex
 } from "./utils";
 
 /* =========================
    Local helpers (import)
 ========================= */
 
-// VERY small normalization to avoid importing normalizeHeader/findBestHeader variants
+// Simple header normalizer for import mapping (local, to avoid signature drift)
 const norm = (s: any) =>
   String(s ?? "")
     .trim()
@@ -84,9 +84,8 @@ export default function App() {
   // Messages (toasts)
   const [msgs, setMsgs] = useState<Msg[]>([]);
   function toast(msg: Omit<Msg, "id">) {
-    const withId: Msg = { ...msg, id: Math.random().toString(36).slice(2) };
+    const withId: Msg = { ...msg, id: Date.now() };
     setMsgs((m) => [...m, withId]);
-    // auto-dismiss oldest
     setTimeout(() => setMsgs((m) => m.slice(1)), 3500);
   }
 
@@ -153,31 +152,40 @@ export default function App() {
 
     const newShots: Shot[] = dataRows.map((r) => {
       const s: Shot = {
-        Date: isoDate(get(r, ["date", "timestamp", "time"])),
-        SessionId: String(get(r, ["session", "sessionid", "set"]) ?? "Unknown Session"),
-        Club: String(get(r, ["club", "clubtype", "clubname", "club name"]) ?? "Unknown Club"),
-        CarryDistance_yds: fpOf(get(r, ["carrydistanceyds", "carryyds", "carry (yds)", "carry"])),
-        TotalDistance_yds: fpOf(get(r, ["totaldistanceyds", "totalyds", "total (yds)", "total"])),
-        BallSpeed_mph: fpOf(get(r, ["ballspeedmph", "ballspeed"])),
-        ClubSpeed_mph: fpOf(get(r, ["clubspeedmph", "clubspeed"])),
-        LaunchAngle_deg: fpOf(get(r, ["launchangledeg", "launchangle", "launch"])),
-        Spin_rpm: fpOf(get(r, ["spinrpm", "spin"])),
-        PeakHeight_yds: fpOf(get(r, ["peakheightyds", "apex", "peakheight"])),
-        LandingAngle_deg: fpOf(get(r, ["landingangledeg", "descentangle", "landingangle"])),
-        Offline_yds: fpOf(get(r, ["offlineyds", "offline"])),
-        Side_deg: fpOf(get(r, ["sidedeg", "faceangle", "face"])),
-        Path_deg: fpOf(get(r, ["pathdeg", "clubpath", "path"])),
-        AttackAngle_deg: fpOf(get(r, ["attackangledeg", "aoa", "attackangle"])),
-        SmashFactor: fpOf(get(r, ["smashfactor", "smash"])),
-        FaceToPath_deg: fpOf(get(r, ["facetopathdeg", "facetopath", "f2p"])),
-        Notes: String(get(r, ["notes", "note"]) ?? ""),
+        // Strings
+        SessionId: String(get(r, ["sessionid", "session id", "session"]) ?? "Unknown Session"),
+        Club: String(get(r, ["club", "club type", "clubname", "club name"]) ?? "Unknown Club"),
+        Timestamp: isoDate(get(r, ["timestamp", "date", "datetime"])),
+
+        // Numbers (all via fpOf)
+        ClubSpeed_mph: fpOf(get(r, ["club speed"])),
+        AttackAngle_deg: fpOf(get(r, ["attack angle", "aoa", "attackangle"])),
+        ClubPath_deg: fpOf(get(r, ["club path", "path"])),
+        ClubFace_deg: fpOf(get(r, ["club face", "face angle", "face"])),
+        FaceToPath_deg: fpOf(get(r, ["face to path", "f2p", "facetopath"])),
+        BallSpeed_mph: fpOf(get(r, ["ball speed"])),
+        SmashFactor: fpOf(get(r, ["smash factor", "smash"])),
+        LaunchAngle_deg: fpOf(get(r, ["launch angle", "launch"])),
+        LaunchDirection_deg: fpOf(get(r, ["launch direction"])),
+        Backspin_rpm: fpOf(get(r, ["backspin"])),
+        Sidespin_rpm: fpOf(get(r, ["sidespin"])),
+        SpinRate_rpm: fpOf(get(r, ["spin rate"])),
+        SpinRateType: String(get(r, ["spin rate type"]) ?? "") || undefined,
+        SpinAxis_deg: fpOf(get(r, ["spin axis"])),
+        ApexHeight_yds: fpOf(get(r, ["apex height", "apex", "peak height", "peakheight"])),
+        CarryDistance_yds: fpOf(get(r, ["carry distance", "carry (yds)", "carry"])),
+        CarryDeviationAngle_deg: fpOf(get(r, ["carry deviation angle"])),
+        CarryDeviationDistance_yds: fpOf(get(r, ["carry deviation distance"])),
+        TotalDistance_yds: fpOf(get(r, ["total distance", "total (yds)", "total"])),
+        TotalDeviationAngle_deg: fpOf(get(r, ["total deviation angle"])),
+        TotalDeviationDistance_yds: fpOf(get(r, ["total deviation distance"])),
       };
       return applyDerived(s);
     });
 
-    // Merge & de-dupe by (Date+Club+Carry+Ball+ClubSpeed)
+    // Merge & de-dupe by (Timestamp+Club+Carry+Ball+ClubSpeed)
     const keyOf = (s: Shot) =>
-      [s.Date, s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
+      [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
 
     const existing = new Map(shots.map(s => [keyOf(s), s]));
     const merged = [...existing.values()];
@@ -195,10 +203,22 @@ export default function App() {
   }
 
   /* =========================
-     Export
+     Export (basic CSV)
   ========================= */
   function exportShotsCSV() {
-    const csv = exportCSV(shots);
+    const headers = [
+      "Timestamp","SessionId","Club","CarryDistance_yds","TotalDistance_yds",
+      "BallSpeed_mph","ClubSpeed_mph","LaunchAngle_deg","SpinRate_rpm",
+      "ApexHeight_yds","CarryDeviationAngle_deg","CarryDeviationDistance_yds",
+      "TotalDeviationAngle_deg","TotalDeviationDistance_yds","SmashFactor","FaceToPath_deg",
+      "AttackAngle_deg","ClubPath_deg","ClubFace_deg","LaunchDirection_deg","Backspin_rpm","Sidespin_rpm","SpinAxis_deg","SpinRateType"
+    ];
+    const esc = (v:any) => { if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; };
+    const lines = [
+      headers.join(","),
+      ...shots.map(s => headers.map(h => esc((s as any)[h])).join(",")),
+    ];
+    const csv = lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -384,9 +404,9 @@ export default function App() {
     return shots.filter(s => {
       if (selectedSession !== "ALL" && (s.SessionId ?? "Unknown Session") !== selectedSession) return false;
       if (selectedClubs.length && !selectedClubs.includes(s.Club)) return false;
-      if (start && s.Date) {
+      if (start && s.Timestamp) {
         try {
-          const d = new Date(s.Date);
+          const d = new Date(s.Timestamp);
           if (d < start) return false;
         } catch {}
       }
