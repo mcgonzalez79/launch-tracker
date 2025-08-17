@@ -439,18 +439,6 @@ export default function InsightsView(props: Props) {
     return items;
   }, [filteredNoClubOutliers]);
 
-  const warnings = (
-    <div key="warnings" draggable onDragStart={onDragStart("warnings")} onDragOver={onDragOver("warnings")} onDrop={onDrop("warnings")}>
-      <Card title="Warnings & Gapping (All Clubs)" theme={T}>
-        {warningsList.length ? (
-          <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
-            {warningsList.map((w, i) => <li key={i}>{w}</li>)}
-          </ul>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings triggered.</div>}
-      </Card>
-    </div>
-  );
-
   /* ---------- Personal Records (only when a single club is selected; uses RAW rows) ---------- */
   const personalRecords = (
     <div key="personalRecords" draggable onDragStart={onDragStart("personalRecords")} onDragOver={onDragOver("personalRecords")} onDrop={onDrop("personalRecords")}>
@@ -539,11 +527,15 @@ export default function InsightsView(props: Props) {
     </div>
   );
 
-  /* ---------- Weaknesses placeholder (kept if you had it ordered) ---------- */
+  /* ---------- Weaknesses (now includes Warnings & Gapping; all clubs) ---------- */
   const weaknesses = (
     <div key="weaknesses" draggable onDragStart={onDragStart("weaknesses")} onDragOver={onDragOver("weaknesses")} onDrop={onDrop("weaknesses")}>
-      <Card title="Weaknesses" theme={T}>
-        <div className="text-sm" style={{ color: T.textDim }}>Coming soon.</div>
+      <Card title="Weaknesses & Warnings (All Clubs)" theme={T}>
+        {warningsList.length ? (
+          <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
+            {warningsList.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings triggered.</div>}
       </Card>
     </div>
   );
@@ -552,7 +544,6 @@ export default function InsightsView(props: Props) {
     distanceBox,
     highlights,
     swingMetrics,
-    warnings,
     personalRecords,
     progress,
     weaknesses,
