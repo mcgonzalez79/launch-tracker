@@ -1,7 +1,9 @@
 import React from "react";
 import type { Theme } from "../theme";
 
-/* Icons */
+/* =========================
+   Icons
+========================= */
 export function IconSun() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -10,6 +12,7 @@ export function IconSun() {
     </svg>
   );
 }
+
 export function IconMoon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -18,37 +21,54 @@ export function IconMoon() {
   );
 }
 
-/* Card */
+/* =========================
+   Card
+========================= */
 export function Card({
   title,
+  right,
   children,
   theme: T,
   pad = true,
+  footer,
 }: {
   title?: string;
+  right?: React.ReactNode;        // right-aligned content in header (optional)
   children?: React.ReactNode;
   theme: Theme;
   pad?: boolean;
+  footer?: React.ReactNode;       // optional footer region
 }) {
   return (
     <section
       className="rounded-xl shadow-sm"
       style={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
     >
-      {title && (
+      {(title || right) && (
         <header
-          className="px-4 py-2 rounded-t-xl text-sm font-medium"
+          className="px-4 py-2 rounded-t-xl text-sm font-medium flex items-center justify-between gap-2"
           style={{ borderBottom: `1px solid ${T.border}`, background: T.panelAlt, color: T.text }}
         >
-          {title}
+          <div>{title}</div>
+          {right ? <div className="text-xs" style={{ color: T.textDim }}>{right}</div> : null}
         </header>
       )}
       <div className={pad ? "p-4" : ""}>{children}</div>
+      {footer ? (
+        <div
+          className="px-4 py-2 rounded-b-xl text-xs"
+          style={{ borderTop: `1px solid ${T.border}`, background: T.panelAlt, color: T.textDim }}
+        >
+          {footer}
+        </div>
+      ) : null}
     </section>
   );
 }
 
-/* Top Tab */
+/* =========================
+   Top Tabs
+========================= */
 export function TopTab({
   label,
   active,
@@ -69,32 +89,11 @@ export function TopTab({
         color: active ? T.white : T.text,
         borderColor: active ? T.brand : T.border,
       }}
-    >
-      {label}
-    </button>
-  );
-}
-
-/* Chip (for filters) */
-export function Chip({
-  label,
-  selected,
-  onClick,
-  theme: T,
-}: {
-  label: string;
-  selected?: boolean;
-  onClick?: () => void;
-  theme: Theme;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-2 py-1 rounded-md text-xs border"
-      style={{
-        background: selected ? T.brandMuted : T.panelAlt,
-        color: selected ? T.text : T.text,
-        borderColor: selected ? T.brand : T.border,
+      onMouseOver={(e) => {
+        if (!active) e.currentTarget.style.backgroundColor = T.panelAlt;
+      }}
+      onMouseOut={(e) => {
+        if (!active) e.currentTarget.style.backgroundColor = T.panel;
       }}
     >
       {label}
@@ -102,48 +101,129 @@ export function Chip({
   );
 }
 
-/* Muted button */
+/* =========================
+   Chip (filters)
+========================= */
+export function Chip({
+  label,
+  selected,
+  onClick,
+  theme: T,
+  title,
+}: {
+  label: string;
+  selected?: boolean;
+  onClick?: () => void;
+  theme: Theme;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="px-2 py-1 rounded-md text-xs border transition-colors"
+      style={{
+        background: selected ? T.brandMuted : T.panelAlt,
+        color: T.text,
+        borderColor: selected ? T.brand : T.border,
+      }}
+      onMouseOver={(e) => {
+        if (selected) e.currentTarget.style.backgroundColor = T.brand;
+        else e.currentTarget.style.backgroundColor = T.panel;
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.backgroundColor = selected ? T.brandMuted : T.panelAlt;
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/* =========================
+   Buttons
+========================= */
+const focusRing = (T: Theme) => ({
+  boxShadow: `0 0 0 2px ${T.white}, 0 0 0 4px ${T.brandMuted}`,
+});
+
 export function MutedButton({
   children,
   onClick,
   theme: T,
+  title,
+  disabled,
 }: {
   children: React.ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   theme: Theme;
+  title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
-      onClick={onClick}
-      className="px-3 py-1 rounded-md border text-sm"
-      style={{ background: T.panel, color: T.text, borderColor: T.border }}
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      className="px-3 py-1 rounded-md border text-sm transition-colors"
+      style={{
+        background: T.panel,
+        color: disabled ? T.textDim : T.text,
+        borderColor: T.border,
+        opacity: disabled ? 0.7 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+      onMouseOver={(e) => {
+        if (!disabled) e.currentTarget.style.backgroundColor = T.panelAlt;
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.backgroundColor = T.panel;
+      }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusRing(T))}
+      onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
       {children}
     </button>
   );
 }
 
-/* Primary button */
 export function PrimaryButton({
   children,
   onClick,
   theme: T,
+  title,
+  disabled,
 }: {
   children: React.ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   theme: Theme;
+  title?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
-      onClick={onClick}
-      className="px-3 py-1 rounded-md border text-sm"
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      className="px-3 py-1 rounded-md border text-sm transition-colors"
       style={{
-        background: T.brand,
+        background: disabled ? T.brandMuted : T.brand,
         color: T.white,
-        borderColor: T.brand,
+        borderColor: disabled ? T.brandMuted : T.brand,
+        opacity: disabled ? 0.8 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
       }}
-      onMouseOver={(e) => ((e.currentTarget.style.backgroundColor = T.brandHover))}
-      onMouseOut={(e) => ((e.currentTarget.style.backgroundColor = T.brand))}
+      onMouseOver={(e) => {
+        if (!disabled) e.currentTarget.style.backgroundColor = T.brandHover;
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.backgroundColor = disabled ? T.brandMuted : T.brand;
+      }}
+      onFocus={(e) => Object.assign(e.currentTarget.style, focusRing(T))}
+      onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
       {children}
     </button>
