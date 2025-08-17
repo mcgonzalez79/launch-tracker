@@ -141,3 +141,6 @@ button, input, select, textarea {
   flex-wrap: wrap;
 }
 
+
+/* Prevent date inputs from overflowing the sidebar */
+.filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
