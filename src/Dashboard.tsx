@@ -139,50 +139,43 @@ function RangeDispersion({ theme, shots, clubs }:{
     <div>
       <div className="w-full" style={{ height: 360 }}>
         <ResponsiveContainer>
-          <ScatterChart margin={{ top: 10, right: 14, bottom: 24, left: 14 }}>
-            <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.18)} />
-            <XAxis
-              type="number"
-              dataKey="x"
-              domain={[xMin, xMax]}
-              tick={{ fill: T.text }}
-              label={{ value: "Lateral deviation (yds)", position: "insideBottom", dy: 12, fill: T.text }}
+         <ScatterChart
+          width={600}
+          height={400}
+          margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+        >
+          {/* Range-like green background */}
+          <ReferenceArea
+            x1={-60}  // left bound
+            x2={60}   // right bound
+            y1={0}    // tee line
+            y2={350}  // farthest distance (adjust for your data)
+            fill="#006747"  // Pantone green you’re using
+            fillOpacity={0.1}
+          />
+        
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis type="number" dataKey="side" name="Side" unit="yds" />
+          <YAxis type="number" dataKey="distance" name="Distance" unit="yds" reversed />
+          <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+          <Legend verticalAlign="top" />
+          <Scatter name="Dispersion" data={dispersionData} fill="#8884d8" />
+          
+          {/* Center line */}
+          <ReferenceLine x={0} stroke="black" strokeDasharray="4 4" />
+          
+          {/* Distance flags */}
+          {[50, 100, 150, 200, 250, 300].map((yd) => (
+            <ReferenceLine
+              key={yd}
+              y={yd}
+              stroke="gray"
+              strokeDasharray="3 3"
+              label={{ value: `${yd}`, position: "right", fill: "gray" }}
             />
-            <YAxis
-              type="number"
-              dataKey="y"
-              domain={[yMin, yMax]}
-              tick={{ fill: T.text }}
-              label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.text }}
-            />
+          ))}
+        </ScatterChart>
 
-            {/* Centerline (target line) at x=0 */}
-            <ReferenceLine x={0} stroke={rgbaFromHex(T.text, 0.6)} strokeWidth={2} />
-
-            {/* Distance flags (horizontal dashed lines) */}
-            {flags.map(d => (
-              <ReferenceLine
-                key={`flag-${d}`}
-                y={d}
-                stroke={rgbaFromHex(T.textDim, 0.35)}
-                strokeDasharray="6 6"
-              >
-                <Label value={`${d} yds`} position="right" offset={6} fill={T.text} />
-              </ReferenceLine>
-            ))}
-
-            {/* Points per club */}
-            {presentClubs.map((club) => (
-              <Scatter
-                key={club}
-                data={byClub.get(club)!}
-                name={club}
-                fill={rgbaFromHex(colorForClub(club), 0.9)}
-              />
-            ))}
-
-            <Tooltip />
-          </ScatterChart>
         </ResponsiveContainer>
       </div>
 
