@@ -20,6 +20,12 @@ const norm = (s: any) =>
     .toLowerCase()
     .replace(/\s+|[\-_()/]/g, "");
 
+// ensure number (Shot numeric fields are `number`, not optional)
+const num = (v: any): number => {
+  const x = fpOf(v);
+  return typeof x === "number" ? x : Number.NaN;
+};
+
 function idxOf(headers: string[], variants: string[]): number {
   for (const v of variants) {
     const i = headers.findIndex((h) => norm(h) === norm(v));
@@ -156,21 +162,21 @@ export default function App() {
         Club: String(get(r, ["club", "club type", "clubname", "club name"]) ?? "Unknown Club"),
         Timestamp: isoDate(get(r, ["timestamp", "date", "datetime"])),
 
-        // numbers (only fields that exist on Shot)
-        CarryDistance_yds: fpOf(get(r, ["carry distance", "carry (yds)", "carry", "carryyds"])),
-        TotalDistance_yds: fpOf(get(r, ["total distance", "total (yds)", "total", "totalyds"])),
-        BallSpeed_mph: fpOf(get(r, ["ball speed"])),
-        ClubSpeed_mph: fpOf(get(r, ["club speed"])),
-        LaunchAngle_deg: fpOf(get(r, ["launch angle", "launch"])),
-        Spin_rpm: fpOf(get(r, ["spin", "spin rpm", "spinrate"])),
-        PeakHeight_yds: fpOf(get(r, ["apex", "apex height", "peak height", "peakheight"])),
-        LandingAngle_deg: fpOf(get(r, ["landing angle", "descent angle"])),
-        Offline_yds: fpOf(get(r, ["offline", "offline yds"])),
-        Side_deg: fpOf(get(r, ["face angle", "face", "side", "sidedeg"])),
-        Path_deg: fpOf(get(r, ["club path", "path", "pathdeg"])),
-        AttackAngle_deg: fpOf(get(r, ["attack angle", "aoa", "attackangle"])),
-        SmashFactor: fpOf(get(r, ["smash factor", "smash"])),
-        FaceToPath_deg: fpOf(get(r, ["face to path", "f2p", "facetopath"]))
+        // numbers (Shot expects `number`)
+        CarryDistance_yds: num(get(r, ["carry distance", "carry (yds)", "carry", "carryyds"])),
+        TotalDistance_yds: num(get(r, ["total distance", "total (yds)", "total", "totalyds"])),
+        BallSpeed_mph:      num(get(r, ["ball speed"])),
+        ClubSpeed_mph:      num(get(r, ["club speed"])),
+        LaunchAngle_deg:    num(get(r, ["launch angle", "launch"])),
+        Spin_rpm:           num(get(r, ["spin", "spin rpm", "spinrate"])),
+        PeakHeight_yds:     num(get(r, ["apex", "apex height", "peak height", "peakheight"])),
+        LandingAngle_deg:   num(get(r, ["landing angle", "descent angle"])),
+        Offline_yds:        num(get(r, ["offline", "offline yds"])),
+        Side_deg:           num(get(r, ["face angle", "face", "side", "sidedeg"])),
+        Path_deg:           num(get(r, ["club path", "path", "pathdeg"])),
+        AttackAngle_deg:    num(get(r, ["attack angle", "aoa", "attackangle"])),
+        SmashFactor:        num(get(r, ["smash factor", "smash"])),
+        FaceToPath_deg:     num(get(r, ["face to path", "f2p", "facetopath"]))
       };
       return applyDerived(s);
     });
@@ -225,7 +231,6 @@ export default function App() {
   /* =========================
      Filters state (names match Filters.tsx)
   ========================= */
-  // The Filters panel expects these exact props:
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
   const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
@@ -236,7 +241,6 @@ export default function App() {
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
 
-  // convenience numbers from strings
   const carryMinNum = useMemo(() => (carryMin ? parseFloat(carryMin) : undefined), [carryMin]);
   const carryMaxNum = useMemo(() => (carryMax ? parseFloat(carryMax) : undefined), [carryMax]);
 
@@ -254,7 +258,7 @@ export default function App() {
     return () => ro.disconnect();
   }, [filtersRef.current, shots, selectedClubs, sessionFilter, excludeOutliers, carryMin, carryMax, dateFrom, dateTo]);
 
-  // Card order (merge-safe) — Dashboard.tsx expects cardOrder & setCardOrder
+  // Card order (merge-safe)
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
     const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"]; // "launchspin" removed
     try {
@@ -267,7 +271,7 @@ export default function App() {
   useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
-  // Insights order (merge-safe) — Insights.tsx expects insightsOrder
+  // Insights order (merge-safe)
   const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "swingMetrics", "warnings", "personalRecords", "progress", "weaknesses"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
@@ -296,7 +300,6 @@ export default function App() {
   }
 
   function onLoadSample() {
-    // no-op placeholder (optional: load embedded sample dataset)
     toast({ type: "info", text: "Sample loader not implemented." });
   }
 
@@ -343,25 +346,21 @@ export default function App() {
     });
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMinNum, carryMaxNum]);
 
-  // For now, treat "excludeOutliers" as a passthrough (placeholder for z-score filter by club)
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    // TODO: implement 3σ filter per club here if desired
+    // TODO: implement per-club outlier filter if desired
     return filteredBase;
   }, [filteredBase, excludeOutliers]);
 
-  // Some components want both "filtered" and "filteredOutliers"
   const filtered = filteredBase;
 
-  // tableRows — if you have a real reducer in utils, plug it in. For now, provide empty list to satisfy types.
   const tableRows = useMemo(() => {
     const rows: ClubRow[] = [];
-    // Optional: compute per-club aggregates and push as ClubRow objects.
     return rows;
   }, [filteredOutliers]);
 
   /* =========================
-     KPIs (Dashboard may compute its own, but we can pass if wanted)
+     KPIs
   ========================= */
   const kCarry = useMemo(() => {
     const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
@@ -387,7 +386,7 @@ export default function App() {
   const kpis = { carry: kCarry, ball: kBall, club: kClub, smash: kSmash };
 
   /* =========================
-     Journal state (unchanged)
+     Journal state
   ========================= */
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [journalHTML, setJournalHTML] = useState<string>(() => {
