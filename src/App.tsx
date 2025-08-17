@@ -1,14 +1,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { LIGHT, DARK, Theme } from "./theme";
-import FiltersPanel from "./Filters";
-import DashboardCards from "./Dashboard";
-import InsightsView from "./Insights";
-import JournalView from "./Journal";
-import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
+  XLSX, orderIndex, ClubRow,
   normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
 } from "./utils";
 
@@ -29,10 +23,15 @@ const isNum = (x: any): x is number => typeof x === "number" && Number.isFinite(
 
 const applyDerived = (s: Shot): Shot => {
   const s2 = { ...s } as Shot;
-  const Sm = coalesceSmash(s2.SmashFactor, s2.BallSpeed_mph, s2.ClubSpeed_mph);
-  const F2P = coalesceFaceToPath(s2.FaceToPath_deg, s2.ClubFace_deg, s2.ClubPath_deg);
-  if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
-  if (F2P !== undefined) s2.FaceToPath_deg = F2P;
+  // Compute SmashFactor if missing and speeds available
+  if (!isNum(s2.SmashFactor) && isNum(s2.BallSpeed_mph) && isNum(s2.ClubSpeed_mph) && s2.ClubSpeed_mph) {
+    const Sm = s2.BallSpeed_mph / s2.ClubSpeed_mph;
+    s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+  }
+  // Compute Face-to-Path if missing and face/path available
+  if (!isNum(s2.FaceToPath_deg) && isNum(s2.ClubFace_deg) && isNum(s2.ClubPath_deg)) {
+    s2.FaceToPath_deg = (s2.ClubFace_deg as number) - (s2.ClubPath_deg as number);
+  }
   return s2;
 };
 
@@ -414,9 +413,10 @@ export default function App() {
   useEffect(() => {
     const el = filtersRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const rect = el.getBoundingClientRect();
-      setFiltersHeight(Math.max(320, Math.floor(rect.height)));
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      setFiltersHeight(Math.max(320, Math.floor(cr.height)));
     });
     ro.observe(el);
     return () => ro.disconnect();
