@@ -6,15 +6,14 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import { Card, TopTab, IconSun, IconMoon } from "./components/UI";
 import {
-  Shot, ClubRow, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
+  Shot, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex
 } from "./utils";
 
 /* =========================
-   Local helpers (import)
+   Small local helpers
 ========================= */
 
-// Simple header normalizer for import mapping (local, to avoid signature drift)
 const norm = (s: any) =>
   String(s ?? "")
     .trim()
@@ -152,33 +151,26 @@ export default function App() {
 
     const newShots: Shot[] = dataRows.map((r) => {
       const s: Shot = {
-        // Strings
+        // strings
         SessionId: String(get(r, ["sessionid", "session id", "session"]) ?? "Unknown Session"),
         Club: String(get(r, ["club", "club type", "clubname", "club name"]) ?? "Unknown Club"),
         Timestamp: isoDate(get(r, ["timestamp", "date", "datetime"])),
 
-        // Numbers (all via fpOf)
-        ClubSpeed_mph: fpOf(get(r, ["club speed"])),
-        AttackAngle_deg: fpOf(get(r, ["attack angle", "aoa", "attackangle"])),
-        ClubPath_deg: fpOf(get(r, ["club path", "path"])),
-        ClubFace_deg: fpOf(get(r, ["club face", "face angle", "face"])),
-        FaceToPath_deg: fpOf(get(r, ["face to path", "f2p", "facetopath"])),
+        // numbers (only fields that exist on Shot)
+        CarryDistance_yds: fpOf(get(r, ["carry distance", "carry (yds)", "carry", "carryyds"])),
+        TotalDistance_yds: fpOf(get(r, ["total distance", "total (yds)", "total", "totalyds"])),
         BallSpeed_mph: fpOf(get(r, ["ball speed"])),
-        SmashFactor: fpOf(get(r, ["smash factor", "smash"])),
+        ClubSpeed_mph: fpOf(get(r, ["club speed"])),
         LaunchAngle_deg: fpOf(get(r, ["launch angle", "launch"])),
-        LaunchDirection_deg: fpOf(get(r, ["launch direction"])),
-        Backspin_rpm: fpOf(get(r, ["backspin"])),
-        Sidespin_rpm: fpOf(get(r, ["sidespin"])),
-        SpinRate_rpm: fpOf(get(r, ["spin rate"])),
-        SpinRateType: String(get(r, ["spin rate type"]) ?? "") || undefined,
-        SpinAxis_deg: fpOf(get(r, ["spin axis"])),
-        ApexHeight_yds: fpOf(get(r, ["apex height", "apex", "peak height", "peakheight"])),
-        CarryDistance_yds: fpOf(get(r, ["carry distance", "carry (yds)", "carry"])),
-        CarryDeviationAngle_deg: fpOf(get(r, ["carry deviation angle"])),
-        CarryDeviationDistance_yds: fpOf(get(r, ["carry deviation distance"])),
-        TotalDistance_yds: fpOf(get(r, ["total distance", "total (yds)", "total"])),
-        TotalDeviationAngle_deg: fpOf(get(r, ["total deviation angle"])),
-        TotalDeviationDistance_yds: fpOf(get(r, ["total deviation distance"])),
+        Spin_rpm: fpOf(get(r, ["spin", "spin rpm", "spinrate"])),
+        PeakHeight_yds: fpOf(get(r, ["apex", "apex height", "peak height", "peakheight"])),
+        LandingAngle_deg: fpOf(get(r, ["landing angle", "descent angle"])),
+        Offline_yds: fpOf(get(r, ["offline", "offline yds"])),
+        Side_deg: fpOf(get(r, ["face angle", "face", "side", "sidedeg"])),
+        Path_deg: fpOf(get(r, ["club path", "path", "pathdeg"])),
+        AttackAngle_deg: fpOf(get(r, ["attack angle", "aoa", "attackangle"])),
+        SmashFactor: fpOf(get(r, ["smash factor", "smash"])),
+        FaceToPath_deg: fpOf(get(r, ["face to path", "f2p", "facetopath"]))
       };
       return applyDerived(s);
     });
@@ -203,15 +195,17 @@ export default function App() {
   }
 
   /* =========================
-     Export (basic CSV)
+     Export (CSV aligned to Shot)
   ========================= */
   function exportShotsCSV() {
     const headers = [
-      "Timestamp","SessionId","Club","CarryDistance_yds","TotalDistance_yds",
-      "BallSpeed_mph","ClubSpeed_mph","LaunchAngle_deg","SpinRate_rpm",
-      "ApexHeight_yds","CarryDeviationAngle_deg","CarryDeviationDistance_yds",
-      "TotalDeviationAngle_deg","TotalDeviationDistance_yds","SmashFactor","FaceToPath_deg",
-      "AttackAngle_deg","ClubPath_deg","ClubFace_deg","LaunchDirection_deg","Backspin_rpm","Sidespin_rpm","SpinAxis_deg","SpinRateType"
+      "Timestamp","SessionId","Club",
+      "CarryDistance_yds","TotalDistance_yds",
+      "BallSpeed_mph","ClubSpeed_mph",
+      "LaunchAngle_deg","Spin_rpm",
+      "PeakHeight_yds","LandingAngle_deg",
+      "Offline_yds","Side_deg","Path_deg","AttackAngle_deg",
+      "SmashFactor","FaceToPath_deg"
     ];
     const esc = (v:any) => { if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; };
     const lines = [
