@@ -560,18 +560,7 @@ export default function InsightsView({
           </div>
         );
 
-        if (key === "weaknesses") return (
-          <div
-            key={key}
-            draggable
-            onDragStart={onDragStart(key)}
-            onDragOver={onDragOver(key)}
-            onDrop={onDrop(key)}
-            style={{ cursor: "grab" }}
-            title="Drag to reorder"
-          >           
-          </div>
-        );
+   
 
         /* ===== New: Swing Metrics (current selection) ===== */
         if (key === "swingMetrics") return (
