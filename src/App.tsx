@@ -169,7 +169,7 @@ export default function App() {
     ClubSpeed_mph:      num(get(r, ["club speed"])),
     LaunchAngle_deg:    num(get(r, ["launch angle", "launch"])),
     // Use the name your Shot actually has:
-    DescentAngle_deg:   num(get(r, ["descent angle", "landing angle"])),
+    //DescentAngle_deg:   num(get(r, ["descent angle", "landing angle"])),
     ApexHeight_yds:     num(get(r, ["apex", "apex height", "peak height", "peakheight"])),
     Offline_yds:        num(get(r, ["offline", "offline yds"])),
     Side_deg:           num(get(r, ["face angle", "face", "side", "sidedeg"])),
