@@ -241,7 +241,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry">{gapData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.club)||"#8884d8"} />))}</Bar>
+                <Bar dataKey="carry" fill="#099d00" />
               </BarChart>
             </ResponsiveContainer>
           </div>
