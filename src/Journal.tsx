@@ -90,11 +90,14 @@ export default function JournalView({ theme: T, editorRef, value, onInputHTML, s
   };
 
   /* ---------- Styles ---------- */
+  const fixedHeight = Math.max(320, Math.floor(defaultHeightPx));
+  const editorHeight = Math.max(200, fixedHeight - 90);
   const sectionStyle: React.CSSProperties = {
     background: T.panel,
     color: T.text,
     borderColor: T.border,
-    minHeight: Math.max(320, Math.floor(defaultHeightPx)), // match Filters default height
+    height: fixedHeight, // lock height to avoid feedback loop with Filters measurement
+    overflow: "hidden",
   };
 
   const headerStyle: React.CSSProperties = {
@@ -138,7 +141,7 @@ export default function JournalView({ theme: T, editorRef, value, onInputHTML, s
           suppressContentEditableWarning
           onInput={handleInput}
           style={{
-            minHeight: Math.max(200, Math.floor(defaultHeightPx) - 90), // leave room for header+toolbar
+            height: editorHeight, // fixed editor viewport; scroll internally
             padding: 8,
             border: `1px solid ${T.border}`,
             borderRadius: 8,
