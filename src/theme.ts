@@ -89,3 +89,26 @@ export const DARK: Theme = {
   white: H.white,
   blueSoft: "#0B2239",      // subtle dark info stripe
 };
+
+// Natural club ordering helper for sorting (Driver -> woods -> hybrids -> irons -> wedges -> putter)
+export function orderIndex(club: string): number {
+  const name = (club || "").toLowerCase().replace(/\s+/g, "");
+  const table = [
+    "driver", "1w", "2w", "3w", "4w", "5w", "7w", "9w",
+    "1h","2h","3h","4h","5h","6h",
+    "1i","2i","3i","4i","5i","6i","7i","8i","9i",
+    "pw","gw","aw","sw","lw",
+    "putter","pt"
+  ];
+  // Common aliases
+  const alias: Record<string,string> = {
+    "3wood":"3w","5wood":"5w","7wood":"7w","9wood":"9w",
+    "3hybrid":"3h","4hybrid":"4h","5hybrid":"5h",
+    "3iron":"3i","4iron":"4i","5iron":"5i","6iron":"6i","7iron":"7i","8iron":"8i","9iron":"9i",
+    "pitchingwedge":"pw","gapwedge":"gw","approachwedge":"aw","sandwedge":"sw","lobwedge":"lw"
+  };
+  const key = alias[name] || name;
+  const idx = table.indexOf(key);
+  return idx >= 0 ? idx : 100 + key.charCodeAt(0); // fallback groups unknowns at the end
+}
+
