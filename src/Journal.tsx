@@ -1,55 +1,152 @@
-import React, { useEffect } from "react";
-import { Theme } from "./theme";
-import { Card, ToolbarBtn } from "./components/UI";
+import React, { useEffect, useRef } from "react";
+import type { Theme } from "./theme";
 
-export default function JournalView({ theme, editorRef, value, onInputHTML, sessionLabel, defaultHeightPx }:{
-  theme: Theme; editorRef: React.RefObject<HTMLDivElement>; value: string; onInputHTML: (html: string)=>void; sessionLabel: string; defaultHeightPx?: number;
-}) {
-  const T = theme;
-  const HELP_TEXT = "Use the Journal to capture longer-form notes from your sessions: swing thoughts and feels vs. reals, drills and rep counts, shot patterns and misses, goals and next steps, equipment tweaks, course notes, and conditions. Entries auto-save per session.";
+type Props = {
+  theme: Theme;
+  editorRef: React.RefObject<HTMLDivElement>;
+  value: string;                       // HTML
+  onInputHTML: (html: string) => void;
+  sessionLabel: string;                // e.g., "Journal — All Sessions"
+  defaultHeightPx: number;             // from Filters panel height for a good starting size
+};
 
-  const exec = (cmd: string, arg?: string) => {
-    document.execCommand(cmd, false, arg);
-    onInputHTML(editorRef.current?.innerHTML || "");
+export default function JournalView({
+  theme: T,
+  editorRef,
+  value,
+  onInputHTML,
+  sessionLabel,
+  defaultHeightPx,
+}: Props) {
+  const localRef = useRef<HTMLDivElement | null>(null);
+
+  // keep internal ref synced with external
+  useEffect(() => {
+    if (editorRef && "current" in editorRef) {
+      (editorRef as any).current = localRef.current;
+    }
+  }, [editorRef]);
+
+  // keep HTML in sync when session changes
+  useEffect(() => {
+    if (localRef.current && localRef.current.innerHTML !== value) {
+      localRef.current.innerHTML = value || "";
+    }
+  }, [value]);
+
+  const exec = (cmd: string, val?: string) => {
+    document.execCommand(cmd, false, val);
+    if (localRef.current) {
+      onInputHTML(localRef.current.innerHTML);
+    }
   };
-  const onKeyUp = () => onInputHTML(editorRef.current?.innerHTML || "");
+
   const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    e.preventDefault(); const text = e.clipboardData.getData("text/plain");
-    document.execCommand("insertText", false, text); onInputHTML(editorRef.current?.innerHTML || "");
+    // paste as plain text -> minimal formatting
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
   };
-  useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || ""; }, [value, editorRef]);
-  const RESERVED = 160; const minEditorH = Math.max(420, Math.floor((defaultHeightPx || 420) - RESERVED));
 
   return (
-    <div className="grid grid-cols-1 gap-8">
-      <Card theme={T} title={`Journal — ${sessionLabel}`}>
-        <div className="mb-4 text-sm rounded-lg px-4 py-3" style={{ background: T.blueSoft, border: `1px solid ${T.border}`, color: T.text }}>
-          {HELP_TEXT}
+    <section
+      className="rounded-xl border shadow-sm"
+      style={{ background: T.panel, color: T.text, borderColor: T.border }}
+    >
+      <header
+        className="px-4 py-2 flex items-center justify-between gap-3 rounded-t-xl"
+        style={{ background: T.panelAlt, borderBottom: `1px solid ${T.border}`, color: T.text }}
+      >
+        <div className="text-sm font-medium">{sessionLabel}</div>
+        <div className="flex flex-wrap items-center gap-1">
+          <ToolbarButton label="B" title="Bold" onClick={() => exec("bold")} T={T} />
+          <ToolbarButton label="I" title="Italic" onClick={() => exec("italic")} T={T} />
+          <ToolbarButton label="U" title="Underline" onClick={() => exec("underline")} T={T} />
+          <ToolbarDivider T={T} />
+          <ToolbarButton label="• List" title="Bulleted list" onClick={() => exec("insertUnorderedList")} T={T} />
+          <ToolbarButton label="1. List" title="Numbered list" onClick={() => exec("insertOrderedList")} T={T} />
+          <ToolbarDivider T={T} />
+          <ToolbarButton label="H1" title="Heading" onClick={() => exec("formatBlock", "<h3>")} T={T} />
+          <ToolbarButton label="P" title="Paragraph" onClick={() => exec("formatBlock", "<p>")} T={T} />
+          <ToolbarDivider T={T} />
+          <ToolbarButton
+            label="Clear"
+            title="Clear formatting"
+            onClick={() => exec("removeFormat")}
+            T={T}
+          />
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
-          <ToolbarBtn theme={T} label="B" onClick={() => exec("bold")} />
-          <ToolbarBtn theme={T} label={<em>I</em>} onClick={() => exec("italic")} />
-          <ToolbarBtn theme={T} label={<u>U</u>} onClick={() => exec("underline")} />
-          <ToolbarBtn theme={T} label="H2" onClick={() => exec("formatBlock", "H2")} />
-          <ToolbarBtn theme={T} label="H3" onClick={() => exec("formatBlock", "H3")} />
-          <ToolbarBtn theme={T} label="• List" onClick={() => exec("insertUnorderedList")} />
-          <ToolbarBtn theme={T} label="1. List" onClick={() => exec("insertOrderedList")} />
-          <ToolbarBtn theme={T} label="Link" onClick={() => { const url = window.prompt("Enter URL"); if (url) exec("createLink", url); }} />
-          <ToolbarBtn theme={T} label="Clear" onClick={() => onInputHTML("")} />
-        </div>
+      </header>
+
+      <div className="px-4 pb-4">
         <div
-          ref={editorRef}
+          ref={localRef}
+          role="textbox"
+          aria-label="Journal editor"
           contentEditable
           suppressContentEditableWarning
-          onKeyUp={onKeyUp}
-          onBlur={onKeyUp}
+          onInput={(e) => onInputHTML((e.target as HTMLDivElement).innerHTML)}
           onPaste={onPaste}
-          aria-label="Practice journal editor"
-          className="rounded-lg p-4 text-sm overflow-auto resize-y"
-          style={{ background: T.panel, border: `1px solid ${T.border}`, color: T.text, minHeight: `${minEditorH}px`, resize: "vertical" }}
+          className="rounded-lg outline-none prose-area"
+          style={{
+            minHeight: Math.max(220, Math.round(defaultHeightPx * 0.8)),
+            padding: "12px",
+            background: T.mode === "light" ? T.panel : T.panel,
+            color: T.text,
+            border: `1px solid ${T.border}`,
+          }}
         />
-        {!value && <div className="mt-2 text-xs" style={{ color: T.textDim }}>Tip: your journal auto-saves per session. Use the toolbar to format.</div>}
-      </Card>
-    </div>
+        {/* Subtle tip */}
+        <div className="mt-2 text-xs" style={{ color: T.textDim }}>
+          Tip: notes auto-save per session. Use the toolbar or <kbd>Ctrl/Cmd+B</kbd>, <kbd>I</kbd>, <kbd>U</kbd>.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Toolbar bits ---------- */
+function ToolbarButton({
+  label,
+  title,
+  onClick,
+  T,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+  T: Theme;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="px-2 py-1 rounded-md text-xs border"
+      style={{
+        background: T.panel,
+        color: T.text,
+        borderColor: T.border,
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.backgroundColor = T.panelAlt)}
+      onMouseOut={(e) => (e.currentTarget.style.backgroundColor = T.panel)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ToolbarDivider({ T }: { T: Theme }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 1,
+        height: 20,
+        background: T.border,
+        display: "inline-block",
+        margin: "0 4px",
+      }}
+    />
   );
 }
