@@ -480,9 +480,8 @@ export default function InsightsView({
 
                  {/* Proficiency Rating */}
                  <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                 <div className="text-sm">
-                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
-              </div>
+                 <div className="text-sm text-slate-500">Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b></div>
+                 <div className="mt-1 text-2xl font-semibold">{selectedProf.label}</div>
                  <div className="mt-2 text-xs text-slate-500">
                   Benchmarks are generalized carry/total distances by skill level for common clubs.
                  </div>
