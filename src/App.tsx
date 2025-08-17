@@ -171,7 +171,7 @@ export default function App() {
     // Use the name your Shot actually has:
     //DescentAngle_deg:   num(get(r, ["descent angle", "landing angle"])),
     ApexHeight_yds:     num(get(r, ["apex", "apex height", "peak height", "peakheight"])),
-    Offline_yds:        num(get(r, ["offline", "offline yds"])),
+    //Offline_yds:        num(get(r, ["offline", "offline yds"])),
     Side_deg:           num(get(r, ["face angle", "face", "side", "sidedeg"])),
     Path_deg:           num(get(r, ["club path", "path", "pathdeg"])),
     AttackAngle_deg:    num(get(r, ["attack angle", "aoa", "attackangle"])),
