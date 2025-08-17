@@ -81,8 +81,8 @@ export default function DashboardCards(props: Props) {
     kpis,
     filteredOutliers,
     filtered,
-    // shots, // (available if you want to show overall stats)
-    // tableRows, // (you may have your own pre-computed aggregates)
+    // shots,
+    // tableRows,
     clubs,
   } = props;
 
@@ -113,14 +113,12 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Shot Shape (simple distribution by LaunchDirection or ClubFace) ---------- */
+  /* ---------- Shot Shape (distribution by LaunchDirection/ClubFace) ---------- */
   const shapeData = useMemo(() => {
-    // Prefer LaunchDirection_deg; fall back to ClubFace_deg if not present
     const angles = filteredOutliers
       .map(s => isNum(s.LaunchDirection_deg) ? s.LaunchDirection_deg! : (isNum(s.ClubFace_deg) ? s.ClubFace_deg! : null))
       .filter(isNum);
 
-    // Bin every 2°
     const binSize = 2;
     const map = new Map<number, number>();
     for (const a of angles) {
@@ -160,7 +158,7 @@ export default function DashboardCards(props: Props) {
                 />
                 <Tooltip
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  labelFormatter={(x) => `${x}°`}
+                  formatter={(v: any, _name: string, _item: any) => [`${v}`, "Count"]}
                 />
                 <ReferenceLine x={0} stroke={T.border} />
                 <Bar dataKey="count" fill={T.brand} />
@@ -219,12 +217,13 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(val: any, name: string) => {
-                    if (name === "x") return [`${val.toFixed?.(1)} yds`, "Lateral"];
-                    if (name === "y") return [`${val.toFixed?.(1)} yds`, "Carry"];
+                  // Use formatter's 3rd arg (item) to read item.payload safely, and avoid labelFormatter typing issues
+                  formatter={(val: any, name: string, item: any) => {
+                    const p = item?.payload;
+                    if (name === "x") return [`${val?.toFixed?.(1)} yds`, `Lateral${p?.Club ? ` — ${p.Club}` : ""}`];
+                    if (name === "y") return [`${val?.toFixed?.(1)} yds`, "Carry"];
                     return [val, name];
                   }}
-                  labelFormatter={(_, data) => data && data.payload ? `${data.payload.Club} — ${data.payload.Timestamp?.slice(0, 19).replace("T", " ")}` : ""}
                 />
                 <Legend wrapperStyle={{ color: T.text }} />
                 <ReferenceLine x={0} stroke={T.border} />
@@ -276,7 +275,7 @@ export default function DashboardCards(props: Props) {
                 />
                 <Tooltip
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(v: any) => [`${(v as number).toFixed?.(1)} yds`, "Avg Carry"]}
+                  formatter={(v: any) => [`${(v as number)?.toFixed?.(1)} yds`, "Avg Carry"]}
                 />
                 <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
@@ -303,7 +302,7 @@ export default function DashboardCards(props: Props) {
     [filteredOutliers]
   );
 
-  const effXMin = 50; // requested “floor at 50 mph”
+  const effXMin = 50; // floor at 50 mph
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
@@ -336,12 +335,12 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(val: any, name: string) => {
-                    if (name === "x") return [`${val.toFixed?.(1)} mph`, "Club"];
-                    if (name === "y") return [`${val.toFixed?.(1)} mph`, "Ball"];
+                  formatter={(val: any, name: string, item: any) => {
+                    const p = item?.payload;
+                    if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
+                    if (name === "y") return [`${val?.toFixed?.(1)} mph`, "Ball"];
                     return [val, name];
                   }}
-                  labelFormatter={(_, data) => data && data.payload ? `${data.payload.Club} — ${data.payload.Timestamp?.slice(0, 19).replace("T", " ")}` : ""}
                 />
                 <Legend wrapperStyle={{ color: T.text }} />
                 <Scatter name="Shots" data={efficiencyData} fill={T.accent} />
