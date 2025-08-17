@@ -276,8 +276,16 @@ export default function InsightsView({
     <div className="grid grid-cols-1 gap-8">
       {insightsOrder.map((key) => {
         if (key === "distanceBox") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Distance Distribution — Box & Whisker (Carry & Total)" dragHandle>
               <div style={{ width: "100%", height: 480 }}>
                 <ResponsiveContainer>
                   <ComposedChart
@@ -320,8 +328,16 @@ export default function InsightsView({
         );
 
         if (key === "highlights") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Highlights (independent of club selection)">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Highlights (independent of club selection)" dragHandle>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* PR Carry */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
@@ -366,8 +382,16 @@ export default function InsightsView({
         );
 
         if (key === "warnings") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Gapping Warnings">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Gapping Warnings" dragHandle>
               <div className="text-sm">
                 {gw.tight.length === 0 && gw.wide.length === 0 && <div>No warnings.</div>}
                 {gw.tight.length > 0 && (
@@ -388,8 +412,16 @@ export default function InsightsView({
         );
 
         if (key === "personalRecords") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Personal Records (current selection)">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Personal Records (current selection)" dragHandle>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Carry</div>
@@ -415,8 +447,16 @@ export default function InsightsView({
         );
 
         if (key === "progress") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Club Progress (single-club selection)">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Club Progress (single-club selection)" dragHandle>
               {selectedClubName && progressRows.length > 1 ? (
                 <div style={{ width: "100%", height: progressHeight }}>
                   <ResponsiveContainer>
@@ -438,8 +478,16 @@ export default function InsightsView({
         );
 
         if (key === "weaknesses") return (
-          <div key={key} draggable onDragStart={onDragStart(key)} onDragOver={onDragOver(key)} onDrop={onDrop(key)}>
-            <Card theme={theme} title="Proficiency (normalized to benchmarks)">
+          <div
+            key={key}
+            draggable
+            onDragStart={onDragStart(key)}
+            onDragOver={onDragOver(key)}
+            onDrop={onDrop(key)}
+            style={{ cursor: "grab" }}
+            title="Drag to reorder"
+          >
+            <Card theme={theme} title="Proficiency (normalized to benchmarks)" dragHandle>
               <div className="text-sm">
                 Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
               </div>
