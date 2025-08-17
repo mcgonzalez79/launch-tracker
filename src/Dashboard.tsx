@@ -86,7 +86,7 @@ export default function DashboardCards(props: Props) {
   }, [filteredOutliers]);
 
   const KpiCell = ({ label, value, unit }: { label: string; value: string; unit?: string }) => (
-    <div className="p-3 rounded-lg border" style={{ background: "#dbe8e1", borderColor: T.border }}>
+    <div className="p-3 rounded-lg border" style={{ background: T.panelAlt, borderColor: T.border }}>
       <div className="text-xs" style={{ color: T.textDim }}>{label}</div>
       <div className="text-lg font-semibold" style={{ color: T.text }}>
         {value}{unit ? <span className="text-xs font-normal" style={{ color: T.textDim }}> {unit}</span> : null}
@@ -167,7 +167,7 @@ export default function DashboardCards(props: Props) {
     <div key="dispersion" draggable onDragStart={onDragStart("dispersion")} onDragOver={onDragOver("dispersion")} onDrop={onDrop("dispersion")}>
       <Card title="Dispersion (Carry lateral vs distance)" theme={T}>
         {dispersionData.length ? (
-          <div style={{ height: 300, background: "#dbe8e1", borderRadius: 8, padding: 8 }}>
+          <div style={{ height: 300 }}>
             <ResponsiveContainer>
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
