@@ -2,15 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Optional: small tweaks so things feel nice even without custom CSS */
 html, body, #root { height: 100%; }
 body { margin: 0; }
 
-/* Show placeholder text inside the contentEditable when empty */
+/* Light variables */
+:root {
+  --bg: #DBE8E1;
+  --panel: #FFFFFF;
+  --text: #13202E;
+  --text-dim: #4B5563;
+  --border: #C5C8DF;
+  --kpi-border: #E5E7EB;
+  --brand: #076652;
+  --brand-tint: #10B981;
+  --brand-accent: #099D00;
+  --white: #FFFFFF;
+  --blue-soft: #E8F1FF;
+}
+
+/* Dark variables */
+.dark :root {
+  --bg: #13202E;
+  --panel: #1A2A3A;
+  --text: #DBE8E1;
+  --text-dim: #A7B0B8;
+  --border: #2C3B4B;
+  --kpi-border: #314355;
+  --brand: #099D00;
+  --brand-tint: #34D399;
+  --brand-accent: #076652;
+  --white: #FFFFFF;
+  --blue-soft: #0B2239;
+}
+
+/* Useful utility mappings (optional) */
+.bg-app   { background-color: var(--bg); }
+.bg-panel { background-color: var(--panel); }
+.text-app { color: var(--text); }
+.border-app { border-color: var(--border); }
+
+/* Journal placeholder text */
 [contenteditable="true"]:empty:before {
   content: attr(data-placeholder);
   color: #94a3b8;           /* slate-400 */
-  white-space: pre-wrap;    /* allow multi-line if needed */
+  white-space: pre-wrap;
 }
-
-
