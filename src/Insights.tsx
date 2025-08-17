@@ -453,7 +453,7 @@ export default function InsightsView({
             title="Drag to reorder"
           >
             <Card theme={theme} title="Personal Records (current selection)" dragHandle>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* PR Carry (with date) */}
                 <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
                   <div className="text-sm text-slate-500">PR Carry</div>
@@ -478,17 +478,52 @@ export default function InsightsView({
                   </div>
                 </div>
 
-                 {/* PR Total (with date) */}
-                <div className="rounded-xl p-4 border" style={{ borderColor: "#e5e7eb" }}>
-                  <div className="text-sm text-slate-500">PR Total</div>
-                  <div className="mt-1 text-2xl font-semibold">
-                    {selectedPR.bestTotal?.TotalDistance_yds ? `${selectedPR.bestTotal.TotalDistance_yds.toFixed(1)} yds` : "-"}
-                  </div>
-                  <div className="text-slate-600 mt-1 text-sm">
-                    {selectedPR.bestTotal?.Club ? `(${selectedPR.bestTotal.Club})` : ""}
-                    {selectedPR.bestTotal?.Timestamp ? ` — ${safeFmtDate(selectedPR.bestTotal.Timestamp)}` : ""}
-                  </div>
+                 {/* Proficiency Rating */}
+                <div className="text-sm">
+                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Benchmarks are generalized carry/total distances by skill level for common clubs.
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowBench(true)}
+                  className="px-3 py-2 rounded-lg text-sm border"
+                  style={{ borderColor: "#e5e7eb", color: "#111827", background: "#fff" }}
+                >
+                  View Benchmarks
+                </button>
+              </div>
+              <Modal theme={theme} title="Benchmarks" open={showBench} onClose={() => setShowBench(false)}>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left pr-4">Club</th>
+                        <th className="text-left pr-4">Beginner</th>
+                        <th className="text-left pr-4">Average</th>
+                        <th className="text-left pr-4">Good</th>
+                        <th className="text-left pr-4">Advanced</th>
+                        <th className="text-left pr-4">PGA Tour</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {benches.map(r => (
+                        <tr key={r.club}>
+                          <td className="pr-4">{r.club}</td>
+                          <td className="pr-4">{r.Beginner}</td>
+                          <td className="pr-4">{r.Average}</td>
+                          <td className="pr-4">{r.Good}</td>
+                          <td className="pr-4">{r.Advanced}</td>
+                          <td className="pr-4">{r.PGATour}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              </Modal>
+
+                
               </div>
             </Card>
           </div>
@@ -535,51 +570,7 @@ export default function InsightsView({
             style={{ cursor: "grab" }}
             title="Drag to reorder"
           >
-            <Card theme={theme} title="Proficiency (normalized to benchmarks)" dragHandle>
-              <div className="text-sm">
-                Overall proficiency: <b>{selectedProf.score.toFixed(0)} / 100</b> — {selectedProf.label}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Benchmarks are generalized carry/total distances by skill level for common clubs.
-              </div>
-              <div className="mt-3">
-                <button
-                  onClick={() => setShowBench(true)}
-                  className="px-3 py-2 rounded-lg text-sm border"
-                  style={{ borderColor: "#e5e7eb", color: "#111827", background: "#fff" }}
-                >
-                  View Benchmarks
-                </button>
-              </div>
-              <Modal theme={theme} title="Benchmarks" open={showBench} onClose={() => setShowBench(false)}>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-left pr-4">Club</th>
-                        <th className="text-left pr-4">Beginner</th>
-                        <th className="text-left pr-4">Average</th>
-                        <th className="text-left pr-4">Good</th>
-                        <th className="text-left pr-4">Advanced</th>
-                        <th className="text-left pr-4">PGA Tour</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {benches.map(r => (
-                        <tr key={r.club}>
-                          <td className="pr-4">{r.club}</td>
-                          <td className="pr-4">{r.Beginner}</td>
-                          <td className="pr-4">{r.Average}</td>
-                          <td className="pr-4">{r.Good}</td>
-                          <td className="pr-4">{r.Advanced}</td>
-                          <td className="pr-4">{r.PGATour}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Modal>
-            </Card>
+           
           </div>
         );
 
