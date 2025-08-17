@@ -6,12 +6,32 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import { Card, TopTab, IconSun, IconMoon } from "./components/UI";
 import {
-  Shot, ClubRow, Msg, ViewKey, mean, stddev, n, isoDate, clamp, coalesceSmash, coalesceFaceToPath,
-  normalizeHeader, headerMap, findBestHeader, parseWeirdLaunchCSV, weirdRowsToShots, fpOf, exportCSV, XLSX, orderIndex
+  Shot, ClubRow, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
+  coalesceSmash, coalesceFaceToPath, fpOf, exportCSV, XLSX, orderIndex
 } from "./utils";
 
-/* ===== App ===== */
-// --- Footer (new) ---
+/* =========================
+   Local helpers (import)
+========================= */
+
+// VERY small normalization to avoid importing normalizeHeader/findBestHeader variants
+const norm = (s: any) =>
+  String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+|[\-_()/]/g, "");
+
+function idxOf(headers: string[], variants: string[]): number {
+  for (const v of variants) {
+    const i = headers.findIndex((h) => norm(h) === norm(v));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/* =========================
+   Footer (new)
+========================= */
 function Footer({ T }: { T: Theme }) {
   const year = new Date().getFullYear();
   return (
@@ -44,6 +64,9 @@ function Footer({ T }: { T: Theme }) {
   );
 }
 
+/* =========================
+   App
+========================= */
 export default function App() {
   // Theme
   const [dark, setDark] = useState<boolean>(() => {
@@ -60,9 +83,11 @@ export default function App() {
 
   // Messages (toasts)
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  function toast(msg: Msg) {
-    setMsgs(m => [...m, { ...msg, id: Math.random().toString(36).slice(2) }]);
-    setTimeout(() => setMsgs(m => m.slice(1)), 3500);
+  function toast(msg: Omit<Msg, "id">) {
+    const withId: Msg = { ...msg, id: Math.random().toString(36).slice(2) };
+    setMsgs((m) => [...m, withId]);
+    // auto-dismiss oldest
+    setTimeout(() => setMsgs((m) => m.slice(1)), 3500);
   }
 
   // Data
@@ -75,8 +100,14 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
 
   // Derived session/club lists
-  const clubs = useMemo(() => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)), [shots]);
-  const sessions = useMemo(() => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()], [shots]);
+  const clubs = useMemo(
+    () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
+    [shots]
+  );
+  const sessions = useMemo(
+    () => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()],
+    [shots]
+  );
 
   const carryBounds = useMemo(() => {
     const vals = shots.map(s => s.CarryDistance_yds).filter((v): v is number => v !== undefined);
@@ -84,7 +115,9 @@ export default function App() {
     return { min: Math.floor(Math.min(...vals)), max: Math.ceil(Math.max(...vals)) };
   }, [shots]);
 
-  /* ===== Import processing (XLSX/CSV + dedupe) ===== */
+  /* =========================
+     Import processing
+  ========================= */
   function applyDerived(s: Shot): Shot {
     const s2 = { ...s };
     const Sm = coalesceSmash(s2);
@@ -94,7 +127,8 @@ export default function App() {
     return s2;
   }
 
-  function processWorkbook(wb: XLSX.WorkBook, textFromCSV: string | null, filename: string) {
+  function processWorkbook(wb: XLSX.WorkBook, _textFromCSV: string | null, filename: string) {
+    // Choose first non-empty sheet
     const firstSheet =
       wb.SheetNames.find(n => {
         const ws = wb.Sheets[n];
@@ -104,68 +138,65 @@ export default function App() {
 
     const ws = wb.Sheets[firstSheet];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    const headers = (rows[0] || []).map((h) => normalizeHeader(String(h ?? "")));
-
-    // Find mapped headers
-    const mapped = headerMap(headers);
-
-    // If we detect a “weird” CSV form (no headers, Launch Monitor export etc.), try the heuristic parser
-    let newShots: Shot[] = [];
-    if (!mapped.anyMapped && textFromCSV) {
-      try {
-        const weird = parseWeirdLaunchCSV(textFromCSV);
-        if (weird.rows.length) {
-          newShots = weirdRowsToShots(weird.rows).map(applyDerived);
-        }
-      } catch (e) {
-        console.warn("weird CSV parse failed", e);
-      }
+    if (!rows.length) {
+      toast({ type: "warn", text: `No rows detected in ${filename}` });
+      return;
     }
 
-    if (!newShots.length) {
-      const dataRows = rows.slice(1); // skip header row
-      newShots = dataRows.map((r) => {
-        const get = (name: string): any => {
-          const idx = findBestHeader(headers, name);
-          return idx >= 0 ? r[idx] : null;
-        };
-        const s: Shot = {
-          Date: isoDate(get("Date") || get("Timestamp") || get("Time")),
-          SessionId: String(get("Session") ?? get("SessionId") ?? get("Set") ?? "Unknown Session"),
-          Club: String(get("Club") ?? get("ClubType") ?? get("Club Name") ?? "Unknown Club"),
-          CarryDistance_yds: fpOf(get("CarryDistance_yds") ?? get("Carry (yds)")),
-          TotalDistance_yds: fpOf(get("TotalDistance_yds") ?? get("Total (yds)")),
-          BallSpeed_mph: fpOf(get("BallSpeed_mph") ?? get("Ball Speed")),
-          ClubSpeed_mph: fpOf(get("ClubSpeed_mph") ?? get("Club Speed")),
-          LaunchAngle_deg: fpOf(get("LaunchAngle_deg") ?? get("Launch Angle")),
-          Spin_rpm: fpOf(get("Spin_rpm") ?? get("Spin")),
-          PeakHeight_yds: fpOf(get("PeakHeight_yds") ?? get("Apex") ?? get("Peak Height")),
-          LandingAngle_deg: fpOf(get("LandingAngle_deg") ?? get("Descent Angle") ?? get("Landing Angle")),
-          Offline_yds: fpOf(get("Offline_yds") ?? get("Offline")),
-          Side_deg: fpOf(get("Side_deg") ?? get("Face Angle") ?? get("Face")),
-          Path_deg: fpOf(get("Path_deg") ?? get("Club Path") ?? get("Path")),
-          AttackAngle_deg: fpOf(get("AttackAngle_deg") ?? get("AoA") ?? get("Attack Angle")),
-          SmashFactor: fpOf(get("SmashFactor") ?? get("Smash")),
-          FaceToPath_deg: fpOf(get("FaceToPath_deg") ?? get("Face to Path") ?? get("F2P")),
-          Notes: String(get("Notes") ?? ""),
-        };
-        return applyDerived(s);
-      });
-    }
+    const header = (rows[0] || []).map((h) => String(h ?? ""));
+    const dataRows = rows.slice(1);
+
+    const get = (r: any[], variants: string[]): any => {
+      const i = idxOf(header, variants);
+      return i >= 0 ? r[i] : null;
+    };
+
+    const newShots: Shot[] = dataRows.map((r) => {
+      const s: Shot = {
+        Date: isoDate(get(r, ["date", "timestamp", "time"])),
+        SessionId: String(get(r, ["session", "sessionid", "set"]) ?? "Unknown Session"),
+        Club: String(get(r, ["club", "clubtype", "clubname", "club name"]) ?? "Unknown Club"),
+        CarryDistance_yds: fpOf(get(r, ["carrydistanceyds", "carryyds", "carry (yds)", "carry"])),
+        TotalDistance_yds: fpOf(get(r, ["totaldistanceyds", "totalyds", "total (yds)", "total"])),
+        BallSpeed_mph: fpOf(get(r, ["ballspeedmph", "ballspeed"])),
+        ClubSpeed_mph: fpOf(get(r, ["clubspeedmph", "clubspeed"])),
+        LaunchAngle_deg: fpOf(get(r, ["launchangledeg", "launchangle", "launch"])),
+        Spin_rpm: fpOf(get(r, ["spinrpm", "spin"])),
+        PeakHeight_yds: fpOf(get(r, ["peakheightyds", "apex", "peakheight"])),
+        LandingAngle_deg: fpOf(get(r, ["landingangledeg", "descentangle", "landingangle"])),
+        Offline_yds: fpOf(get(r, ["offlineyds", "offline"])),
+        Side_deg: fpOf(get(r, ["sidedeg", "faceangle", "face"])),
+        Path_deg: fpOf(get(r, ["pathdeg", "clubpath", "path"])),
+        AttackAngle_deg: fpOf(get(r, ["attackangledeg", "aoa", "attackangle"])),
+        SmashFactor: fpOf(get(r, ["smashfactor", "smash"])),
+        FaceToPath_deg: fpOf(get(r, ["facetopathdeg", "facetopath", "f2p"])),
+        Notes: String(get(r, ["notes", "note"]) ?? ""),
+      };
+      return applyDerived(s);
+    });
 
     // Merge & de-dupe by (Date+Club+Carry+Ball+ClubSpeed)
-    const keyOf = (s: Shot) => [s.Date, s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
+    const keyOf = (s: Shot) =>
+      [s.Date, s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
+
     const existing = new Map(shots.map(s => [keyOf(s), s]));
     const merged = [...existing.values()];
+    let added = 0;
     for (const s of newShots) {
       const k = keyOf(s);
-      if (!existing.has(k)) merged.push(s);
+      if (!existing.has(k)) {
+        existing.set(k, s);
+        merged.push(s);
+        added++;
+      }
     }
     setShots(merged);
-    toast({ kind: "ok", text: `Imported ${newShots.length} new shots from ${filename}` });
+    toast({ type: "success", text: `Imported ${added} new shots from ${filename}` });
   }
 
-  /* ===== Export ===== */
+  /* =========================
+     Export
+  ========================= */
   function exportShotsCSV() {
     const csv = exportCSV(shots);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -177,7 +208,9 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   }
 
-  /* ===== Filters state (lifted) ===== */
+  /* =========================
+     Filters state (lifted)
+  ========================= */
   const [selectedSession, setSelectedSession] = useState<string>("ALL");
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [includeOutliers, setIncludeOutliers] = useState<boolean>(true);
@@ -221,13 +254,13 @@ export default function App() {
 
   // Card order (merge-safe)
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
+    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"]; // "launchspin" removed
     try {
       const raw = localStorage.getItem("launch-tracker:card-order");
       const saved = raw ? JSON.parse(raw) : null;
       if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
       return DEFAULT;
-    } catch { return ["kpis", "shape", "dispersion", "gap", "eff", "table"]; }
+    } catch { return DEFAULT; }
   });
   useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
@@ -252,7 +285,10 @@ export default function App() {
       return localStorage.getItem(k) || "";
     } catch { return ""; }
   });
-  const journalKey = useMemo(() => `Journal — ${selectedSession === "ALL" ? "All Sessions" : selectedSession}`, [selectedSession]);
+  const journalKey = useMemo(
+    () => `Journal — ${selectedSession === "ALL" ? "All Sessions" : selectedSession}`,
+    [selectedSession]
+  );
   useEffect(() => {
     try {
       const k = `launch-tracker:journal:${selectedSession}`;
@@ -267,7 +303,9 @@ export default function App() {
     } catch {}
   }, [selectedSession, journalHTML]);
 
-  /* ===== Drag & drop reordering (cards + insights) ===== */
+  /* =========================
+     Drag & drop reordering
+  ========================= */
   const dragKey = useRef<string | null>(null);
   const onDragStart = (key: string) => (e: React.DragEvent) => {
     dragKey.current = key;
@@ -286,7 +324,7 @@ export default function App() {
       return copy;
     });
   };
-  const onDrop = (key: string) => (_: React.DragEvent) => { dragKey.current = null; };
+  const onDrop = (_key: string) => (_: React.DragEvent) => { dragKey.current = null; };
 
   const dragKey2 = useRef<string | null>(null);
   const onDragStart2 = (key: string) => (e: React.DragEvent) => {
@@ -306,9 +344,11 @@ export default function App() {
       return copy;
     });
   };
-  const onDrop2 = (key: string) => (_: React.DragEvent) => { dragKey2.current = null; };
+  const onDrop2 = (_key: string) => (_: React.DragEvent) => { dragKey2.current = null; };
 
-  /* ===== File input handling ===== */
+  /* =========================
+     File input
+  ========================= */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   function onClickImport() {
     fileInputRef.current?.click();
@@ -327,11 +367,13 @@ export default function App() {
       e.currentTarget.value = "";
     } catch (err) {
       console.error(err);
-      toast({ kind: "error", text: `Import failed: ${(err as Error).message}` });
+      toast({ type: "error", text: `Import failed: ${(err as Error).message}` });
     }
   }
 
-  /* ===== Filtered data selection ===== */
+  /* =========================
+     Filtered data selection
+  ========================= */
   const filtered = useMemo(() => {
     const now = new Date();
     let start: Date | null = null;
@@ -342,11 +384,6 @@ export default function App() {
     return shots.filter(s => {
       if (selectedSession !== "ALL" && (s.SessionId ?? "Unknown Session") !== selectedSession) return false;
       if (selectedClubs.length && !selectedClubs.includes(s.Club)) return false;
-      if (!includeOutliers) {
-        // naïve outlier filter: drop anything > 3σ for carry within club
-        // compute by club
-        // we can optimize later if needed
-      }
       if (start && s.Date) {
         try {
           const d = new Date(s.Date);
@@ -358,9 +395,11 @@ export default function App() {
       }
       return true;
     });
-  }, [shots, selectedSession, selectedClubs, includeOutliers, carryRange, datePreset]);
+  }, [shots, selectedSession, selectedClubs, carryRange, datePreset]);
 
-  /* ===== KPI samples ===== */
+  /* =========================
+     KPIs
+  ========================= */
   const kCarry = useMemo(() => {
     const v = filtered.map(s => s.CarryDistance_yds).filter((x): x is number => x != null);
     return { mean: mean(v), n: n(v), std: stddev(v) };
@@ -381,14 +420,18 @@ export default function App() {
     return { mean: mean(v), n: n(v), std: stddev(v) };
   }, [filtered]);
 
-  /* ===== Render ===== */
+  /* =========================
+     Render
+  ========================= */
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
       {/* Top bar */}
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="text-lg font-semibold">Launch Tracker</div>
-          <div className="hidden md:block text-xs" style={{ color: T.textDim }}>Analyze carry, dispersion, efficiency, and progress</div>
+          <div className="hidden md:block text-xs" style={{ color: T.textDim }}>
+            Analyze carry, dispersion, efficiency, and progress
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -489,7 +532,8 @@ export default function App() {
                 defaultHeightPx={filtersHeight}
               />
             )}
-          <Footer T={T} />
+
+            <Footer T={T} />
           </div>
         </div>
       </div>
