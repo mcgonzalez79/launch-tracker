@@ -6,7 +6,7 @@ import {
   ResponsiveContainer,
   ScatterChart, Scatter,
   BarChart, Bar,
-  ComposedChart, Line,
+  Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine
 } from "recharts";
@@ -211,7 +211,7 @@ export default function DashboardCards(props: Props) {
       if (!Number.isNaN(avgCarry)) rows.push({ club, carry: avgCarry });
     }
     const order = new Map(clubs.map((c, i) => [c, i]));
-    rows.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    rows.sort((a, b) => (order.get(b.club) ?? -999) - (order.get(a.club) ?? -999));
     return rows;
   }, [filteredOutliers, clubs]);
 
@@ -300,37 +300,45 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Club Averages (replace recent shots) ---------- */
-  const clubAvgData = useMemo(() => (
-    tableRows.map((r: any) => ({
-      club: r.club,
-      avgCarry: Number(r.avgCarry || 0),
-      avgTotal: Number(r.avgTotal || 0),
-      avgSmash: Number(r.avgSmash || 0),
-      avgCS: Number(r.avgCS || 0),
-      avgBS: Number(r.avgBS || 0),
-    }))
-  ), [tableRows]);
-
+  
+  /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
-        {clubAvgData.length ? (
-          <div style={{ height: 320 }}>
-            <ResponsiveContainer>
-              <ComposedChart data={clubAvgData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
-                <YAxis yAxisId="left" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Distance (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Smash", angle: 90, position: "insideRight", fill: T.textDim, fontSize: 12 }} />
-                <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(val:any, name:string)=>[typeof val==='number'? (name==='avgSmash'? val.toFixed(3): val.toFixed(1)) : val, name.replace('avg','')]} />
-                <Legend />
-                <Bar yAxisId="left" dataKey="avgCarry" name="Carry" />
-                <Bar yAxisId="left" dataKey="avgTotal" name="Total" />
-                <Line yAxisId="right" type="linear" dataKey="avgSmash" name="Smash" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
-              </ComposedChart>
-            </ResponsiveContainer>
+        {tableRows.length ? (
+          <div style={{ overflowX: "auto" }}>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr style={{ color: T.textDim }}>
+                  <th className="text-left py-2 pr-3">Club</th>
+                  <th className="text-right py-2 px-2">#</th>
+                  <th className="text-right py-2 px-2">Avg Carry</th>
+                  <th className="text-right py-2 px-2">Avg Total</th>
+                  <th className="text-right py-2 px-2">Avg Smash</th>
+                  <th className="text-right py-2 px-2">Avg Spin</th>
+                  <th className="text-right py-2 px-2">Avg CS</th>
+                  <th className="text-right py-2 px-2">Avg BS</th>
+                  <th className="text-right py-2 px-2">Avg LA</th>
+                  <th className="text-right py-2 px-2">Avg F2P</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((r) => (
+                  <tr key={(r as any).club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="py-2 pr-3">{(r as any).club}</td>
+                    <td className="text-right py-2 px-2">{(r as any).count}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgCarry ?? 0).toFixed(1)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgTotal ?? 0).toFixed(1)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgSmash ?? 0).toFixed(3)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgSpin ?? 0).toFixed(0)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgCS ?? 0).toFixed(1)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgBS ?? 0).toFixed(1)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgLA ?? 0).toFixed(1)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgF2P ?? 0).toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>No club averages available.</div>
@@ -338,6 +346,7 @@ export default function DashboardCards(props: Props) {
       </Card>
     </div>
   );
+
 
   const cardMap: Record<string, JSX.Element> = {
     kpis: kpiCard,
