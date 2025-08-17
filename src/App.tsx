@@ -565,3 +565,25 @@ export default function App() {
     </div>
   );
 }
+
+
+/* =========================
+   Footer
+========================= */
+function Footer({ T }: { T: Theme }) {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
+        <div className="text-xs" style={{ color: T.textDim }}>
+          © {year} Launch Tracker
+        </div>
+        <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
+          <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
+          <span>·</span>
+          <span>v1.0.0+</span>
+        </nav>
+      </div>
+    </footer>
+  );
+}
