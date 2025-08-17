@@ -51,6 +51,11 @@ export default function FiltersPanel(props: Props) {
     dateTo,
     setDateFrom,
     setDateTo,
+    carryMin,
+    carryMax,
+    setCarryMin,
+    setCarryMax,
+    carryBounds,
     onImportFile,
     onLoadSample,
     onExportCSV,
@@ -141,22 +146,24 @@ export default function FiltersPanel(props: Props) {
           </button>
         </div>
 
-        {/* 3) Date range (one row) + 4) Quick selects */}
+        {/* 3) Date range (same row) + 4) Quick selects */}
         <div className="mb-3">
           <label className="text-xs block mb-1" style={{ color: T.textDim }}>Date range</label>
-          <div className="flex items-center gap-2">
+
+          {/* force single row inside sidebar */}
+          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
             <input
               type="date"
-              className="rounded-md px-2 py-1 border flex-1"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
             <span className="text-xs" style={{ color: T.textDim }}>to</span>
             <input
               type="date"
-              className="rounded-md px-2 py-1 border flex-1"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
@@ -177,11 +184,8 @@ export default function FiltersPanel(props: Props) {
           </div>
         </div>
 
-        {/* 5) Exclude outliers */}
-        <div
-          className="mb-3 rounded-md px-2 py-2 border"
-          style={{ background: T.panelAlt, borderColor: T.border }}
-        >
+        {/* 5) Exclude outliers — simple row */}
+        <div className="mb-3">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -245,6 +249,47 @@ export default function FiltersPanel(props: Props) {
               No clubs yet — import some shots to see club filters.
             </div>
           )}
+        </div>
+
+        {/* 3b) Carry distance range — below Clubs */}
+        <div className="mb-3">
+          <label className="text-xs block mb-1" style={{ color: T.textDim }}>
+            Carry distance range (yds)
+          </label>
+          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
+              placeholder={Number.isFinite(carryBounds.min) ? String(carryBounds.min) : "min"}
+              value={carryMin}
+              onChange={(e) => setCarryMin(e.target.value)}
+            />
+            <span className="text-xs" style={{ color: T.textDim }}>to</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
+              placeholder={Number.isFinite(carryBounds.max) ? String(carryBounds.max) : "max"}
+              value={carryMax}
+              onChange={(e) => setCarryMax(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs" style={{ color: T.textDim }}>
+              Bounds: {Number.isFinite(carryBounds.min) ? carryBounds.min : "—"}–{Number.isFinite(carryBounds.max) ? carryBounds.max : "—"} yds
+            </span>
+            <button
+              className="ml-auto text-xs underline underline-offset-2"
+              style={{ color: T.textDim }}
+              onClick={() => { setCarryMin(""); setCarryMax(""); }}
+              title="Clear carry range"
+            >
+              Clear
+            </button>
+          </div>
         </div>
 
         {/* 7) Print club averages (full width) */}
