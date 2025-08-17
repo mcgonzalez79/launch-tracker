@@ -6,21 +6,19 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
-  Shot, Msg, ViewKey, mean, stddev, n, isoDate, clamp,
+  Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow
 } from "./utils";
 
 /* =========================
    Small local helpers
 ========================= */
-
 const norm = (s: any) =>
   String(s ?? "")
     .trim()
     .toLowerCase()
     .replace(/\s+|[\-_()/]/g, "");
 
-// ensure number (Shot numeric fields are `number`, not optional)
 const num = (v: any): number => {
   const x = fpOf(v);
   return typeof x === "number" ? x : Number.NaN;
@@ -132,7 +130,6 @@ export default function App() {
   }
 
   function processWorkbook(wb: XLSX.WorkBook, _textFromCSV: string | null, filename: string) {
-    // Choose first non-empty sheet
     const firstSheet =
       wb.SheetNames.find(n => {
         const ws = wb.Sheets[n];
@@ -149,26 +146,22 @@ export default function App() {
 
     const header = (rows[0] || []).map((h) => String(h ?? ""));
     const dataRows = rows.slice(1);
-
     const get = (r: any[], variants: string[]): any => {
       const i = idxOf(header, variants);
       return i >= 0 ? r[i] : null;
     };
 
     const newShots: Shot[] = dataRows.map((r) => {
-      // helpers
       const dateRaw = String(get(r, ["date"]) ?? "").trim();
       const sessionByDay = dateRaw.split(" ")[0] || "Unknown Session";
       const clubName = String(get(r, ["club name"]) ?? "").trim();
       const clubType = String(get(r, ["club type"]) ?? "").trim();
 
       const s: Shot = {
-        // strings
         SessionId: sessionByDay,
         Club: clubName || clubType || "Unknown Club",
         Timestamp: isoDate(dateRaw),
 
-        // numbers (ensure number type with `num`)
         ClubSpeed_mph:      num(get(r, ["club speed"])),
         AttackAngle_deg:    num(get(r, ["attack angle"])),
         ClubPath_deg:       num(get(r, ["club path"])),
@@ -188,7 +181,6 @@ export default function App() {
       return applyDerived(s);
     });
 
-    // Merge & de-dupe by (Timestamp+Club+Carry+Ball+ClubSpeed)
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
 
@@ -211,7 +203,6 @@ export default function App() {
      Export (CSV aligned to Shot)
   ========================= */
   function exportShotsCSV() {
-    // Keep this list in sync with your Shot interface & the fields you populate
     const headers = [
       "Timestamp", "SessionId", "Club",
       "CarryDistance_yds", "TotalDistance_yds",
@@ -242,14 +233,14 @@ export default function App() {
   }
 
   /* =========================
-     Filters state (names match Filters.tsx)
+     Filters state
   ========================= */
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
   const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
 
-  const [dateFrom, setDateFrom] = useState<string>(""); // ISO yyyy-mm-dd or ""
-  const [dateTo, setDateTo] = useState<string>("");     // ISO yyyy-mm-dd or ""
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
@@ -257,7 +248,7 @@ export default function App() {
   const carryMinNum = useMemo(() => (carryMin ? parseFloat(carryMin) : undefined), [carryMin]);
   const carryMaxNum = useMemo(() => (carryMax ? parseFloat(carryMax) : undefined), [carryMax]);
 
-  // Sticky sidebar needs a measured height for journal default height (keep this)
+  // sidebar height for Journal sizing
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
@@ -271,9 +262,9 @@ export default function App() {
     return () => ro.disconnect();
   }, [filtersRef.current, shots, selectedClubs, sessionFilter, excludeOutliers, carryMin, carryMax, dateFrom, dateTo]);
 
-  // Card order (merge-safe)
+  // Card order
   const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"]; // "launchspin" removed
+    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
     try {
       const raw = localStorage.getItem("launch-tracker:card-order");
       const saved = raw ? JSON.parse(raw) : null;
@@ -284,7 +275,7 @@ export default function App() {
   useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
-  // Insights order (merge-safe)
+  // Insights order
   const INSIGHTS_DEFAULT = ["distanceBox", "highlights", "swingMetrics", "warnings", "personalRecords", "progress", "weaknesses"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
@@ -297,7 +288,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
   /* =========================
-     File input helpers for Filters onImportFile
+     File input helpers
   ========================= */
   function onImportFile(file: File) {
     (async () => {
@@ -312,21 +303,14 @@ export default function App() {
     })();
   }
 
-  function onLoadSample() {
-    toast({ type: "info", text: "Sample loader not implemented." });
-  }
-
-  function onPrintClubAverages() {
-    window.print();
-  }
-
+  function onLoadSample() { toast({ type: "info", text: "Sample loader not implemented." }); }
+  function onPrintClubAverages() { window.print(); }
   function onDeleteSession() {
     if (sessionFilter === "ALL") return;
     const remaining = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
     setShots(remaining);
     toast({ type: "warn", text: `Deleted session "${sessionFilter}"` });
   }
-
   function onDeleteAll() {
     if (!shots.length) return;
     setShots([]);
@@ -334,7 +318,7 @@ export default function App() {
   }
 
   /* =========================
-     Filtering (aligned to Filters props)
+     Filtering
   ========================= */
   const filteredBase = useMemo(() => {
     const from = dateFrom ? new Date(dateFrom) : null;
@@ -361,7 +345,6 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    // TODO: implement per-club outlier filter if desired
     return filteredBase;
   }, [filteredBase, excludeOutliers]);
 
@@ -379,17 +362,14 @@ export default function App() {
     const v = filteredOutliers.map(s => s.CarryDistance_yds).filter((x): x is number => Number.isFinite(x));
     return { mean: mean(v), n: v.length, std: stddev(v) };
   }, [filteredOutliers]);
-
   const kBall = useMemo(() => {
     const v = filteredOutliers.map(s => s.BallSpeed_mph).filter((x): x is number => Number.isFinite(x));
     return { mean: mean(v), n: v.length, std: stddev(v) };
   }, [filteredOutliers]);
-
   const kClub = useMemo(() => {
     const v = filteredOutliers.map(s => s.ClubSpeed_mph).filter((x): x is number => Number.isFinite(x));
     return { mean: mean(v), n: v.length, std: stddev(v) };
   }, [filteredOutliers]);
-
   const kSmash = useMemo(() => {
     const v = filteredOutliers.map(s => s.SmashFactor).filter((x): x is number => Number.isFinite(x));
     return { mean: mean(v), n: v.length, std: stddev(v) };
@@ -399,41 +379,10 @@ export default function App() {
   const kpis = { carry: kCarry, ball: kBall, club: kClub, smash: kSmash };
 
   /* =========================
-     Journal state
-  ========================= */
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const [journalHTML, setJournalHTML] = useState<string>(() => {
-    try {
-      const k = "launch-tracker:journal:ALL";
-      return localStorage.getItem(k) || "";
-    } catch { return ""; }
-  });
-  const journalKey = useMemo(
-    () => `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`,
-    [sessionFilter]
-  );
-  useEffect(() => {
-    try {
-      const k = `launch-tracker:journal:${sessionFilter}`;
-      const raw = localStorage.getItem(k);
-      setJournalHTML(raw || "");
-    } catch { setJournalHTML(""); }
-  }, [sessionFilter]);
-  useEffect(() => {
-    try {
-      const k = `launch-tracker:journal:${sessionFilter}`;
-      localStorage.setItem(k, journalHTML);
-    } catch {}
-  }, [sessionFilter, journalHTML]);
-
-  /* =========================
      Drag & drop handlers
   ========================= */
   const dragKey = useRef<string | null>(null);
-  const onDragStart = (key: string) => (e: React.DragEvent) => {
-    dragKey.current = key;
-    e.dataTransfer.effectAllowed = "move";
-  };
+  const onDragStart = (key: string) => (e: React.DragEvent) => { dragKey.current = key; e.dataTransfer.effectAllowed = "move"; };
   const onDragOver = (key: string) => (e: React.DragEvent) => {
     e.preventDefault();
     if (dragKey.current === key) return;
@@ -450,10 +399,7 @@ export default function App() {
   const onDrop = (_key: string) => (_: React.DragEvent) => { dragKey.current = null; };
 
   const dragKey2 = useRef<string | null>(null);
-  const onDragStart2 = (key: string) => (e: React.DragEvent) => {
-    dragKey2.current = key;
-    e.dataTransfer.effectAllowed = "move";
-  };
+  const onDragStart2 = (key: string) => (e: React.DragEvent) => { dragKey2.current = key; e.dataTransfer.effectAllowed = "move"; };
   const onDragOver2 = (key: string) => (e: React.DragEvent) => {
     e.preventDefault();
     if (dragKey2.current === key) return;
@@ -470,7 +416,7 @@ export default function App() {
   const onDrop2 = (_key: string) => (_: React.DragEvent) => { dragKey2.current = null; };
 
   /* =========================
-     Sidebar (left) collapse for small screens
+     Sidebar toggle (mobile)
   ========================= */
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
@@ -479,7 +425,7 @@ export default function App() {
   ========================= */
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
-      {/* Top bar */}
+      {/* Header */}
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -496,7 +442,12 @@ export default function App() {
             Analyze carry, dispersion, efficiency, and progress
           </div>
         </div>
+
+        {/* Right side: tabs + theme */}
         <div className="flex items-center gap-2">
+          <TopTab label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} theme={T} />
+          <TopTab label="Insights"  active={view === "insights"}  onClick={() => setView("insights")}  theme={T} />
+          <TopTab label="Journal"   active={view === "journal"}   onClick={() => setView("journal")}   theme={T} />
           <button
             className="rounded-md px-2 py-1 border"
             style={{ background: T.panel, borderColor: T.border, color: T.text }}
@@ -505,40 +456,17 @@ export default function App() {
           >
             {dark ? <IconSun /> : <IconMoon />}
           </button>
-          <button
-            className="rounded-md px-3 py-1 border"
-            style={{ background: T.brand, borderColor: T.brand, color: T.white }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = ".xlsx,.xls,.csv";
-              input.onchange = (e: any) => {
-                const file = e.target?.files?.[0];
-                if (file) onImportFile(file);
-              };
-              input.click();
-            }}
-          >
-            Import
-          </button>
-          <button
-            className="rounded-md px-3 py-1 border"
-            style={{ background: T.panel, borderColor: T.border, color: T.text }}
-            onClick={exportShotsCSV}
-          >
-            Export CSV
-          </button>
         </div>
       </div>
 
       {/* Main layout: sidebar + content */}
       <div className="max-w-6xl mx-auto px-4 pb-6 md:flex md:gap-4">
-        {/* Sidebar (Filters) */}
+        {/* Sidebar */}
         <aside
-          className={`md:sticky md:top-4 md:self-start md:w-[280px] md:shrink-0 ${sidebarOpen ? "" : "hidden"} md:block`}
+          className={`md:sticky md:top-4 md:self-start md:w-[320px] md:shrink-0 min-w-0 overflow-x-hidden ${sidebarOpen ? "" : "hidden"} md:block`}
           aria-label="Filters"
         >
-          <div ref={filtersRef}>
+          <div ref={filtersRef} className="sidebar-fix">
             <FiltersPanel
               theme={T}
               shots={shots}
@@ -566,64 +494,92 @@ export default function App() {
               onDeleteSession={onDeleteSession}
               onDeleteAll={onDeleteAll}
             />
+
+            {/* Import / Export inside Filters */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className="rounded-md px-3 py-1 border"
+                style={{ background: T.brand, borderColor: T.brand, color: T.white }}
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = ".xlsx,.xls,.csv";
+                  input.onchange = (e: any) => {
+                    const file = e.target?.files?.[0];
+                    if (file) onImportFile(file);
+                  };
+                  input.click();
+                }}
+              >
+                Import
+              </button>
+              <button
+                className="rounded-md px-3 py-1 border"
+                style={{ background: T.panel, borderColor: T.border, color: T.text }}
+                onClick={exportShotsCSV}
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
         </aside>
 
         {/* Content area */}
         <main className="flex-1">
-          {/* Tabs */}
-          <div className="mt-4">
-            <div className="flex gap-2 items-center">
-              <TopTab label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} theme={T} />
-              <TopTab label="Insights" active={view === "insights"} onClick={() => setView("insights")} theme={T} />
-              <TopTab label="Journal" active={view === "journal"} onClick={() => setView("journal")} theme={T} />
-            </div>
+          <div className="mt-2">
+            {view === "dashboard" && (
+              <DashboardCards
+                theme={T}
+                cardOrder={cardOrder}
+                setCardOrder={setCardOrder}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+                hasData={hasData}
+                kpis={kpis}
+                filteredOutliers={filteredOutliers}
+                filtered={filtered}
+                shots={shots}
+                tableRows={tableRows}
+                clubs={clubs}
+              />
+            )}
 
-            <div className="mt-4">
-              {view === "dashboard" && (
-                <DashboardCards
-                  theme={T}
-                  cardOrder={cardOrder}
-                  setCardOrder={setCardOrder}
-                  onDragStart={onDragStart}
-                  onDragOver={onDragOver}
-                  onDrop={onDrop}
-                  hasData={hasData}
-                  kpis={kpis}
-                  filteredOutliers={filteredOutliers}
-                  filtered={filtered}
-                  shots={shots}
-                  tableRows={tableRows}
-                  clubs={clubs}
-                />
-              )}
+            {view === "insights" && (
+              <InsightsView
+                theme={T}
+                tableRows={tableRows}
+                filteredOutliers={filteredOutliers}
+                filteredNoClubOutliers={filteredOutliers}
+                filteredNoClubRaw={filtered}
+                allClubs={clubs}
+                insightsOrder={insightsOrder}
+                onDragStart={onDragStart2}
+                onDragOver={onDragOver2}
+                onDrop={onDrop2}
+              />
+            )}
 
-              {view === "insights" && (
-                <InsightsView
-                  theme={T}
-                  tableRows={tableRows}
-                  filteredOutliers={filteredOutliers}
-                  filteredNoClubOutliers={filteredOutliers}
-                  filteredNoClubRaw={filtered}
-                  allClubs={clubs}
-                  insightsOrder={insightsOrder}
-                  onDragStart={onDragStart2}
-                  onDragOver={onDragOver2}
-                  onDrop={onDrop2}
-                />
-              )}
-
-              {view === "journal" && (
-                <JournalView
-                  theme={T}
-                  editorRef={editorRef}
-                  value={journalHTML}
-                  onInputHTML={setJournalHTML}
-                  sessionLabel={journalKey}
-                  defaultHeightPx={filtersHeight}
-                />
-              )}
-            </div>
+            {view === "journal" && (
+              <JournalView
+                theme={T}
+                editorRef={useRef<HTMLDivElement | null>(null)}
+                value={(() => {
+                  try {
+                    const k = `launch-tracker:journal:${sessionFilter}`;
+                    return localStorage.getItem(k) || "";
+                  } catch { return ""; }
+                })()}
+                onInputHTML={(html) => {
+                  try {
+                    const k = `launch-tracker:journal:${sessionFilter}`;
+                    localStorage.setItem(k, html);
+                  } catch {}
+                }}
+                sessionLabel={`Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`}
+                defaultHeightPx={filtersHeight}
+              />
+            )}
           </div>
 
           <Footer T={T} />
