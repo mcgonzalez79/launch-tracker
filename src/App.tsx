@@ -13,51 +13,39 @@ import {
 } from "./utils";
 
 /* =========================
-   Local helpers
-========================= */
-const norm = (s: any) =>
-  String(s ?? "")
-    .trim()
-    .toLowerCase()
-    // remove bracketed or parenthetical units: [yds], (rpm), etc.
-    .replace(/\[[^\]]*\]/g, "")
-    .replace(/\([^)]*\)/g, "")
-    // collapse whitespace and strip common punctuation
-    .replace(/\s+/g, " ")
-    .replace(/[\-_/(),:]/g, "")
-    .trim();
-
-const num = (v: any): number | undefined => {
-  const x = fpOf(v);
-  return typeof x === "number" ? x : Number.NaN;
-};
-
-function idxOf(headers: string[], variants: string[]): number {
-  for (const v of variants) {
-    const i = headers.findIndex((h) => norm(h) === norm(v));
-    if (i >= 0) return i;
-  }
-  return -1;
-}
-
-/* =========================
-   Toast system
+   Toasts
 ========================= */
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
-    const id = m.id ?? Date.now() + Math.random();
-    setMsgs((prev) => [...prev, { id, text: m.text, type: m.type }]);
+    const id = m.id ?? Math.floor(Date.now() + Math.random() * 1000);
+    setMsgs(prev => [...prev, { id, text: m.text, type: m.type }]);
   };
-  const remove = (id: number) => setMsgs((prev) => prev.filter((x) => x.id !== id));
+  const remove = (id: number) => setMsgs(prev => prev.filter(x => x.id !== id));
   return { msgs, push, remove };
 }
+
+/* =========================
+   Helpers
+========================= */
+const num = (v: any): number | undefined => {
+  const x = fpOf(v);
+  return typeof x === "number" ? x : undefined;
+};
+const applyDerived = (s: Shot): Shot => {
+  const s2 = { ...s };
+  const Sm = coalesceSmash(s2);
+  const F2P = coalesceFaceToPath(s2);
+  if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+  if (F2P !== undefined) s2.FaceToPath_deg = F2P;
+  return s2;
+};
 
 /* =========================
    App
 ========================= */
 export default function App() {
-  /* Theme */
+  // Theme
   const [theme, setTheme] = useState<Theme>(() => {
     try { return (localStorage.getItem("launch-tracker:theme") || "dark") === "light" ? LIGHT : DARK; } catch { return DARK; }
   });
@@ -66,22 +54,18 @@ export default function App() {
     document.documentElement.style.setProperty("color-scheme", theme === LIGHT ? "light" : "dark");
   }, [theme]);
 
-  /* Tabs */
+  // Tab
   const [tab, setTab] = useState<ViewKey>(() => {
     try { return (localStorage.getItem("launch-tracker:tab") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:tab", tab); } catch {} }, [tab]);
 
-  /* Data */
+  // Data
   const [shots, setShots] = useState<Shot[]>(() => {
-    try {
-      const raw = localStorage.getItem("launch-tracker:shots");
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
+    try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
 
-  // Derived lists
   const clubs = useMemo(
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
@@ -90,7 +74,6 @@ export default function App() {
     () => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()],
     [shots]
   );
-
   const carryBounds = useMemo(() => {
     const vals = shots.map(s => s.CarryDistance_yds).filter((v): v is number => v !== undefined);
     if (!vals.length) return { min: 0, max: 0 };
@@ -98,16 +81,9 @@ export default function App() {
   }, [shots]);
 
   /* =========================
-     Import processing
+     Import / Export
   ========================= */
-  function applyDerived(s: Shot): Shot {
-    const s2 = { ...s };
-    const Sm = coalesceSmash(s2);
-    const F2P = coalesceFaceToPath(s2);
-    if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
-    if (F2P !== undefined) s2.FaceToPath_deg = F2P;
-    return s2;
-  }
+  const { msgs, push: toast, remove: removeToast } = useToasts();
 
   function mergeImportedShots(newShots: Shot[], filename: string) {
     const keyOf = (s: Shot) =>
@@ -125,86 +101,64 @@ export default function App() {
     toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
   }
 
-  // Generic header-driven extraction using utils.headerMap/normalizeHeader
   function rowsToShots(headerRow: any[], dataRows: any[][], filename: string): Shot[] {
     const header = headerRow.map(h => String(h ?? ""));
     const hNorm = header.map(h => normalizeHeader(h));
-    const get = (r: any[], key: keyof typeof headerMap) => {
-      // find the first header alias that maps to this Shot field
-      const target = key; // headerMap maps normalized strings to Shot keys; we want index of that normalized header
-      // build reverse index: ShotKey -> positions in header
-      const idx = hNorm.findIndex(h => (headerMap as any)[h] === target);
-      return idx >= 0 ? r[idx] : null;
-    };
 
-    const shotsLocal: Shot[] = dataRows.map((row) => {
-      // Try to read flexible fields via headerMap; also support some common fallbacks
-      const dateRaw = String(row[hNorm.findIndex(h => /^(date|timestamp|datetime)$/.test(h))] ?? "").trim();
+    const idx = (name: string) => hNorm.findIndex(h => h === name);
+
+    return dataRows.map((row) => {
+      const dateRaw = String(row[idx("date")] ?? row[idx("timestamp")] ?? row[idx("datetime")] ?? "").trim();
       const sessionByDay = (dateRaw.split(" ")[0] || "Unknown Session");
 
-      // We also allow either "club name" or "club type" to fill Club
       const clubIdx = (() => {
         const cand = ["club name", "club", "club type"];
-        for (const c of cand) {
-          const i = hNorm.findIndex(h => h === c);
-          if (i >= 0) return i;
-        }
+        for (const c of cand) { const i = idx(c); if (i >= 0) return i; }
         return -1;
       })();
-      const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "";
+      const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "Unknown Club";
 
       const s: Shot = {
         SessionId: sessionByDay,
-        Club: clubVal || "Unknown Club",
+        Club: clubVal,
         Timestamp: isoDate(dateRaw),
 
-        ClubSpeed_mph:      num(row[hNorm.findIndex(h => h === "club speed")]),
-        AttackAngle_deg:    num(row[hNorm.findIndex(h => h === "attack angle")]),
-        ClubPath_deg:       num(row[hNorm.findIndex(h => h === "club path")]),
-        ClubFace_deg:       num(row[hNorm.findIndex(h => h === "club face")]),
-        FaceToPath_deg:     num(row[hNorm.findIndex(h => h === "face to path")]),
-        BallSpeed_mph:      num(row[hNorm.findIndex(h => h === "ball speed")]),
-        SmashFactor:        num(row[hNorm.findIndex(h => h === "smash factor")]),
-        LaunchAngle_deg:    num(row[hNorm.findIndex(h => h === "launch angle")]),
-        LaunchDirection_deg:num(row[hNorm.findIndex(h => h === "launch direction")]),
-        ApexHeight_yds:     num(row[hNorm.findIndex(h => h === "apex height")]),
-        CarryDistance_yds:  num(row[hNorm.findIndex(h => h === "carry distance")]),
-        CarryDeviationDistance_yds: num(row[hNorm.findIndex(h => h === "carry deviation distance")]),
-        TotalDeviationDistance_yds: num(row[hNorm.findIndex(h => h === "total deviation distance")]),
-        TotalDistance_yds:  num(row[hNorm.findIndex(h => h === "total distance")]),
-        Backspin_rpm:       num(row[hNorm.findIndex(h => h === "backspin")]),
-        Sidespin_rpm:       num(row[hNorm.findIndex(h => h === "sidespin")]),
-        SpinRate_rpm:       num(row[hNorm.findIndex(h => h === "spin rate")]),
-        SpinRateType:       ((): string | undefined => {
-          const i = hNorm.findIndex(h => h === "spin rate type");
-          const v = i >= 0 ? row[i] : undefined;
-          return v == null ? undefined : String(v);
-        })(),
-        SpinAxis_deg:       num(row[hNorm.findIndex(h => h === "spin axis")]),
+        ClubSpeed_mph:      num(row[idx("club speed")]),
+        AttackAngle_deg:    num(row[idx("attack angle")]),
+        ClubPath_deg:       num(row[idx("club path")]),
+        ClubFace_deg:       num(row[idx("club face")]),
+        FaceToPath_deg:     num(row[idx("face to path")]),
+        BallSpeed_mph:      num(row[idx("ball speed")]),
+        SmashFactor:        num(row[idx("smash factor")]),
+        LaunchAngle_deg:    num(row[idx("launch angle")]),
+        LaunchDirection_deg:num(row[idx("launch direction")]),
+        ApexHeight_yds:     num(row[idx("apex height")]),
+        CarryDistance_yds:  num(row[idx("carry distance")]),
+        CarryDeviationDistance_yds: num(row[idx("carry deviation distance")]),
+        TotalDeviationDistance_yds: num(row[idx("total deviation distance")]),
+        TotalDistance_yds:  num(row[idx("total distance")]),
+        Backspin_rpm:       num(row[idx("backspin")]),
+        Sidespin_rpm:       num(row[idx("sidespin")]),
+        SpinRate_rpm:       num(row[idx("spin rate")]),
+        SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
+        SpinAxis_deg:       num(row[idx("spin axis")]),
       };
 
       return applyDerived(s);
     });
-
-    return shotsLocal;
   }
 
-  function processWorkbook(wb: XLSX.WorkBook, _textFromCSV: string | null, filename: string) {
-    const firstSheet =
-      wb.SheetNames.find(n => {
-        const ws = wb.Sheets[n];
-        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-        return rr && rr.flat().some(v => v !== null && v !== "");
-      }) || wb.SheetNames[0];
+  function processWorkbook(wb: XLSX.WorkBook, filename: string) {
+    const valid = wb.SheetNames.find(n => {
+      const ws = wb.Sheets[n];
+      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+      return rr && rr.flat().some(v => v !== null && v !== "");
+    }) || wb.SheetNames[0];
 
-    const ws = wb.Sheets[firstSheet];
+    const ws = wb.Sheets[valid];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    if (!rows.length) {
-      toast({ type: "warn", text: `No rows detected in ${filename}` });
-      return;
-    }
+    if (!rows.length) { toast({ type: "warn", text: `No rows detected in ${filename}` }); return; }
 
-    // If the file is actually a CSV with a units line, allow for 2-line header by detecting a units row
     const header = rows[0].map((h) => String(h ?? ""));
     const second = rows[1]?.map((h) => String(h ?? "")) ?? [];
     const hasUnitsRow = second.length && second.some(s => /\b(mph|rpm|yds|deg)\b/i.test(s));
@@ -214,37 +168,14 @@ export default function App() {
     mergeImportedShots(newShots, filename);
   }
 
-  /* =========================
-     Export (CSV aligned to Shot)
-  ========================= */
-  function exportShotsCSV() {
-    exportCSV(shots);
-  }
-
-  /* =========================
-     Filters state
-  ========================= */
-  const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
-  const [sessionFilter, setSessionFilter] = useState<string>("ALL");
-  const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [carryMin, setCarryMin] = useState<string>("");
-  const [carryMax, setCarryMax] = useState<string>("");
-
-  /* =========================
-     Actions
-  ========================= */
   function onImportFile(file: File) {
     (async () => {
       try {
         const buffer = await file.arrayBuffer();
-        // First attempt: parse as workbook (handles XLSX, XLS, CSV too)
         const wb = XLSX.read(buffer, { type: "array" });
-        processWorkbook(wb, null, file.name);
+        processWorkbook(wb, file.name);
       } catch (wbErr) {
         try {
-          // Fallback: read CSV as text and run through CSV helpers
           const text = await file.text();
           const parsed = parseWeirdLaunchCSV(text);
           if (parsed) {
@@ -262,7 +193,6 @@ export default function App() {
   }
 
   function onLoadSample() {
-    // Simple synthetic dataset across two sessions/clubs
     const sample: Shot[] = [
       { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
         ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
@@ -283,32 +213,32 @@ export default function App() {
     mergeImportedShots(sample, "Sample Data");
   }
 
+  function exportShotsCSV() { exportCSV(shots); }
   function onPrintClubAverages() { window.print(); }
-
-  // Delete helpers
   function onDeleteSession() {
-    const sel = sessionFilter;
-    if (!shots.length || sel === "ALL") return;
-    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sel);
+    if (!shots.length || sessionFilter === "ALL") return;
+    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
     setShots(keep);
   }
-  function onDeleteAll() {
-    if (!shots.length) return;
-    setShots([]);
-  }
+  function onDeleteAll() { if (!shots.length) return; setShots([]); }
+
+  /* =========================
+     Filters state
+  ========================= */
+  const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
+  const [sessionFilter, setSessionFilter] = useState<string>("ALL");
+  const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [carryMin, setCarryMin] = useState<string>("");
+  const [carryMax, setCarryMax] = useState<string>("");
 
   /* =========================
      Filtering
   ========================= */
   const filteredBase = useMemo(() => {
-    const inClubs = (s: Shot) => {
-      if (!selectedClubs.length) return true;
-      return selectedClubs.includes(s.Club);
-    };
-    const inSession = (s: Shot) => {
-      if (sessionFilter === "ALL") return true;
-      return (s.SessionId ?? "Unknown Session") === sessionFilter;
-    };
+    const inClubs = (s: Shot) => !selectedClubs.length || selectedClubs.includes(s.Club);
+    const inSession = (s: Shot) => sessionFilter === "ALL" || (s.SessionId ?? "Unknown Session") === sessionFilter;
 
     const carryMinNum = carryMin ? Number(carryMin) : undefined;
     const carryMaxNum = carryMax ? Number(carryMax) : undefined;
@@ -324,7 +254,6 @@ export default function App() {
         const to = new Date(dateTo);
         try { if (new Date(s.Timestamp || "") > to) return false; } catch {}
       }
-
       if (Number.isFinite(s.CarryDistance_yds)) {
         if (carryMinNum != null && (s.CarryDistance_yds ?? 0) < carryMinNum) return false;
         if (carryMaxNum != null && (s.CarryDistance_yds ?? 0) > carryMaxNum) return false;
@@ -335,8 +264,7 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    // Placeholder for future robust trimming (IQR, per-club)
-    return filteredBase;
+    return filteredBase; // hook up IQR trimming later
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
@@ -347,16 +275,8 @@ export default function App() {
   const kpis = useMemo(() => {
     const vals = (key: keyof Shot) => filteredOutliers.map(s => s[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
     const kpi = (arr: number[]) => ({ mean: arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0, n: arr.length, std: arr.length ? Math.sqrt(arr.reduce((a,b)=>a+(b-(arr.reduce((a,c)=>a+c,0)/arr.length))**2,0)/arr.length) : 0 });
-    return {
-      carry: kpi(vals("CarryDistance_yds")),
-      ball:  kpi(vals("BallSpeed_mph")),
-      club:  kpi(vals("ClubSpeed_mph")),
-      smash: kpi(vals("SmashFactor")),
-    };
+    return { carry: kpi(vals("CarryDistance_yds")), ball:  kpi(vals("BallSpeed_mph")), club:  kpi(vals("ClubSpeed_mph")), smash: kpi(vals("SmashFactor")) } as any;
   }, [filteredOutliers]);
-
-  const filteredNoClubRaw = filteredBase;
-  const filteredNoClubOutliers = filteredOutliers;
 
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
@@ -372,25 +292,37 @@ export default function App() {
         const xs = arr.map(r => r[key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
         return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
       };
-      rows.push({
-        club, count: arr.length,
-        avgCarry: avg("CarryDistance_yds"),
-        avgTotal: avg("TotalDistance_yds"),
-        avgSmash: avg("SmashFactor"),
-        avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"),
-        avgCS: avg("ClubSpeed_mph"),
-        avgBS: avg("BallSpeed_mph"),
-        avgLA: avg("LaunchAngle_deg"),
-        avgF2P: avg("FaceToPath_deg"),
-      } as any);
+      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"), avgSmash: avg("SmashFactor"), avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"), avgCS: avg("ClubSpeed_mph"), avgBS: avg("BallSpeed_mph"), avgLA: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
     });
     return rows;
   }, [filteredOutliers]);
 
-  // Drag handlers (no-op placeholders to satisfy props; your Dashboard/Insights read them for ordering if needed)
+  // Drag handlers for card ordering
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
+    try {
+      const raw = localStorage.getItem("launch-tracker:card-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
+      return DEFAULT;
+    } catch { return DEFAULT; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
+
+  const INSIGHTS_DEFAULT = ["dist", "high", "records", "gaps", "progress"];
+  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("launch-tracker:insights-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
+      return INSIGHTS_DEFAULT;
+    } catch { return INSIGHTS_DEFAULT; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+
   const onDragStart = (key: string) => (e: React.DragEvent) => { e.dataTransfer.setData("text/plain", key); };
-  const onDragOver = (_key: string) => (e: React.DragEvent) => { e.preventDefault(); };
-  const onDrop = (targetKey: string) => (e: React.DragEvent) => {
+  const onDragOver  = (_key: string) => (e: React.DragEvent) => { e.preventDefault(); };
+  const onDrop      = (targetKey: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const sourceKey = e.dataTransfer.getData("text/plain");
     if (!sourceKey || sourceKey === targetKey) return;
@@ -405,9 +337,18 @@ export default function App() {
     });
   };
 
+  /* =========================
+     Journal
+  ========================= */
+  const journalRef = useRef<HTMLDivElement>(null);
+  const [journalHTML, setJournalHTML] = useState<string>(() => {
+    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
+  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
 
   /* =========================
-     Layout helpers
+     Layout
   ========================= */
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
@@ -422,64 +363,6 @@ export default function App() {
     return () => ro.disconnect();
   }, [filtersRef.current, shots, selectedClubs, sessionFilter, excludeOutliers, carryMin, carryMax, dateFrom, dateTo]);
 
-  // Card order
-  const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
-    try {
-      const raw = localStorage.getItem("launch-tracker:card-order");
-      const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
-      return DEFAULT;
-    } catch { return DEFAULT; }
-  });
-  useEffect(() => { if (!cardOrder.length) { setCardOrder(["kpis", "shape", "dispersion", "gap", "eff", "table"]); } }, []);
-  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
-
-  // Insights order
-  const INSIGHTS_DEFAULT = ["dist", "high", "records", "gaps", "progress"];
-  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem("launch-tracker:insights-order");
-      const saved = raw ? JSON.parse(raw) : null;
-      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
-      return INSIGHTS_DEFAULT;
-    } catch { return INSIGHTS_DEFAULT; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
-
-  
-  /* =========================
-     Journal state
-  ========================= */
-  const journalRef = useRef<HTMLDivElement>(null);
-  const [journalHTML, setJournalHTML] = useState<string>(() => {
-    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
-
-  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
-
-/* =========================
-     Handlers wired to Filters
-  ========================= */
-  const onExportCSV = () => exportShotsCSV();
-
-  /* =========================
-     Toasts
-  ========================= */
-  const { msgs, push: toast, remove: removeToast } = useToasts();
-  useEffect(() => {
-    if (!msgs.length) return;
-    const last = msgs[msgs.length - 1];
-    const id = last.id || Date.now();
-    last.id = id;
-    const t = setTimeout(() => removeToast(id), 3500);
-    return () => clearTimeout(t);
-  }, [msgs]);
-
-  /* =========================
-     Render
-  ========================= */
   const T = theme;
 
   return (
@@ -488,11 +371,13 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="text-lg font-semibold">Launch Tracker</div>
           <div className="flex items-center gap-2">
+            {/* Tabs in header (desktop) */}
             <div className="hidden md:flex items-center gap-2">
               <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
               <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
               <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
             </div>
+            {/* Theme toggle */}
             <button
               className="px-2 py-1 rounded-md border text-xs"
               style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
@@ -505,8 +390,17 @@ export default function App() {
         </div>
       </header>
 
-      {/* Tabs removed from body; now in header */}
-<div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
+      {/* Mobile tabs row */}
+      <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
+          <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
           {/* Left rail */}
           <div ref={filtersRef}>
             <FiltersPanel
@@ -531,7 +425,7 @@ export default function App() {
               carryBounds={carryBounds}
               onImportFile={onImportFile}
               onLoadSample={onLoadSample}
-              onExportCSV={onExportCSV}
+              onExportCSV={exportShotsCSV}
               onPrintClubAverages={onPrintClubAverages}
               onDeleteSession={onDeleteSession}
               onDeleteAll={onDeleteAll}
@@ -544,7 +438,7 @@ export default function App() {
               <DashboardCards
                 theme={T}
                 cardOrder={cardOrder}
-                setCardOrder={(v)=>setCardOrder(v)}
+                setCardOrder={setCardOrder}
                 onDragStart={onDragStart}
                 onDragOver={onDragOver}
                 onDrop={onDrop}
