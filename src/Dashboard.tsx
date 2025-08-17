@@ -86,7 +86,7 @@ function ShotShapeCard({ theme, shots }: { theme: Theme; shots: Shot[] }) {
   );
 }
 
-/* ---------- Dispersion (legend outside) ---------- */
+/* ---------- Dispersion (driving-range style) ---------- */
 
 function RangeDispersion({ theme, shots, clubs }:{
   theme: Theme; shots: Shot[]; clubs: string[];
@@ -94,6 +94,7 @@ function RangeDispersion({ theme, shots, clubs }:{
   const T = theme;
   if (!shots.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
+  // Lateral deviation (yds): prefer CarryDeviationDistance_yds, otherwise estimate from LaunchDirection and Carry
   const lateralDev = (s: Shot): number | undefined => {
     if (s.CarryDeviationDistance_yds !== undefined) return s.CarryDeviationDistance_yds;
     if (s.LaunchDirection_deg !== undefined && s.CarryDistance_yds !== undefined) {
@@ -102,48 +103,75 @@ function RangeDispersion({ theme, shots, clubs }:{
     return undefined;
   };
 
+  // Map points as driving-range top-down:
+  //   x = lateral left/right (yds)
+  //   y = carry distance (yds)
   const pts = shots.map(s => {
-    const x = s.CarryDistance_yds;
-    const y = lateralDev(s);
+    const x = lateralDev(s);
+    const y = s.CarryDistance_yds;
     return (x == null || y == null) ? null : { x, y, club: s.Club };
   }).filter(Boolean) as { x: number; y: number; club: string }[];
 
   if (!pts.length) return <div className="h-40 grid place-items-center" style={{ color: T.textDim }}>No data</div>;
 
-  const xMin = Math.floor(Math.min(...pts.map(p => p.x))) - 5;
-  const xMax = Math.ceil(Math.max(...pts.map(p => p.x))) + 5;
-  const yMin = Math.floor(Math.min(...pts.map(p => p.y))) - 5;
-  const yMax = Math.ceil(Math.max(...pts.map(p => p.y))) + 5;
+  // symmetric lateral domain around 0 for a centered range look
+  const maxAbsLat = Math.max(...pts.map(p => Math.abs(p.x)));
+  const xMin = -Math.ceil(maxAbsLat + 5);
+  const xMax =  Math.ceil(maxAbsLat + 5);
 
-  // build series by club (only for clubs present in filtered shots)
+  const yMax = Math.ceil(Math.max(...pts.map(p => p.y)) + 5);
+  const yMin = 0; // tee line at 0
+
+  // group series by club
   const byClub = new Map<string, { x: number; y: number }[]>();
   pts.forEach(p => {
     if (!byClub.has(p.club)) byClub.set(p.club, []);
     byClub.get(p.club)!.push({ x: p.x, y: p.y });
   });
-
   const presentClubs = clubs.filter(c => byClub.has(c));
+
+  // Distance flags every N yards up to yMax
+  const FLAG_STEP = 50;
+  const flags: number[] = [];
+  for (let d = FLAG_STEP; d <= yMax; d += FLAG_STEP) flags.push(d);
 
   return (
     <div>
-      <div className="w-full" style={{ height: 320 }}>
+      <div className="w-full" style={{ height: 360 }}>
         <ResponsiveContainer>
-          <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-            <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.2)} />
+          <ScatterChart margin={{ top: 10, right: 14, bottom: 24, left: 14 }}>
+            <CartesianGrid stroke={rgbaFromHex(T.textDim, 0.18)} />
             <XAxis
               type="number"
               dataKey="x"
               domain={[xMin, xMax]}
               tick={{ fill: T.text }}
-              label={{ value: "Carry (yds)", position: "insideBottom", dy: 10, fill: T.text }}
+              label={{ value: "Lateral deviation (yds)", position: "insideBottom", dy: 12, fill: T.text }}
             />
             <YAxis
               type="number"
               dataKey="y"
               domain={[yMin, yMax]}
               tick={{ fill: T.text }}
-              label={{ value: "Lateral deviation (yds)", angle: -90, position: "insideLeft", fill: T.text }}
+              label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.text }}
             />
+
+            {/* Centerline (target line) at x=0 */}
+            <ReferenceLine x={0} stroke={rgbaFromHex(T.text, 0.6)} strokeWidth={2} />
+
+            {/* Distance flags (horizontal dashed lines) */}
+            {flags.map(d => (
+              <ReferenceLine
+                key={`flag-${d}`}
+                y={d}
+                stroke={rgbaFromHex(T.textDim, 0.35)}
+                strokeDasharray="6 6"
+              >
+                <Label value={`${d} yds`} position="right" offset={6} fill={T.text} />
+              </ReferenceLine>
+            ))}
+
+            {/* Points per club */}
             {presentClubs.map((club) => (
               <Scatter
                 key={club}
@@ -152,9 +180,12 @@ function RangeDispersion({ theme, shots, clubs }:{
                 fill={rgbaFromHex(colorForClub(club), 0.9)}
               />
             ))}
+
+            <Tooltip />
           </ScatterChart>
         </ResponsiveContainer>
       </div>
+
       {/* Legend outside chart */}
       <div className="flex flex-wrap gap-3 mt-3">
         {presentClubs.map((club) => (
@@ -204,7 +235,7 @@ function GapChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   );
 }
 
-/* ---------- Efficiency + Smash trendline (now per-club colors) ---------- */
+/* ---------- Efficiency + Smash trendline (per-club colors) ---------- */
 
 function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
   const T = theme;
@@ -260,7 +291,7 @@ function EfficiencyChart({ theme, shots }:{ theme: Theme; shots: Shot[] }) {
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      {/* optional legend below for clarity */}
+      {/* legend below */}
       <div className="flex flex-wrap gap-3 mt-3">
         {presentClubs.map((club) => (
           <div key={club} className="flex items-center gap-2">
@@ -394,7 +425,7 @@ export default function DashboardCards(props: Props) {
       render: () => <ShotShapeCard theme={T} shots={filteredOutliers} />
     },
     dispersion: {
-      title: "Range Dispersion (Carry vs Lateral)",
+      title: "Range Dispersion (Top-Down: Lateral vs Carry)",
       render: () => <RangeDispersion theme={T} shots={filteredOutliers} clubs={clubs} />
     },
     gap: {
@@ -425,6 +456,7 @@ export default function DashboardCards(props: Props) {
             onDragOver={onDragOver(key)}
             onDrop={onDrop(key)}
             style={{ cursor: "grab" }}
+            title="Drag to reorder"
           >
             <Card theme={T} title={card.title} dragHandle>{card.render()}</Card>
           </div>
