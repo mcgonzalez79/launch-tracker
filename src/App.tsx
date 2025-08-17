@@ -171,9 +171,8 @@ export default function App() {
     // numbers (ensure number type with `num`)
     ClubSpeed_mph:      num(get(r, ["club speed"])),
     AttackAngle_deg:    num(get(r, ["attack angle"])),
-   ClubPath_deg:       num(get(r, ["club path"])),
-ClubFace_deg:       num(get(r, ["club face"])),
-
+    ClubPath_deg:       num(get(r, ["club path"])),
+    ClubFace_deg:       num(get(r, ["club face"])),
     FaceToPath_deg:     num(get(r, ["face to path"])),
     BallSpeed_mph:      num(get(r, ["ball speed"])),
     SmashFactor:        num(get(r, ["smash factor"])),
@@ -183,8 +182,7 @@ ClubFace_deg:       num(get(r, ["club face"])),
     CarryDistance_yds:  num(get(r, ["carry distance"])),
     // Treat lateral miss at carry as offline
     CarryDeviationDistance_yds: num(get(r, ["carry deviation distance"])),
-TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
-
+    TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
     TotalDistance_yds:  num(get(r, ["total distance"])),
     LaunchDirection_deg: num(get(r, ["launch direction"])),
 
