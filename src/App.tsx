@@ -17,8 +17,8 @@ import {
 ========================= */
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const push = (text: string) => setMsgs((m) => [...m, { id: Math.random().toString(36).slice(2), text }]);
-  const remove = (id: string) => setMsgs((m) => m.filter(x => x.id !== id));
+  const push = (text: string) => setMsgs((m) => [...m, { id: Date.now(), text } as Msg]);
+  const remove = (id: number) => setMsgs((m) => m.filter(x => x.id !== id));
   return { msgs, push, remove };
 }
 
@@ -99,8 +99,9 @@ export default function App() {
     try {
       if (ext === "csv") {
         const text = await file.text();
-        const rows = parseWeirdLaunchCSV(text);
-        const shots = weirdRowsToShots(rows).map(applyDerived);
+        const parsed = parseWeirdLaunchCSV(text);
+        if (!parsed) { toast("CSV format not recognized (no club column?)"); return; }
+        const shots = weirdRowsToShots(parsed.header, parsed.dataRows, "Imported").map(applyDerived);
         mergeImportedShots(shots, file.name);
         return;
       }
@@ -207,7 +208,7 @@ export default function App() {
       clubSpeed: s.ClubSpeed_mph,
       smash: s.SmashFactor,
     }));
-    exportCSV(rows, "launch-tracker-shots.csv");
+    exportCSV(rows);
   }
 
   // Mobile drawer state
@@ -237,17 +238,19 @@ export default function App() {
       }
       // Discover columns present on first row
       const first = rows[0] || {};
-      const colDefs: { key: string; label: string; align?: "left" | "right" }[] = [
-        { key: "club",      label: "Club", align: "left" },
-        { key: "count",     label: "Shots" },
-        { key: "avgCarry",  label: "Avg Carry (yds)" },
-        { key: "avgTotal",  label: "Avg Total (yds)" },
-        { key: "avgBall",   label: "Avg Ball (mph)" },
-        { key: "avgClub",   label: "Avg Club (mph)" },
-        { key: "avgSmash",  label: "Smash" },
-        { key: "avgLaunch", label: "Launch (°)" },
-        { key: "avgF2P",    label: "Face-to-Path (°)" },
-      ].filter(c => c.key in first);
+      const colDefs: { key: string; label: string; align?: "left" | "right" }[] = (
+        [
+          { key: "club",      label: "Club", align: "left" as const },
+          { key: "count",     label: "Shots" },
+          { key: "avgCarry",  label: "Avg Carry (yds)" },
+          { key: "avgTotal",  label: "Avg Total (yds)" },
+          { key: "avgBall",   label: "Avg Ball (mph)" },
+          { key: "avgClub",   label: "Avg Club (mph)" },
+          { key: "avgSmash",  label: "Smash" },
+          { key: "avgLaunch", label: "Launch (°)" },
+          { key: "avgF2P",    label: "Face-to-Path (°)" },
+        ] as const
+      ).filter(c => c.key in first) as { key: string; label: string; align?: "left" | "right" }[];
 
       const fmt = (k: string, v: any) => {
         if (v == null || v === "") return "";
@@ -542,7 +545,7 @@ export default function App() {
               <DashboardCards
                 theme={theme}
                 cardOrder={cardOrder}
-                setCardOrder={setCardOrder}
+                setCardOrder={(arr: string[]) => setCardOrder(arr)}
                 onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
                 onDragOver={(_key) => (e) => e.preventDefault()}
                 onDrop={(targetKey) => (e) => {
@@ -559,6 +562,10 @@ export default function App() {
                     return cur;
                   });
                 }}
+                hasData={hasData}
+                kpis={kpis}
+                filteredOutliers={filteredOutliers}
+                filtered={filteredBase}
                 shots={shots}
                 tableRows={tableRows as any}
                 clubs={clubs}
