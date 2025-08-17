@@ -157,76 +157,88 @@ export default function App() {
     }
   }
 
-  function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    const valid = wb.SheetNames.find((name) => {
-      const ws = wb.Sheets[name];
-      if (!ws) return false; // guard: sheet might not exist
-      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-      return rr && rr.length > 0 && rr[0] && rr[0].length > 3;
-    });
-    if (!valid) {
-      toast(`No data in ${filename}`);
-      return;
-    }
-    const ws = wb.Sheets[valid];
-    if (!ws) {
-      toast(`Unable to read sheet in ${filename}`);
-      return;
-    }
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    const header = (rows[0] || []).map((x) => String(x ?? ""));
-    const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
-    const data = rows.slice(1);
+ function processWorkbook(wb: XLSX.WorkBook, filename: string) {
+  // Find a sheet that actually has a row/cols shape we can read
+  const sheetName: string | null =
+    (wb.SheetNames || []).find((n) => {
+      const ws = wb.Sheets?.[n];
+      if (!ws) return false;
+      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+      return Array.isArray(rr) && rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
+    }) ?? null;
 
-    const numOrUndef = (v: any) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : undefined;
+  if (!sheetName) {
+    toast(`No data in ${filename}`);
+    return;
+  }
+
+  const ws = wb.Sheets?.[sheetName];
+  if (!ws) {
+    toast(`Unable to read sheet in ${filename}`);
+    return;
+  }
+
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+  const headerRow: any[] = Array.isArray(rows) && rows.length ? rows[0] as any[] : [];
+  const header = headerRow.map((x) => String(x ?? ""));
+
+  const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
+
+  const data = Array.isArray(rows) && rows.length > 1 ? rows.slice(1) : [];
+
+  const numOrUndef = (v: any) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
+  const shots2: Shot[] = data.map((row) => {
+    const safe = Array.isArray(row) ? row : [];
+
+    const s: Shot = {
+      SessionId: (safe[idx("session")] ?? undefined) as any,
+      Timestamp: (() => {
+        const i = idx("timestamp");
+        const v = i >= 0 ? safe[i] : undefined;
+        if (v instanceof Date) return v.toISOString();
+        try {
+          const d = new Date(v as any);
+          return isNaN(d as any) ? undefined : d.toISOString();
+        } catch {
+          return undefined;
+        }
+      })(),
+      Club: (safe[idx("club")] ?? undefined) as any,
+      ClubSpeed_mph: numOrUndef(safe[idx("club speed")]),
+      AttackAngle_deg: numOrUndef(safe[idx("attack angle")]),
+      ClubPath_deg: numOrUndef(safe[idx("club path")]),
+      ClubFace_deg: numOrUndef(safe[idx("club face")]),
+      FaceToPath_deg: numOrUndef(safe[idx("face to path")]),
+      BallSpeed_mph: numOrUndef(safe[idx("ball speed")]),
+      SmashFactor: numOrUndef(safe[idx("smash factor")]),
+      LaunchAngle_deg: numOrUndef(safe[idx("launch angle")]),
+      LaunchDirection_deg: numOrUndef(safe[idx("launch direction")]),
+      ApexHeight_yds: numOrUndef(safe[idx("apex height")]),
+      CarryDistance_yds: numOrUndef(safe[idx("carry distance")]),
+      CarryDeviationDistance_yds: numOrUndef(safe[idx("carry deviation distance")]),
+      TotalDeviationDistance_yds: numOrUndef(safe[idx("total deviation distance")]),
+      TotalDistance_yds: numOrUndef(safe[idx("total distance")]),
+      Backspin_rpm: numOrUndef(safe[idx("backspin")]),
+      Sidespin_rpm: numOrUndef(safe[idx("sidespin")]),
+      SpinRate_rpm: numOrUndef(safe[idx("spin rate")]),
+      SpinRateType: (() => {
+        const i = idx("spin rate type");
+        const v = i >= 0 ? safe[i] : undefined;
+        return v == null ? undefined : String(v);
+      })(),
+      SpinAxis_deg: numOrUndef(safe[idx("spin axis")]),
     };
 
-    const shots2: Shot[] = data.map((row) => {
-      const s: Shot = {
-        SessionId: (row[idx("session")] ?? undefined) as any,
-        Timestamp: (() => {
-          const v = row[idx("timestamp")];
-          if (v instanceof Date) return v.toISOString();
-          try {
-            const d = new Date(v);
-            return isNaN(d as any) ? undefined : d.toISOString();
-          } catch {
-            return undefined;
-          }
-        })(),
-        Club: (row[idx("club")] ?? undefined) as any,
-        ClubSpeed_mph: numOrUndef(row[idx("club speed")]),
-        AttackAngle_deg: numOrUndef(row[idx("attack angle")]),
-        ClubPath_deg: numOrUndef(row[idx("club path")]),
-        ClubFace_deg: numOrUndef(row[idx("club face")]),
-        FaceToPath_deg: numOrUndef(row[idx("face to path")]),
-        BallSpeed_mph: numOrUndef(row[idx("ball speed")]),
-        SmashFactor: numOrUndef(row[idx("smash factor")]),
-        LaunchAngle_deg: numOrUndef(row[idx("launch angle")]),
-        LaunchDirection_deg: numOrUndef(row[idx("launch direction")]),
-        ApexHeight_yds: numOrUndef(row[idx("apex height")]),
-        CarryDistance_yds: numOrUndef(row[idx("carry distance")]),
-        CarryDeviationDistance_yds: numOrUndef(row[idx("carry deviation distance")]),
-        TotalDeviationDistance_yds: numOrUndef(row[idx("total deviation distance")]),
-        TotalDistance_yds: numOrUndef(row[idx("total distance")]),
-        Backspin_rpm: numOrUndef(row[idx("backspin")]),
-        Sidespin_rpm: numOrUndef(row[idx("sidespin")]),
-        SpinRate_rpm: numOrUndef(row[idx("spin rate")]),
-        SpinRateType: (() => {
-          const i = idx("spin rate type");
-          const v = i >= 0 ? row[i] : undefined;
-          return v == null ? undefined : String(v);
-        })(),
-        SpinAxis_deg: numOrUndef(row[idx("spin axis")]),
-      };
+    return applyDerived(s);
+  });
 
-      return applyDerived(s);
-    });
+  mergeImportedShots(shots2, filename);
+}
 
-    mergeImportedShots(shots2, filename);
-  }
 
   function onLoadSample() {
     // minimal sample generator for demo
