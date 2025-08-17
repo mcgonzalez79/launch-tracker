@@ -182,7 +182,9 @@ ClubFace_deg:       num(get(r, ["club face"])),
     ApexHeight_yds:     num(get(r, ["apex height"])),
     CarryDistance_yds:  num(get(r, ["carry distance"])),
     // Treat lateral miss at carry as offline
-    Offline_yds:        num(get(r, ["carry deviation distance"])),
+    CarryDeviationDistance_yds: num(get(r, ["carry deviation distance"])),
+TotalDeviationDistance_yds: num(get(r, ["total deviation distance"])),
+
     TotalDistance_yds:  num(get(r, ["total distance"])),
     LaunchDirection_deg: num(get(r, ["launch direction"])),
 
