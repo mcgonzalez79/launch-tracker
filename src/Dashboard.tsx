@@ -8,7 +8,7 @@ import {
   BarChart, Bar,
   Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ReferenceLine
+  ReferenceLine, Cell
 } from "recharts";
 
 /* =========================
@@ -65,6 +65,19 @@ export default function DashboardCards(props: Props) {
     tableRows,
     clubs,
   } = props;
+
+  /* ---------- Club color palette ---------- */
+  const CLUB_PALETTE = [
+    "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
+    "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ab",
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+  ];
+  const clubColor = useMemo(() => {
+    const m = new Map<string, string>();
+    clubs.forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
+    return m;
+  }, [clubs]);
 
   /* ---------- KPIs ---------- */
   const avgTotalDistance = useMemo(() => {
@@ -185,7 +198,9 @@ export default function DashboardCards(props: Props) {
                     return [val, name];
                   }}
                 />
-                <Scatter name="Shots" data={dispersionData} fill={T.accent} />
+                <Scatter name="Shots" data={dispersionData}>
+                  {dispersionData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
+                </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -226,7 +241,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry" />
+                <Bar dataKey="carry">{gapData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.club)||"#8884d8"} />))}</Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -288,7 +303,9 @@ export default function DashboardCards(props: Props) {
                   }}
                 />
                 <Legend wrapperStyle={{ color: T.text }} />
-                <Scatter name="Shots" data={efficiencyData} fill={T.accent} />
+                <Scatter name="Shots" data={efficiencyData}>
+                {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
+                </Scatter>
                 <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
