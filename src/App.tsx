@@ -16,10 +16,8 @@ import {
 ========================= */
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const push = (text: string) =>
-    setMsgs((m) => [...m, { id: Date.now(), text } as Msg]);
-  const remove = (id: number) =>
-    setMsgs((m) => m.filter((x) => x.id !== id));
+  const push = (text: string) => setMsgs((m) => [...m, { id: Date.now(), text } as Msg]);
+  const remove = (id: number) => setMsgs((m) => m.filter((x) => x.id !== id));
   return { msgs, push, remove };
 }
 
@@ -157,88 +155,87 @@ export default function App() {
     }
   }
 
- function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-  // Find a sheet that actually has a row/cols shape we can read
-  const sheetName: string | null =
-    (wb.SheetNames || []).find((n) => {
-      const ws = wb.Sheets?.[n];
-      if (!ws) return false;
-      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
-      return Array.isArray(rr) && rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
-    }) ?? null;
+  function processWorkbook(wb: XLSX.WorkBook, filename: string) {
+    // Find a sheet that has a row/cols shape we can read
+    const sheetName: string | null =
+      (wb.SheetNames || []).find((n) => {
+        const ws = wb.Sheets?.[n];
+        if (!ws) return false;
+        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+        return Array.isArray(rr) && rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
+      }) ?? null;
 
-  if (!sheetName) {
-    toast(`No data in ${filename}`);
-    return;
-  }
+    if (!sheetName) {
+      toast(`No data in ${filename}`);
+      return;
+    }
 
-  const ws = wb.Sheets?.[sheetName];
-  if (!ws) {
-    toast(`Unable to read sheet in ${filename}`);
-    return;
-  }
+    const ws = wb.Sheets?.[sheetName];
+    if (!ws) {
+      toast(`Unable to read sheet in ${filename}`);
+      return;
+    }
 
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
-  const headerRow: any[] = Array.isArray(rows) && rows.length ? rows[0] as any[] : [];
-  const header = headerRow.map((x) => String(x ?? ""));
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+    const headerRow: any[] = Array.isArray(rows) && rows.length ? (rows[0] as any[]) : [];
+    const header = headerRow.map((x) => String(x ?? ""));
 
-  const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
+    const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
 
-  const data = Array.isArray(rows) && rows.length > 1 ? rows.slice(1) : [];
+    const data = Array.isArray(rows) && rows.length > 1 ? rows.slice(1) : [];
 
-  const numOrUndef = (v: any) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
-
-  const shots2: Shot[] = data.map((row) => {
-    const safe = Array.isArray(row) ? row : [];
-
-    const s: Shot = {
-      SessionId: (safe[idx("session")] ?? undefined) as any,
-      Timestamp: (() => {
-        const i = idx("timestamp");
-        const v = i >= 0 ? safe[i] : undefined;
-        if (v instanceof Date) return v.toISOString();
-        try {
-          const d = new Date(v as any);
-          return isNaN(d as any) ? undefined : d.toISOString();
-        } catch {
-          return undefined;
-        }
-      })(),
-      Club: (safe[idx("club")] ?? undefined) as any,
-      ClubSpeed_mph: numOrUndef(safe[idx("club speed")]),
-      AttackAngle_deg: numOrUndef(safe[idx("attack angle")]),
-      ClubPath_deg: numOrUndef(safe[idx("club path")]),
-      ClubFace_deg: numOrUndef(safe[idx("club face")]),
-      FaceToPath_deg: numOrUndef(safe[idx("face to path")]),
-      BallSpeed_mph: numOrUndef(safe[idx("ball speed")]),
-      SmashFactor: numOrUndef(safe[idx("smash factor")]),
-      LaunchAngle_deg: numOrUndef(safe[idx("launch angle")]),
-      LaunchDirection_deg: numOrUndef(safe[idx("launch direction")]),
-      ApexHeight_yds: numOrUndef(safe[idx("apex height")]),
-      CarryDistance_yds: numOrUndef(safe[idx("carry distance")]),
-      CarryDeviationDistance_yds: numOrUndef(safe[idx("carry deviation distance")]),
-      TotalDeviationDistance_yds: numOrUndef(safe[idx("total deviation distance")]),
-      TotalDistance_yds: numOrUndef(safe[idx("total distance")]),
-      Backspin_rpm: numOrUndef(safe[idx("backspin")]),
-      Sidespin_rpm: numOrUndef(safe[idx("sidespin")]),
-      SpinRate_rpm: numOrUndef(safe[idx("spin rate")]),
-      SpinRateType: (() => {
-        const i = idx("spin rate type");
-        const v = i >= 0 ? safe[i] : undefined;
-        return v == null ? undefined : String(v);
-      })(),
-      SpinAxis_deg: numOrUndef(safe[idx("spin axis")]),
+    const numOrUndef = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
     };
 
-    return applyDerived(s);
-  });
+    const shots2: Shot[] = data.map((row) => {
+      const safe = Array.isArray(row) ? row : [];
 
-  mergeImportedShots(shots2, filename);
-}
+      const s: Shot = {
+        SessionId: (safe[idx("session")] ?? undefined) as any,
+        Timestamp: (() => {
+          const i = idx("timestamp");
+          const v = i >= 0 ? safe[i] : undefined;
+          if (v instanceof Date) return v.toISOString();
+          try {
+            const d = new Date(v as any);
+            return isNaN(d as any) ? undefined : d.toISOString();
+          } catch {
+            return undefined;
+          }
+        })(),
+        Club: (safe[idx("club")] ?? undefined) as any,
+        ClubSpeed_mph: numOrUndef(safe[idx("club speed")]),
+        AttackAngle_deg: numOrUndef(safe[idx("attack angle")]),
+        ClubPath_deg: numOrUndef(safe[idx("club path")]),
+        ClubFace_deg: numOrUndef(safe[idx("club face")]),
+        FaceToPath_deg: numOrUndef(safe[idx("face to path")]),
+        BallSpeed_mph: numOrUndef(safe[idx("ball speed")]),
+        SmashFactor: numOrUndef(safe[idx("smash factor")]),
+        LaunchAngle_deg: numOrUndef(safe[idx("launch angle")]),
+        LaunchDirection_deg: numOrUndef(safe[idx("launch direction")]),
+        ApexHeight_yds: numOrUndef(safe[idx("apex height")]),
+        CarryDistance_yds: numOrUndef(safe[idx("carry distance")]),
+        CarryDeviationDistance_yds: numOrUndef(safe[idx("carry deviation distance")]),
+        TotalDeviationDistance_yds: numOrUndef(safe[idx("total deviation distance")]),
+        TotalDistance_yds: numOrUndef(safe[idx("total distance")]),
+        Backspin_rpm: numOrUndef(safe[idx("backspin")]),
+        Sidespin_rpm: numOrUndef(safe[idx("sidespin")]),
+        SpinRate_rpm: numOrUndef(safe[idx("spin rate")]),
+        SpinRateType: (() => {
+          const i = idx("spin rate type");
+          const v = i >= 0 ? safe[i] : undefined;
+          return v == null ? undefined : String(v);
+        })(),
+        SpinAxis_deg: numOrUndef(safe[idx("spin axis")]),
+      };
 
+      return applyDerived(s);
+    });
+
+    mergeImportedShots(shots2, filename);
+  }
 
   function onLoadSample() {
     // minimal sample generator for demo
@@ -528,20 +525,27 @@ export default function App() {
     } catch {}
   }, [insightsOrder]);
 
-  // Journal height measurement (match filters)
+  // Journal height measurement (match filters) — fully guarded
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
     const node = filtersRef.current;
     if (!node || typeof ResizeObserver === "undefined") return;
 
-    // seed once
-    const seed = node.getBoundingClientRect?.().height;
-    if (typeof seed === "number" && Number.isFinite(seed)) setFiltersHeight(seed);
+    // Seed once without optional chaining on rect
+    const rect = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+    if (rect && typeof rect.height === "number" && Number.isFinite(rect.height)) {
+      setFiltersHeight(rect.height);
+    }
 
+    // Observe safely
     const ro = new ResizeObserver((entries) => {
-      const h = entries?.[0]?.contentRect?.height;
-      if (typeof h === "number" && Number.isFinite(h)) setFiltersHeight(h);
+      const entry = entries && entries.length ? entries[0] : undefined;
+      const h = entry && entry.contentRect ? entry.contentRect.height : undefined;
+      if (typeof h === "number" && Number.isFinite(h)) {
+        setFiltersHeight(h);
+      }
     });
+
     ro.observe(node);
     return () => ro.disconnect();
   }, []);
