@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
+import { Card } from "./components/UI";
 import {
   ResponsiveContainer,
   LineChart, Line,
