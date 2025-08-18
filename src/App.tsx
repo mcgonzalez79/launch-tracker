@@ -170,13 +170,19 @@ export default function App() {
       return;
     }
 
-    const ws = wb.Sheets?.[sheetName];
+    const ws = wb.Sheets?.[sheetName] as XLSX.WorkSheet | undefined;
     if (!ws) {
       toast(`Unable to read sheet in ${filename}`);
       return;
     }
 
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+    // Non-null assertion after guard to satisfy TS
+    const rows = XLSX.utils.sheet_to_json(ws as XLSX.WorkSheet, {
+      header: 1,
+      defval: null,
+      raw: true,
+    }) as unknown as any[][];
+
     const headerRow: any[] = Array.isArray(rows) && rows.length ? (rows[0] as any[]) : [];
     const header = headerRow.map((x) => String(x ?? ""));
 
