@@ -514,6 +514,7 @@ export default function App() {
                 filteredNoClubOutliers={filteredOutliers}
                 filteredNoClubRaw={filteredBase}
                 allClubs={clubs}
+                allShots={shots}
                 insightsOrder={insightsOrder}
                 onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
                 onDragOver={(_key) => (e) => e.preventDefault()}
