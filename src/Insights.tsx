@@ -53,14 +53,6 @@ function stddev(nums: number[]) {
   const v = nums.reduce((a,b)=>a + (b-m)**2, 0) / nums.length;
   return Math.sqrt(v);
 }
-function quantile(sorted: number[], q: number) {
-  if (!sorted.length) return null;
-  const pos = (sorted.length - 1) * q;
-  const base = Math.floor(pos);
-  const rest = pos - base;
-  const next = sorted[base + 1];
-  return next !== undefined ? sorted[base] + rest * (next - sorted[base]) : sorted[base];
-}
 function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
   let best: T | null = null; let bestScore = -Infinity;
   for (const t of arr) {
@@ -149,6 +141,9 @@ export default function Insights({
     return Math.ceil((m + 5) / 10) * 10;
   }, [distRows]);
 
+  // Dynamic height so every club label is rendered clearly
+  const chartHeight = Math.max(220, distRows.length * 28);
+
   // Tooltip
   const DistTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -165,11 +160,25 @@ export default function Insights({
     );
   };
 
+  // Custom legend so the swatches exactly match the bar colors (brand & brand@0.45)
+  const DistLegend = () => (
+    <div className="flex gap-4 text-xs mt-1" style={{ color: T.textDim }}>
+      <div className="inline-flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded" style={{ background: T.brand }} />
+        Carry
+      </div>
+      <div className="inline-flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded" style={{ background: T.brand, opacity: 0.45 }} />
+        Roll
+      </div>
+    </div>
+  );
+
   const dist = (
     <div key="dist" draggable onDragStart={onDragStart("dist")} onDragOver={onDragOver("dist")} onDrop={onDrop("dist")}>
       <Card title="Distance (Avg) — Carry + Total (Stacked)" theme={T}>
         {distRows.length ? (
-          <div className="h-72">
+          <div style={{ height: chartHeight }}>
             <ResponsiveContainer>
               <BarChart
                 data={distRows}
@@ -179,13 +188,14 @@ export default function Insights({
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis type="number" domain={[0, xMax]} tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="club" width={90} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="club" width={100} tick={{ fontSize: 12 }} interval={0} />
                 <Tooltip content={<DistTooltip />} />
-                <Legend />
+                {/* Use custom legend so colors match bars exactly */}
+                <Legend content={<DistLegend />} />
 
                 {/* Stacked: Carry (brand), Roll (brand, lighter). Total = Carry + Roll */}
                 <Bar name="Carry" dataKey="avgCarry" stackId="dist" fill={T.brand} />
-                <Bar name="Roll"  dataKey="avgRoll"  stackId="dist" fill={T.brand} fillOpacity={0.4} />
+                <Bar name="Roll"  dataKey="avgRoll"  stackId="dist" fill={T.brand} fillOpacity={0.45} />
               </BarChart>
             </ResponsiveContainer>
           </div>
