@@ -35,11 +35,30 @@ type Props = {
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-function domainOf(vals: number[], pad = 0): [number, number] {
-  if (!vals.length) return [0, 0];
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  return [Math.floor(min - pad), Math.ceil(max + pad)];
+function domainPad([min, max]: [number, number], pct = 0.05) {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [min, max] as [number, number];
+  const span = max - min;
+  const pad = Math.max(1, span * pct);
+  return [Math.floor(min - pad), Math.ceil(max + pad)] as [number, number];
+}
+
+function safeMin(nums: number[]) {
+  return nums.length ? Math.min(...nums) : 0;
+}
+
+function safeMax(nums: number[]) {
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+function quantile(sorted: number[], q: number) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sorted[base + 1] !== undefined) {
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  }
+  return sorted[base];
 }
 
 function groupBy<T>(rows: T[], keyFn: (x: T) => string) {
@@ -70,60 +89,90 @@ function maxBy<T>(rows: T[], val: (x: T) => number | null) {
   return best;
 }
 
+// Lightweight KPI tile used in Highlights
+function KpiCell({
+  label,
+  value,
+  sub,
+  theme: T,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  theme: Theme;
+}) {
+  return (
+    <div className="rounded-xl p-4 border" style={{ background: T.panelAlt, borderColor: T.border }}>
+      <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
+      <div className="text-2xl font-semibold" style={{ color: T.text }}>{value}</div>
+      {sub ? <div className="text-xs mt-1" style={{ color: T.textDim }}>{sub}</div> : null}
+    </div>
+  );
+}
+
 /* =========================
    Component
 ========================= */
-export default function InsightsView(props: Props) {
-  const {
-    theme: T,
-    filteredOutliers,
-    filteredNoClubOutliers,
-    filteredNoClubRaw,
-    allClubs,
-    insightsOrder,
-    onDragStart, onDragOver, onDrop,
-  } = props;
+export default function Insights({
+  theme: T,
+  tableRows,
+  filteredOutliers,
+  filteredNoClubOutliers,
+  filteredNoClubRaw,
+  allClubs,
+  insightsOrder,
+  onDragStart,
+  onDragOver,
+  onDrop,
+}: Props) {
 
-  /* ---------- Distance Box (histogram of carry) ---------- */
-  const distanceBins = useMemo(() => {
-    const vals = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum);
-    if (!vals.length) return [];
-    // bin width = 5 yds
-    const w = 5;
-    const map = new Map<number, number>();
-    for (const v of vals) {
-      const b = Math.round(v / w) * w;
-      map.set(b, (map.get(b) ?? 0) + 1);
+  /* ---------- Distance Distribution (Box & Whisker) ---------- */
+  const distData = useMemo(() => {
+    const groups = groupBy(filteredOutliers.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    const out: { club: string; q1: number; q3: number; min: number; max: number }[] = [];
+    for (const [club, shots] of groups.entries()) {
+      const vals = shots.map(s => s.CarryDistance_yds as number).sort((a,b)=>a-b);
+      const q1 = quantile(vals, 0.25);
+      const q3 = quantile(vals, 0.75);
+      const min = vals.length ? vals[0] : 0;
+      const max = vals.length ? vals[vals.length - 1] : 0;
+      if (q1 != null && q3 != null) out.push({ club, q1, q3, min, max });
     }
-    const rows = Array.from(map.entries()).map(([bin, count]) => ({ bin, count }));
-    rows.sort((a, b) => a.bin - b.bin);
-    return rows;
+    // Sort by your master club order
+    const order = new Map(allClubs.map((c, i) => [c, i]));
+    out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return out;
+  }, [filteredOutliers, allClubs]);
+
+  const distDomain = useMemo(() => {
+    const vals = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+    if (!vals.length) return [0, 100] as [number, number];
+    return domainPad([safeMin(vals), safeMax(vals)] as [number, number]);
   }, [filteredOutliers]);
 
-  const distDomain = useMemo(() => domainOf(distanceBins.map(d => d.bin), 5), [distanceBins]);
-
-  const distanceBox = (
-    <div key="distanceBox" draggable onDragStart={onDragStart("distanceBox")} onDragOver={onDragOver("distanceBox")} onDrop={onDrop("distanceBox")}>
-      <Card title="Distance Distribution (Carry)" theme={T}>
-        {distanceBins.length ? (
-          <div style={{ height: 260 }}>
+  const distanceDistribution = (
+    <div key="distanceDistribution" draggable onDragStart={onDragStart("distanceDistribution")} onDragOver={onDragOver("distanceDistribution")} onDrop={onDrop("distanceDistribution")}>
+      <Card title="Distance Distribution" theme={T}>
+        {distData.length ? (
+          <div className="h-72">
             <ResponsiveContainer>
-              <BarChart data={distanceBins} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="bin"
-                  type="number"
-                  domain={distDomain as any}
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Carry (yds)", position: "insideBottom", offset: -2, fill: T.textDim, fontSize: 12 }}
-                />
-                <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(v: any, _n: string, p: any) => [`${v}`, `${p?.payload?.bin} yds`]}
-                />
-                <Bar dataKey="count" fill={T.brand} />
+              <BarChart data={distData} layout="vertical" margin={{ left: 12, right: 12, top: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" domain={distDomain as any} tick={{ fontSize: 12 }}>
+                  <Label value="Distance (yds)" position="insideBottom" dy={10} />
+                </XAxis>
+                <YAxis dataKey="club" type="category" width={80} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Legend verticalAlign="top" height={24} />
+                {/* Render Q1-Q3 as a bar (box), min/max as whiskers via ReferenceLine pairs */}
+                <Bar dataKey="q3" stackId="q" name="Q3" />
+                <Bar dataKey="q1" stackId="q" name="Q1" />
+                {distData.map((row, i) => (
+                  <ReferenceLine key={`min-${i}`} x={row.min} strokeDasharray="3 3" />
+                ))}
+                {distData.map((row, i) => (
+                  <ReferenceLine key={`max-${i}`} x={row.max} strokeDasharray="3 3" />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -132,50 +181,54 @@ export default function InsightsView(props: Props) {
     </div>
   );
 
-  /* ---------- Highlights (best ball speed & carry per club) ---------- */
-  const highlightsData = useMemo(() => {
-    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
-    const out: { club: string; bestCarry?: number; bestBall?: number }[] = [];
+  /* ---------- Highlights (PR Carry, PR Total, Most Consistent) ---------- */
+  const prCarryShot = useMemo(() => {
+    return maxBy(filteredNoClubRaw, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
+  }, [filteredNoClubRaw]);
+
+  const prTotalShot = useMemo(() => {
+    return maxBy(filteredNoClubRaw, s => isNum(s.TotalDistance_yds) ? s.TotalDistance_yds! : null);
+  }, [filteredNoClubRaw]);
+
+  const mostConsistent = useMemo(() => {
+    const MIN = 5;
+    const groups = groupBy(filteredNoClubRaw.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    let bestClub: string | null = null;
+    let bestSd = Infinity;
     for (const [club, shots] of groups.entries()) {
-      const bestCarry = maxBy(shots, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
-      const bestBall = maxBy(shots, s => isNum(s.BallSpeed_mph) ? s.BallSpeed_mph! : null);
-      out.push({
-        club,
-        bestCarry: bestCarry && isNum(bestCarry.CarryDistance_yds) ? bestCarry.CarryDistance_yds! : undefined,
-        bestBall: bestBall && isNum(bestBall.BallSpeed_mph) ? bestBall.BallSpeed_mph! : undefined,
-      });
+      if (shots.length < MIN) continue;
+      const carries = shots.map(s => s.CarryDistance_yds as number);
+      const m = carries.reduce((a,b)=>a+b, 0) / carries.length;
+      const variance = carries.reduce((a,b)=>a + (b - m) ** 2, 0) / carries.length;
+      const sd = Math.sqrt(variance);
+      if (sd < bestSd) { bestSd = sd; bestClub = club; }
     }
-    // order by your allClubs order
-    const order = new Map(allClubs.map((c, i) => [c, i]));
-    out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
-    return out;
-  }, [filteredOutliers, allClubs]);
+    return bestClub ? { club: bestClub, sd: bestSd } : null;
+  }, [filteredNoClubRaw]);
 
   const highlights = (
     <div key="highlights" draggable onDragStart={onDragStart("highlights")} onDragOver={onDragOver("highlights")} onDrop={onDrop("highlights")}>
-      <Card title="Highlights (Best per Club)" theme={T}>
-        {highlightsData.length ? (
-          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
-            <table className="w-full text-sm" style={{ color: T.text }}>
-              <thead style={{ background: T.panelAlt }}>
-                <tr>
-                  <th className="text-left px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">Best Carry (yds)</th>
-                  <th className="text-right px-2 py-1">Best Ball (mph)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {highlightsData.map((r) => (
-                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="px-2 py-1">{r.club}</td>
-                    <td className="px-2 py-1 text-right">{r.bestCarry != null ? r.bestCarry.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.bestBall != null ? r.bestBall.toFixed(1) : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No club highlights yet.</div>}
+      <Card title="Highlights" theme={T}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <KpiCell
+            theme={T}
+            label="PR • Carry"
+            value={prCarryShot && isNum(prCarryShot.CarryDistance_yds) ? `${Math.round(prCarryShot.CarryDistance_yds)} yds` : "—"}
+            sub={prCarryShot ? `${prCarryShot.Club || "Unknown"}${prCarryShot.Timestamp ? ` • ${new Date(prCarryShot.Timestamp).toLocaleDateString()}` : ""}` : "No data"}
+          />
+          <KpiCell
+            theme={T}
+            label="PR • Total Distance"
+            value={prTotalShot && isNum(prTotalShot.TotalDistance_yds) ? `${Math.round(prTotalShot.TotalDistance_yds)} yds` : "—"}
+            sub={prTotalShot ? `${prTotalShot.Club || "Unknown"}${prTotalShot.Timestamp ? ` • ${new Date(prTotalShot.Timestamp).toLocaleDateString()}` : ""}` : "No data"}
+          />
+          <KpiCell
+            theme={T}
+            label="Most Consistent Club"
+            value={mostConsistent ? mostConsistent.club : "—"}
+            sub={mostConsistent ? `Lowest carry SD ≈ ${mostConsistent.sd.toFixed(1)} yds` : "Need ≥5 shots"}
+          />
+        </div>
       </Card>
     </div>
   );
@@ -184,12 +237,18 @@ export default function InsightsView(props: Props) {
   const swingRows = useMemo(() => {
     const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
     const out: { club: string; aoa?: number; path?: number; face?: number; f2p?: number }[] = [];
-    for (const [club, rows] of groups.entries()) {
-      const aoa = avg(rows.map(s => s.AttackAngle_deg).filter(isNum));
-      const path = avg(rows.map(s => s.ClubPath_deg).filter(isNum));
-      const face = avg(rows.map(s => s.ClubFace_deg).filter(isNum));
-      const f2p = avg(rows.map(s => s.FaceToPath_deg).filter(isNum));
-      out.push({ club, aoa: aoa ?? undefined, path: path ?? undefined, face: face ?? undefined, f2p: f2p ?? undefined });
+    for (const [club, shots] of groups.entries()) {
+      const aoaVals = shots.map(s => s.AoA_deg).filter(isNum) as number[];
+      const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
+      const faceVals = shots.map(s => s.FaceAngle_deg).filter(isNum) as number[];
+      const f2pVals = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
+      out.push({
+        club,
+        aoa: avg(aoaVals) ?? undefined,
+        path: avg(pathVals) ?? undefined,
+        face: avg(faceVals) ?? undefined,
+        f2p: avg(f2pVals) ?? undefined,
+      });
     }
     const order = new Map(allClubs.map((c, i) => [c, i]));
     out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
@@ -198,7 +257,7 @@ export default function InsightsView(props: Props) {
 
   const swingMetrics = (
     <div key="swingMetrics" draggable onDragStart={onDragStart("swingMetrics")} onDragOver={onDragOver("swingMetrics")} onDrop={onDrop("swingMetrics")}>
-      <Card title="Swing Metrics (Avg per Club)" theme={T}>
+      <Card title="Swing Metrics" theme={T}>
         {swingRows.length ? (
           <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
             <table className="w-full text-sm" style={{ color: T.text }}>
@@ -215,220 +274,164 @@ export default function InsightsView(props: Props) {
                 {swingRows.map((r) => (
                   <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
                     <td className="px-2 py-1">{r.club}</td>
-                    <td className="px-2 py-1 text-right">{r.aoa != null ? r.aoa.toFixed(2) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.path != null ? r.path.toFixed(2) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.face != null ? r.face.toFixed(2) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.f2p != null ? r.f2p.toFixed(2) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.aoa != null ? r.aoa.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.path != null ? r.path.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.face != null ? r.face.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.f2p != null ? r.f2p.toFixed(1) : ""}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No swing metrics calculated.</div>}
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No swing metric data yet.</div>}
       </Card>
     </div>
   );
 
-  /* ---------- Warnings (basic heuristics) ---------- */
-  const warningsList = useMemo(() => {
-    const items: string[] = [];
-    // Low smash overall
-    const smashVals = filteredOutliers.map(s => s.SmashFactor).filter(isNum);
-    const smashAvg = avg(smashVals);
-    if (smashAvg != null && smashAvg < 1.40) {
-      items.push(`Average smash factor is low (${smashAvg.toFixed(3)}). Consider contact quality drills.`);
+  /* ---------- Warnings (simple gapping warnings) ---------- */
+  const warningsData = useMemo(() => {
+    // very simple: flag if sequential clubs have very close average carry
+    const groups = groupBy(filteredOutliers.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    const avgByClub: { club: string; carry?: number }[] = [];
+    for (const [club, shots] of groups.entries()) {
+      const carries = shots.map(s => s.CarryDistance_yds as number);
+      const m = avg(carries) ?? undefined;
+      avgByClub.push({ club, carry: m });
     }
-    // Excess lateral dispersion (IQR over 20 yds)
-    const lateral = filteredOutliers.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
-    if (lateral.length >= 8) {
-      const q1 = lateral[Math.floor(lateral.length * 0.25)];
-      const q3 = lateral[Math.floor(lateral.length * 0.75)];
-      if (q3 - q1 > 20) items.push(`High lateral dispersion (IQR ${(q3 - q1).toFixed(1)} yds). Work on start-line control.`);
+    const order = new Map(allClubs.map((c, i) => [c, i]));
+    avgByClub.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+
+    const flags: { clubs: string; note: string }[] = [];
+    for (let i = 1; i < avgByClub.length; i++) {
+      const prev = avgByClub[i - 1];
+      const cur = avgByClub[i];
+      if (prev.carry != null && cur.carry != null && Math.abs(cur.carry - prev.carry) < 8) {
+        flags.push({ clubs: `${prev.club} ↔ ${cur.club}`, note: `Avg carry gap is small (${Math.abs(cur.carry - prev.carry).toFixed(1)} yds)` });
+      }
     }
-    // AoA driver hint (if driver exists): if avg AoA < -1 with driver
-    const driverRows = filteredOutliers.filter(s => (s.Club || "").toLowerCase().includes("driver"));
-    if (driverRows.length) {
-      const aoa = avg(driverRows.map(s => s.AttackAngle_deg).filter(isNum));
-      if (aoa != null && aoa < -1) items.push(`Driver AoA averages ${aoa.toFixed(2)}° down. Try tee height/ball position for upward hit.`);
-    }
-    return items;
-  }, [filteredOutliers]);
+    return flags;
+  }, [filteredOutliers, allClubs]);
 
   const warnings = (
     <div key="warnings" draggable onDragStart={onDragStart("warnings")} onDragOver={onDragOver("warnings")} onDrop={onDrop("warnings")}>
-      <Card title="Warnings" theme={T}>
-        {warningsList.length ? (
-          <ul className="list-disc pl-5 text-sm" style={{ color: T.text }}>
-            {warningsList.map((w, i) => <li key={i}>{w}</li>)}
+      <Card title="Gapping Warnings" theme={T}>
+        {warningsData.length ? (
+          <ul className="text-sm list-disc pl-6" style={{ color: T.text }}>
+            {warningsData.map((w, i) => (
+              <li key={i}>{w.clubs}: {w.note}</li>
+            ))}
           </ul>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings triggered.</div>}
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings.</div>}
       </Card>
     </div>
   );
 
-  /* ---------- Personal Records (per-club PRs) ---------- */
-  const prs = useMemo(() => {
-    const groups = groupBy(filteredNoClubRaw, s => s.Club || "Unknown");
-    const out: { club: string; carry?: number; ball?: number; clubspd?: number }[] = [];
-    for (const [club, rows] of groups.entries()) {
-      const bestCarry = maxBy(rows, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
-      const bestBall = maxBy(rows, s => isNum(s.BallSpeed_mph) ? s.BallSpeed_mph! : null);
-      const bestClub = maxBy(rows, s => isNum(s.ClubSpeed_mph) ? s.ClubSpeed_mph! : null);
+  /* ---------- Personal Records (Carry/Total per club) ---------- */
+  const prRows = useMemo(() => {
+    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    const out: { club: string; carry?: number; total?: number }[] = [];
+    for (const [club, shots] of groups.entries()) {
+      const bestCarry = maxBy(shots, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
+      const bestTotal = maxBy(shots, s => isNum(s.TotalDistance_yds) ? s.TotalDistance_yds! : null);
       out.push({
         club,
-        carry: bestCarry && isNum(bestCarry.CarryDistance_yds) ? bestCarry.CarryDistance_yds! : undefined,
-        ball: bestBall && isNum(bestBall.BallSpeed_mph) ? bestBall.BallSpeed_mph! : undefined,
-        clubspd: bestClub && isNum(bestClub.ClubSpeed_mph) ? bestClub.ClubSpeed_mph! : undefined,
+        carry: bestCarry && isNum(bestCarry.CarryDistance_yds) ? bestCarry.CarryDistance_yds : undefined,
+        total: bestTotal && isNum(bestTotal.TotalDistance_yds) ? bestTotal.TotalDistance_yds : undefined,
       });
     }
-    // keep club order
     const order = new Map(allClubs.map((c, i) => [c, i]));
     out.sort((a, b) => (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
     return out;
-  }, [filteredNoClubRaw, allClubs]);
+  }, [filteredOutliers, allClubs]);
 
   const personalRecords = (
     <div key="personalRecords" draggable onDragStart={onDragStart("personalRecords")} onDragOver={onDragOver("personalRecords")} onDrop={onDrop("personalRecords")}>
-      <Card title="Personal Records" theme={T}>
-        {prs.length ? (
+      <Card title="Personal Records (by Club)" theme={T}>
+        {prRows.length ? (
           <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
             <table className="w-full text-sm" style={{ color: T.text }}>
               <thead style={{ background: T.panelAlt }}>
                 <tr>
                   <th className="text-left px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">Max Carry (yds)</th>
-                  <th className="text-right px-2 py-1">Max Ball (mph)</th>
-                  <th className="text-right px-2 py-1">Max Club (mph)</th>
+                  <th className="text-right px-2 py-1">Best Carry (yds)</th>
+                  <th className="text-right px-2 py-1">Best Total (yds)</th>
                 </tr>
               </thead>
               <tbody>
-                {prs.map((r) => (
+                {prRows.map((r) => (
                   <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
                     <td className="px-2 py-1">{r.club}</td>
                     <td className="px-2 py-1 text-right">{r.carry != null ? r.carry.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.ball != null ? r.ball.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.clubspd != null ? r.clubspd.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.total != null ? r.total.toFixed(1) : ""}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No records yet.</div>}
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No PRs yet.</div>}
       </Card>
     </div>
   );
 
-  /* ---------- Progress (average carry per day/session) ---------- */
+  /* ---------- Progress (line chart showing carry over time; only when one club selected upstream) ---------- */
   const progressData = useMemo(() => {
-    // aggregate by SessionId (which you set to yyyy-mm-dd)
-    const groups = groupBy(filteredNoClubOutliers, s => s.SessionId || "Unknown");
-    const out: { session: string; carryAvg: number }[] = [];
-    for (const [session, rows] of groups.entries()) {
-      const carries = rows.map(s => s.CarryDistance_yds).filter(isNum);
-      const a = avg(carries);
-      if (a != null) out.push({ session, carryAvg: a });
-    }
-    // sort sessions by date string asc (yyyy-mm-dd sorts lexicographically)
-    out.sort((a, b) => a.session.localeCompare(b.session));
-    return out;
-  }, [filteredNoClubOutliers]);
+    // Assume upstream only passes a single club's shots when exactly one club is selected.
+    // If multiple clubs are selected, App can pass an empty array or mixed shots — we skip drawing.
+    const clubs = new Set(filteredOutliers.map(s => s.Club));
+    if (clubs.size !== 1) return [] as { t: string; carry?: number }[];
+    const ordered = [...filteredOutliers]
+      .filter(s => isNum(s.CarryDistance_yds) && s.Timestamp)
+      .sort((a, b) => new Date(a.Timestamp!).getTime() - new Date(b.Timestamp!).getTime());
+    return ordered.map(s => ({ t: s.Timestamp!, carry: s.CarryDistance_yds as number }));
+  }, [filteredOutliers]);
 
   const progress = (
     <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
-      <Card title="Progress (Avg Carry by Session)" theme={T}>
+      <Card title="Club Progress (Carry)" theme={T}>
         {progressData.length ? (
-          <div style={{ height: 260 }}>
+          <div className="h-48">
             <ResponsiveContainer>
-              <LineChart data={progressData} margin={{ top: 8, right: 16, bottom: 24, left: 0 }}>
-                <CartesianGrid stroke={T.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="session"
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  interval={Math.max(0, Math.floor(progressData.length / 8) - 1)}
-                  angle={-20}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fill: T.tick, fontSize: 12 }}
-                  stroke={T.tick}
-                  label={{ value: "Avg Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                />
-                <Tooltip
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(v: any) => [`${(v as number).toFixed?.(1)} yds`, "Avg Carry"]}
-                />
-                <Legend wrapperStyle={{ color: T.text }} />
-                <Line type="monotone" dataKey="carryAvg" stroke={T.brand} dot={false} />
+              <LineChart data={progressData} margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="t" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="carry" name="Carry (yds)" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No sessions to chart.</div>}
+        ) : <div className="text-sm" style={{ color: T.textDim }}>Select a single club to see progress.</div>}
       </Card>
     </div>
   );
 
-  /* ---------- Weaknesses (clubs with low smash or high lateral) ---------- */
-  const weaknessesData = useMemo(() => {
-    const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
-    type Row = { club: string; smashAvg?: number; lateralIQR?: number };
-    const rows: Row[] = [];
-    for (const [club, list] of groups.entries()) {
-      const smash = list.map(s => s.SmashFactor).filter(isNum);
-      const lateral = list.map(s => s.CarryDeviationDistance_yds).filter(isNum).sort((a, b) => a - b);
-      const smashAvg = avg(smash) ?? undefined;
-      let lateralIQR: number | undefined;
-      if (lateral.length >= 8) {
-        const q1 = lateral[Math.floor(lateral.length * 0.25)];
-        const q3 = lateral[Math.floor(lateral.length * 0.75)];
-        lateralIQR = q3 - q1;
-      }
-      rows.push({ club, smashAvg, lateralIQR });
-    }
-    // sort by smash ascending, then lateral IQR descending
-    rows.sort((a, b) => {
-      const sA = a.smashAvg ?? Infinity;
-      const sB = b.smashAvg ?? Infinity;
-      if (sA !== sB) return sA - sB;
-      const lA = a.lateralIQR ?? -Infinity;
-      const lB = b.lateralIQR ?? -Infinity;
-      return lB - lA;
-    });
-    return rows;
+  /* ---------- Weaknesses (very simple heuristic) ---------- */
+  const weaknessList = useMemo(() => {
+    const missLeft = filteredOutliers.filter(s => isNum(s.FaceToPath_deg) && (s.FaceToPath_deg as number) < -2).length;
+    const missRight = filteredOutliers.filter(s => isNum(s.FaceToPath_deg) && (s.FaceToPath_deg as number) > 2).length;
+    const short = filteredOutliers.filter(s => isNum(s.SmashFactor) && (s.SmashFactor as number) < 1.4).length;
+    const list: string[] = [];
+    if (missLeft > missRight && missLeft > 5) list.push("Tendency: Face closed to path (left)");
+    if (missRight > missLeft && missRight > 5) list.push("Tendency: Face open to path (right)");
+    if (short > 5) list.push("Lower smash — efficiency opportunities");
+    return list;
   }, [filteredOutliers]);
 
   const weaknesses = (
     <div key="weaknesses" draggable onDragStart={onDragStart("weaknesses")} onDragOver={onDragOver("weaknesses")} onDrop={onDrop("weaknesses")}>
-      <Card title="Weaknesses (Heuristics)" theme={T}>
-        {weaknessesData.length ? (
-          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
-            <table className="w-full text-sm" style={{ color: T.text }}>
-              <thead style={{ background: T.panelAlt }}>
-                <tr>
-                  <th className="text-left px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">Avg Smash</th>
-                  <th className="text-right px-2 py-1">Lateral IQR (yds)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {weaknessesData.map((r) => (
-                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="px-2 py-1">{r.club}</td>
-                    <td className="px-2 py-1 text-right">{r.smashAvg != null ? r.smashAvg.toFixed(3) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.lateralIQR != null ? r.lateralIQR.toFixed(1) : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No weaknesses detected.</div>}
+      <Card title="Weaknesses" theme={T}>
+        {weaknessList.length ? (
+          <ul className="text-sm list-disc pl-6" style={{ color: T.text }}>
+            {weaknessList.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No obvious weaknesses detected.</div>}
       </Card>
     </div>
   );
 
-  /* ---------- Assemble by order ---------- */
-  const cardMap: Record<string, JSX.Element> = {
-    distanceBox,
+  const cardMap: Record<string, React.ReactNode> = {
+    distanceDistribution,
     highlights,
     swingMetrics,
     warnings,
