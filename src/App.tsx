@@ -156,33 +156,31 @@ export default function App() {
   }
 
   function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    // Find a sheet that has a row/cols shape we can read
-    const sheetName: string | null =
-      (wb.SheetNames || []).find((n) => {
-        const ws = wb.Sheets?.[n];
+    // Make sheets a concrete record to avoid optionality
+    const sheets = wb.Sheets as Record<string, XLSX.WorkSheet | undefined>;
+    const names = Array.isArray(wb.SheetNames) ? wb.SheetNames : [];
+
+    // Find a sheet that has a usable shape
+    const sheetName =
+      names.find((n) => {
+        const ws = sheets[n];
         if (!ws) return false;
-        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
         return Array.isArray(rr) && rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
-      }) ?? null;
+      }) || null;
 
     if (!sheetName) {
       toast(`No data in ${filename}`);
       return;
     }
 
-    const ws = wb.Sheets?.[sheetName] as XLSX.WorkSheet | undefined;
+    const ws = sheets[sheetName];
     if (!ws) {
       toast(`Unable to read sheet in ${filename}`);
       return;
     }
 
-    // Non-null assertion after guard to satisfy TS
-    const rows = XLSX.utils.sheet_to_json(ws as XLSX.WorkSheet, {
-      header: 1,
-      defval: null,
-      raw: true,
-    }) as unknown as any[][];
-
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
     const headerRow: any[] = Array.isArray(rows) && rows.length ? (rows[0] as any[]) : [];
     const header = headerRow.map((x) => String(x ?? ""));
 
@@ -404,7 +402,7 @@ export default function App() {
   }
   function onDeleteAll() {
     if (!shots.length) return;
-    if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
+    if (!window.confirm("Delete ALL shots? This cannot be undone.") ) return;
     setShots([]);
   }
 
