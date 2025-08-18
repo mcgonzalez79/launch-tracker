@@ -8,7 +8,6 @@ import {
   ComposedChart,
   Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ReferenceLine,
   LineChart, Line,
   Scatter
 } from "recharts";
@@ -21,9 +20,9 @@ type Props = {
 
   // from App.tsx
   tableRows: ClubRow[];
-  filteredOutliers: Shot[];
-  filteredNoClubOutliers: Shot[];
-  filteredNoClubRaw: Shot[];
+  filteredOutliers: Shot[];           // respects filters incl. outlier toggle
+  filteredNoClubOutliers: Shot[];     // alias of filteredOutliers (for compatibility)
+  filteredNoClubRaw: Shot[];          // respects filters, no outlier removal
   allClubs: string[];
   insightsOrder: string[];
 
@@ -74,7 +73,7 @@ function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
   return best;
 }
 
-/* Lightweight KPI tile */
+/* Lightweight KPI tile used across Insights */
 function KpiCell({
   label, value, sub, theme: T
 }: { label: string; value: string; sub?: string; theme: Theme; }) {
@@ -112,12 +111,16 @@ export default function Insights({
     c_min: number;
     c_q1: number;
     c_q3: number;
+    c_med?: number;
+    c_max: number;
     c_iqr: number; // q3 - q1
 
     // Total (optional)
     t_min?: number;
     t_q1?: number;
     t_q3?: number;
+    t_med?: number;
+    t_max?: number;
     t_iqr?: number; // q3 - q1
   };
 
@@ -138,22 +141,37 @@ export default function Insights({
       const c_min = carry[0];
       const c_q1  = quantile(carry, 0.25)!;
       const c_q3  = quantile(carry, 0.75)!;
+      const c_med = quantile(carry, 0.5) ?? undefined;
+      const c_max = carry[carry.length - 1];
       const c_iqr = Math.max(0, c_q3 - c_q1);
 
       // Total stats (if present)
-      let t_min: number | undefined, t_q1: number | undefined, t_q3: number | undefined, t_iqr: number | undefined;
+      let t_min: number | undefined, t_q1: number | undefined, t_q3: number | undefined, t_med: number | undefined, t_max: number | undefined, t_iqr: number | undefined;
       if (total.length) {
         t_min = total[0];
         t_q1  = quantile(total, 0.25)!;
         t_q3  = quantile(total, 0.75)!;
+        t_med = quantile(total, 0.5) ?? undefined;
+        t_max = total[total.length - 1];
         t_iqr = Math.max(0, (t_q3 ?? 0) - (t_q1 ?? 0));
       }
 
-      out.push({ club, c_min, c_q1, c_q3, c_iqr, t_min, t_q1, t_q3, t_iqr });
+      out.push({ club, c_min, c_q1, c_q3, c_med, c_max, c_iqr, t_min, t_q1, t_q3, t_med, t_max, t_iqr });
     }
     out.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
     return out;
   }, [filteredOutliers, allClubs]);
+
+  // Domain: true max across carry/total, padded to next 10
+  const xMax = useMemo(() => {
+    if (!distRows.length) return 100;
+    let m = 0;
+    for (const r of distRows) {
+      m = Math.max(m, r.c_max, r.t_max ?? 0);
+    }
+    const padded = Math.ceil((m + 5) / 10) * 10;
+    return padded;
+  }, [distRows]);
 
   // Lookup for tooltip
   const rowsByClub = useMemo(() => {
@@ -172,11 +190,9 @@ export default function Insights({
       <div className="rounded-md p-2 border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}>
         <div className="font-semibold mb-1">{row.club}</div>
         <div className="font-medium">Carry</div>
-        <div className="ml-3">Min: {fmt(row.c_min)} • Q1: {fmt(row.c_q1)} • Q3: {fmt(row.c_q3)}</div>
+        <div className="ml-3">Min {fmt(row.c_min)} • Q1 {fmt(row.c_q1)} • Med {fmt(row.c_med)} • Q3 {fmt(row.c_q3)} • Max {fmt(row.c_max)}</div>
         <div className="font-medium mt-1">Total</div>
-        <div className="ml-3">
-          Min: {fmt(row.t_min)} • Q1: {fmt(row.t_q1)} • Q3: {fmt(row.t_q3)}
-        </div>
+        <div className="ml-3">Min {fmt(row.t_min)} • Q1 {fmt(row.t_q1)} • Med {fmt(row.t_med)} • Q3 {fmt(row.t_q3)} • Max {fmt(row.t_max)}</div>
       </div>
     );
   };
@@ -202,45 +218,39 @@ export default function Insights({
                 barGap={6}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <XAxis type="number" domain={[0, xMax]} tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="club" width={90} tick={{ fontSize: 12 }} />
                 <Tooltip content={<DistTooltip />} />
                 <Legend />
 
-                {/* CARRY: transparent offset to Q1, then IQR Q1→Q3 in brand color */}
+                {/* CARRY: transparent offset to Q1, then IQR Q1→Q3 in brand color; median tick */}
                 <Bar dataKey="c_q1" stackId="carry" fill="transparent" isAnimationActive={false} legendType="none" />
-                <Bar
-                  dataKey={(r: DistRow) => r.c_iqr}
-                  stackId="carry"
-                  name="Carry IQR (Q1–Q3)"
-                  fill={T.brand}
-                />
-
-                {/* TOTAL: transparent offset to Q1, then IQR Q1→Q3 in brand color (lighter opacity) */}
-                <Bar dataKey="t_q1" stackId="total" fill="transparent" isAnimationActive={false} legendType="none" />
-                <Bar
-                  dataKey={(r: DistRow) => r.t_iqr ?? 0}
-                  stackId="total"
-                  name="Total IQR (Q1–Q3)"
-                  fill={T.brand}
-                  fillOpacity={0.45}
-                />
-
-                {/* Whiskers: Carry min/max (slightly above center) */}
+                <Bar dataKey={(r: DistRow) => r.c_iqr} stackId="carry" name="Carry IQR (Q1–Q3)" fill={T.brand} />
                 <Scatter
                   name="Carry min/max"
-                  data={distRows.flatMap(r => [{ x: r.c_min, y: r.club }, { x: r.c_q3 + (r.c_q3 - r.c_q1), y: r.club }])}
+                  data={distRows.flatMap(r => [{ x: r.c_min, y: r.club }, { x: r.c_max, y: r.club }])}
                   shape={Whisker(-5, T.brand)}
                 />
-                {/* Whiskers: Total min/max (slightly below center) */}
+                <Scatter
+                  name="Carry median"
+                  data={distRows.map(r => ({ x: r.c_med, y: r.club }))}
+                  shape={(props: any) => <line x1={props.cx} x2={props.cx} y1={props.cy - 6} y2={props.cy + 6} stroke={T.brand} strokeWidth={2} />}
+                />
+
+                {/* TOTAL: transparent offset to Q1, then IQR Q1→Q3 in brand color (lighter); median tick */}
+                <Bar dataKey="t_q1" stackId="total" fill="transparent" isAnimationActive={false} legendType="none" />
+                <Bar dataKey={(r: DistRow) => r.t_iqr ?? 0} stackId="total" name="Total IQR (Q1–Q3)" fill={T.brand} fillOpacity={0.45} />
                 <Scatter
                   name="Total min/max"
                   data={distRows.flatMap(r =>
-                    r.t_min != null && r.t_q3 != null && r.t_q1 != null
-                      ? [{ x: r.t_min, y: r.club }, { x: r.t_q3 + (r.t_q3 - r.t_q1), y: r.club }]
-                      : []
+                    r.t_min != null && r.t_max != null ? [{ x: r.t_min, y: r.club }, { x: r.t_max, y: r.club }] : []
                   )}
                   shape={Whisker(5, T.brand)}
+                />
+                <Scatter
+                  name="Total median"
+                  data={distRows.flatMap(r => (r.t_med != null ? [{ x: r.t_med, y: r.club }] : []))}
+                  shape={(props: any) => <line x1={props.cx} x2={props.cx} y1={props.cy - 6} y2={props.cy + 6} stroke={T.brand} strokeWidth={2} opacity={0.6} />}
                 />
               </ComposedChart>
             </ResponsiveContainer>
