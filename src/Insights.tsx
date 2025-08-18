@@ -200,38 +200,37 @@ export default function Insights({
     return out;
   }, [filteredOutliers, allClubs]);
 
-  const swings = (
-    <div key="swings" draggable onDragStart={onDragStart("swings")} onDragOver={onDragOver("swings")} onDrop={onDrop("swings")}>
-      <Card title="Swing Metrics (Avg per Club)" theme={T}>
-        {swingRows.length ? (
-          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
-            <table className="w-full text-sm" style={{ color: T.text }}>
-              <thead style={{ background: T.panelAlt }}>
-                <tr>
-                  <th className="text-left px-2 py-1">Club</th>
-                  <th className="text-right px-2 py-1">AoA (°)</th>
-                  <th className="text-right px-2 py-1">Path (°)</th>
-                  <th className="text-right px-2 py-1">Face (°)</th>
-                  <th className="text-right px-2 py-1">F2P (°)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {swingRows.map((r) => (
-                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="px-2 py-1">{r.club}</td>
-                    <td className="px-2 py-1 text-right">{r.aoa  != null ? r.aoa.toFixed(1)  : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.path != null ? r.path.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.face != null ? r.face.toFixed(1) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.f2p  != null ? r.f2p.toFixed(1)  : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No swing metric data yet.</div>}
-      </Card>
-    </div>
-  );
+    /* ---------- Swing Metrics ---------- */
+ const swings = (
+  <div
+    key="swings"
+    draggable
+    onDragStart={onDragStart("swings")}
+    onDragOver={onDragOver("swings")}
+    onDrop={onDrop("swings")}
+  >
+    <Card title="Swing Metrics (Avg per Club)" theme={T}>
+      {swingRows.length ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {swingRows.map((r) => (
+            <KpiCell
+              key={r.club}
+              theme={T}
+              label={r.club}
+              value={`${fmt(r.f2p)}° F2P`}
+              sub={`AoA ${fmt(r.aoa)}° • Path ${fmt(r.path)}° • Face ${fmt(r.face)}°`}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm" style={{ color: T.textDim }}>
+          No swing metric data yet.
+        </div>
+      )}
+    </Card>
+  </div>
+);
+
 
   /* ---------- RECORDS (per-club bests) ---------- */
   const recordsRows = useMemo(() => {
