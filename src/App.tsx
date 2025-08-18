@@ -155,19 +155,23 @@ export default function App() {
     }
   }
 
+  // Safe reader for worksheet rows (header:1)
+  function sheetRows(ws: XLSX.WorkSheet | undefined | null): any[][] {
+    if (!ws) return [];
+    const r = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as unknown as any[][];
+    return Array.isArray(r) ? r : [];
+  }
+
   function processWorkbook(wb: XLSX.WorkBook, filename: string) {
-    // Make sheets a concrete record to avoid optionality
+    // Materialize sheets & names to avoid optionals
     const sheets = wb.Sheets as Record<string, XLSX.WorkSheet | undefined>;
     const names = Array.isArray(wb.SheetNames) ? wb.SheetNames : [];
 
     // Find a sheet that has a usable shape
-    const sheetName =
-      names.find((n) => {
-        const ws = sheets[n];
-        if (!ws) return false;
-        const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-        return Array.isArray(rr) && rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
-      }) || null;
+    const sheetName = names.find((n) => {
+      const rr = sheetRows(sheets[n]);
+      return rr.length > 0 && Array.isArray(rr[0]) && rr[0].length > 3;
+    }) || null;
 
     if (!sheetName) {
       toast(`No data in ${filename}`);
@@ -180,13 +184,13 @@ export default function App() {
       return;
     }
 
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
-    const headerRow: any[] = Array.isArray(rows) && rows.length ? (rows[0] as any[]) : [];
+    const rows = sheetRows(ws);
+    const headerRow: any[] = rows.length ? (rows[0] as any[]) : [];
     const header = headerRow.map((x) => String(x ?? ""));
 
     const idx = (key: string) => header.findIndex((h) => normalizeHeader(h) === key);
 
-    const data = Array.isArray(rows) && rows.length > 1 ? rows.slice(1) : [];
+    const data = rows.length > 1 ? rows.slice(1) : [];
 
     const numOrUndef = (v: any) => {
       const n = Number(v);
