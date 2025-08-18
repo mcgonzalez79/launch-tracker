@@ -10,7 +10,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine,
   LineChart, Line,
-  Scatter
+  Scatter,
+  Cell, // ← added
 } from "recharts";
 
 /* =========================
@@ -201,7 +202,10 @@ export default function Insights({
                   <Bar dataKey="offset" stackId="box" fill="transparent" isAnimationActive={false} legendType="none" />
                   <Bar dataKey="iqr" stackId="box" name="IQR (Q1–Q3)">
                     {distRows.map((r, i) => (
-                      <cell key={`c-${i}`} fill={clubColor.get(r.club) ?? CLUB_PALETTE[i % CLUB_PALETTE.length]} />
+                      <Cell
+                        key={`c-${i}`}
+                        fill={clubColor.get(r.club) ?? CLUB_PALETTE[i % CLUB_PALETTE.length]}
+                      />
                     ))}
                   </Bar>
 
@@ -210,7 +214,6 @@ export default function Insights({
                     <ReferenceLine
                       key={`min-${i}`}
                       x={r.min}
-                      y={r.club}
                       stroke={T.textDim}
                       ifOverflow="extendDomain"
                       label={undefined}
@@ -220,7 +223,6 @@ export default function Insights({
                     <ReferenceLine
                       key={`max-${i}`}
                       x={r.max}
-                      y={r.club}
                       stroke={T.textDim}
                       ifOverflow="extendDomain"
                       label={undefined}
