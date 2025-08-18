@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
-import { Card } from "./UI";
+import { Card } from "./components/UI";
 import {
   ResponsiveContainer,
   BarChart, Bar,
@@ -89,7 +89,7 @@ function KpiCell({
 ========================= */
 export default function Insights({
   theme: T,
-  tableRows: _tableRows,            // (unused)
+  tableRows: _tableRows,
   filteredOutliers,
   filteredNoClubOutliers,
   filteredNoClubRaw,
