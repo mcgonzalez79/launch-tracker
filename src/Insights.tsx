@@ -2,14 +2,12 @@
 import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
-import { Card } from "./components/UI";
+import { Card } from "./UI";
 import {
   ResponsiveContainer,
-  ComposedChart,
-  Bar,
+  BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  LineChart, Line,
-  Scatter
+  LineChart, Line
 } from "recharts";
 
 /* =========================
@@ -91,7 +89,7 @@ function KpiCell({
 ========================= */
 export default function Insights({
   theme: T,
-  tableRows,
+  tableRows: _tableRows,            // (unused)
   filteredOutliers,
   filteredNoClubOutliers,
   filteredNoClubRaw,
@@ -103,25 +101,14 @@ export default function Insights({
   allShots,
 }: Props) {
 
-  /* ---------- DIST (Horizontal boxplots for Carry & Total) ---------- */
+  /* ---------- DIST (Horizontal stacked bars: Avg Carry + Avg Roll) ---------- */
   type DistRow = {
     club: string;
-
-    // Carry
-    c_min: number;
-    c_q1: number;
-    c_q3: number;
-    c_med?: number;
-    c_max: number;
-    c_iqr: number; // q3 - q1
-
-    // Total (optional)
-    t_min?: number;
-    t_q1?: number;
-    t_q3?: number;
-    t_med?: number;
-    t_max?: number;
-    t_iqr?: number; // q3 - q1
+    avgCarry: number;        // average Carry
+    avgRoll: number;         // average (Total - Carry), >= 0
+    avgTotal: number;        // convenience for tooltip
+    n: number;               // shots counted for carry
+    nTotal: number;          // shots counted for total
   };
 
   const distRows: DistRow[] = useMemo(() => {
@@ -131,91 +118,64 @@ export default function Insights({
     );
     const order = new Map(allClubs.map((c,i)=>[c,i]));
     const out: DistRow[] = [];
+
     for (const [club, shots] of byClub.entries()) {
-      const carry = shots.map(s => s.CarryDistance_yds).filter(isNum).sort((a,b)=>a-b) as number[];
-      if (!carry.length) continue;
+      const carries = shots.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+      const totals  = shots.map(s => s.TotalDistance_yds).filter(isNum)   as number[];
 
-      const total = shots.map(s => s.TotalDistance_yds).filter(isNum).sort((a,b)=>a-b) as number[];
+      if (!carries.length && !totals.length) continue;
 
-      // Carry stats
-      const c_min = carry[0];
-      const c_q1  = quantile(carry, 0.25)!;
-      const c_q3  = quantile(carry, 0.75)!;
-      const c_med = quantile(carry, 0.5) ?? undefined;
-      const c_max = carry[carry.length - 1];
-      const c_iqr = Math.max(0, c_q3 - c_q1);
+      const avgCarry = avg(carries) ?? 0;
+      const avgTotal = avg(totals)  ?? avgCarry; // if no totals, treat total ~= carry
+      const avgRoll  = Math.max(0, avgTotal - avgCarry);
 
-      // Total stats (if present)
-      let t_min: number | undefined, t_q1: number | undefined, t_q3: number | undefined, t_med: number | undefined, t_max: number | undefined, t_iqr: number | undefined;
-      if (total.length) {
-        t_min = total[0];
-        t_q1  = quantile(total, 0.25)!;
-        t_q3  = quantile(total, 0.75)!;
-        t_med = quantile(total, 0.5) ?? undefined;
-        t_max = total[total.length - 1];
-        t_iqr = Math.max(0, (t_q3 ?? 0) - (t_q1 ?? 0));
-      }
-
-      out.push({ club, c_min, c_q1, c_q3, c_med, c_max, c_iqr, t_min, t_q1, t_q3, t_med, t_max, t_iqr });
+      out.push({
+        club,
+        avgCarry,
+        avgRoll,
+        avgTotal,
+        n: carries.length,
+        nTotal: totals.length
+      });
     }
     out.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
     return out;
   }, [filteredOutliers, allClubs]);
 
-  // Domain: true max across carry/total, padded to next 10
+  // Domain: padded max of avgTotal (so full bar fits nicely)
   const xMax = useMemo(() => {
     if (!distRows.length) return 100;
-    let m = 0;
-    for (const r of distRows) {
-      m = Math.max(m, r.c_max, r.t_max ?? 0);
-    }
-    const padded = Math.ceil((m + 5) / 10) * 10;
-    return padded;
+    const m = Math.max(...distRows.map(r => r.avgTotal));
+    return Math.ceil((m + 5) / 10) * 10;
   }, [distRows]);
 
-  // Lookup for tooltip
-  const rowsByClub = useMemo(() => {
-    const m = new Map<string, DistRow>();
-    for (const r of distRows) m.set(r.club, r);
-    return m;
-  }, [distRows]);
-
-  // Custom tooltip: show both Carry & Total stats
-  const DistTooltip = ({ active, label }: any) => {
-    if (!active || !label) return null;
-    const row = rowsByClub.get(label as string);
+  // Tooltip
+  const DistTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    const row = distRows.find(r => r.club === label);
     if (!row) return null;
-    const fmt = (n?: number | null) => (n == null || !Number.isFinite(n) ? "—" : n.toFixed(1));
+    const f1 = (n: number) => Math.round(n);
     return (
       <div className="rounded-md p-2 border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}>
         <div className="font-semibold mb-1">{row.club}</div>
-        <div className="font-medium">Carry</div>
-        <div className="ml-3">Min {fmt(row.c_min)} • Q1 {fmt(row.c_q1)} • Med {fmt(row.c_med)} • Q3 {fmt(row.c_q3)} • Max {fmt(row.c_max)}</div>
-        <div className="font-medium mt-1">Total</div>
-        <div className="ml-3">Min {fmt(row.t_min)} • Q1 {fmt(row.t_q1)} • Med {fmt(row.t_med)} • Q3 {fmt(row.t_q3)} • Max {fmt(row.t_max)}</div>
+        <div>Avg Carry: {f1(row.avgCarry)} yds {row.n ? `(n=${row.n})` : ""}</div>
+        <div>Avg Roll: {f1(row.avgRoll)} yds</div>
+        <div>Avg Total: {f1(row.avgTotal)} yds {row.nTotal ? `(n=${row.nTotal})` : ""}</div>
       </div>
     );
   };
 
-  // Whisker ticks (vertical) for min/max with slight up/down offsets so Carry/Total are distinguishable
-  const Whisker = (dy: number, color: string) => (props: any) => {
-    const { cx, cy } = props;
-    const y1 = cy - 8 + dy, y2 = cy + 8 + dy;
-    return <line x1={cx} x2={cx} y1={y1} y2={y2} stroke={color} strokeWidth={1} />;
-  };
-
   const dist = (
     <div key="dist" draggable onDragStart={onDragStart("dist")} onDragOver={onDragOver("dist")} onDrop={onDrop("dist")}>
-      <Card title="Distance Distribution — Boxplots (Carry & Total)" theme={T}>
+      <Card title="Distance (Avg) — Carry + Total (Stacked)" theme={T}>
         {distRows.length ? (
           <div className="h-72">
             <ResponsiveContainer>
-              <ComposedChart
+              <BarChart
                 data={distRows}
                 layout="vertical"
                 margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 barCategoryGap="30%"
-                barGap={6}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis type="number" domain={[0, xMax]} tick={{ fontSize: 12 }} />
@@ -223,36 +183,10 @@ export default function Insights({
                 <Tooltip content={<DistTooltip />} />
                 <Legend />
 
-                {/* CARRY: transparent offset to Q1, then IQR Q1→Q3 in brand color; median tick */}
-                <Bar dataKey="c_q1" stackId="carry" fill="transparent" isAnimationActive={false} legendType="none" />
-                <Bar dataKey={(r: DistRow) => r.c_iqr} stackId="carry" name="Carry IQR (Q1–Q3)" fill={T.brand} />
-                <Scatter
-                  name="Carry min/max"
-                  data={distRows.flatMap(r => [{ x: r.c_min, y: r.club }, { x: r.c_max, y: r.club }])}
-                  shape={Whisker(-5, T.brand)}
-                />
-                <Scatter
-                  name="Carry median"
-                  data={distRows.map(r => ({ x: r.c_med, y: r.club }))}
-                  shape={(props: any) => <line x1={props.cx} x2={props.cx} y1={props.cy - 6} y2={props.cy + 6} stroke={T.brand} strokeWidth={2} />}
-                />
-
-                {/* TOTAL: transparent offset to Q1, then IQR Q1→Q3 in brand color (lighter); median tick */}
-                <Bar dataKey="t_q1" stackId="total" fill="transparent" isAnimationActive={false} legendType="none" />
-                <Bar dataKey={(r: DistRow) => r.t_iqr ?? 0} stackId="total" name="Total IQR (Q1–Q3)" fill={T.brand} fillOpacity={0.45} />
-                <Scatter
-                  name="Total min/max"
-                  data={distRows.flatMap(r =>
-                    r.t_min != null && r.t_max != null ? [{ x: r.t_min, y: r.club }, { x: r.t_max, y: r.club }] : []
-                  )}
-                  shape={Whisker(5, T.brand)}
-                />
-                <Scatter
-                  name="Total median"
-                  data={distRows.flatMap(r => (r.t_med != null ? [{ x: r.t_med, y: r.club }] : []))}
-                  shape={(props: any) => <line x1={props.cx} x2={props.cx} y1={props.cy - 6} y2={props.cy + 6} stroke={T.brand} strokeWidth={2} opacity={0.6} />}
-                />
-              </ComposedChart>
+                {/* Stacked: Carry (brand), Roll (brand, lighter). Total = Carry + Roll */}
+                <Bar name="Carry" dataKey="avgCarry" stackId="dist" fill={T.brand} />
+                <Bar name="Roll"  dataKey="avgRoll"  stackId="dist" fill={T.brand} fillOpacity={0.4} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
