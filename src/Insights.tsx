@@ -180,27 +180,31 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- SWINGS (per-club averages as KPI tiles; FILTERED clubs only) ---------- */
-  const swingRows = useMemo(() => {
-    const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
-    const order = new Map(allClubs.map((c,i)=>[c,i]));
-    const out: { club: string; aoa?: number; path?: number; face?: number; f2p?: number }[] = [];
-    for (const [club, shots] of byClub.entries()) {
-      const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
-      const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
-      const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
-      const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
-      out.push({
-        club,
-        aoa:  avg(aoaVals)  ?? undefined,
-        path: avg(pathVals) ?? undefined,
-        face: avg(faceVals) ?? undefined,
-        f2p:  avg(f2pVals)  ?? undefined,
-      });
-    }
-    out.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
-    return out;
-  }, [filteredOutliers, allClubs]);
+  /* ---------- SWINGS (Selected club only; 4 KPI tiles) ---------- */
+  // Determine selected clubs from filteredOutliers
+  const selectedClubs = useMemo(
+    () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
+    [filteredOutliers]
+  );
+
+  // If exactly one club is selected, compute its averages
+  const selectedClubMetrics = useMemo(() => {
+    if (selectedClubs.length !== 1) return null;
+    const club = selectedClubs[0];
+    const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
+    const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
+    const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
+    const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
+    const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
+    return {
+      club,
+      n: shots.length,
+      aoa:  avg(aoaVals)  ?? undefined,
+      path: avg(pathVals) ?? undefined,
+      face: avg(faceVals) ?? undefined,
+      f2p:  avg(f2pVals)  ?? undefined,
+    };
+  }, [filteredOutliers, selectedClubs]);
 
   // simple formatter for KPI text
   const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
@@ -213,22 +217,37 @@ export default function Insights({
       onDragOver={onDragOver("swings")}
       onDrop={onDrop("swings")}
     >
-      <Card title="Swing Metrics (Avg per Club)" theme={T}>
-        {swingRows.length ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {swingRows.map((r) => (
-              <KpiCell
-                key={r.club}
-                theme={T}
-                label={r.club}
-                value={`${fmt(r.f2p)}° F2P`}
-                sub={`AoA ${fmt(r.aoa)}° • Path ${fmt(r.path)}° • Face ${fmt(r.face)}°`}
-              />
-            ))}
+      <Card title="Swing Metrics (Selected Club)" theme={T}>
+        {selectedClubMetrics ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCell
+              theme={T}
+              label={`${selectedClubMetrics.club} • AoA`}
+              value={`${fmt(selectedClubMetrics.aoa)}°`}
+              sub={`n=${selectedClubMetrics.n}`}
+            />
+            <KpiCell
+              theme={T}
+              label={`${selectedClubMetrics.club} • Path`}
+              value={`${fmt(selectedClubMetrics.path)}°`}
+              sub={`n=${selectedClubMetrics.n}`}
+            />
+            <KpiCell
+              theme={T}
+              label={`${selectedClubMetrics.club} • Face`}
+              value={`${fmt(selectedClubMetrics.face)}°`}
+              sub={`n=${selectedClubMetrics.n}`}
+            />
+            <KpiCell
+              theme={T}
+              label={`${selectedClubMetrics.club} • Face to Path`}
+              value={`${fmt(selectedClubMetrics.f2p)}°`}
+              sub={`n=${selectedClubMetrics.n}`}
+            />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>
-            No swing metric data yet.
+            Select a single club to see swing angles (AoA, Path, Face, Face-to-Path).
           </div>
         )}
       </Card>
