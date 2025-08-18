@@ -6,7 +6,7 @@ import { Card } from "./components/UI";
 import {
   ResponsiveContainer,
   ComposedChart,
-  BarChart, Bar,
+  Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine,
   LineChart, Line,
@@ -115,6 +115,19 @@ export default function Insights({
     meanTotal?: number;
   };
 
+  // Palette + stable mapping (mirrors Dashboard)
+  const CLUB_PALETTE = [
+    "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
+    "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ab",
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+  ];
+  const clubColor = useMemo(() => {
+    const m = new Map<string, string>();
+    allClubs.forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
+    return m;
+  }, [allClubs]);
+
   const distRows: DistRow[] = useMemo(() => {
     const byClub = groupBy(
       filteredOutliers.filter(s => isNum(s.CarryDistance_yds) || isNum(s.TotalDistance_yds)),
@@ -141,59 +154,107 @@ export default function Insights({
     return out;
   }, [filteredOutliers, allClubs]);
 
+  // Fast lookup for tooltip
+  const rowsByClub = useMemo(() => {
+    const m = new Map<string, DistRow>();
+    for (const r of distRows) m.set(r.club, r);
+    return m;
+  }, [distRows]);
+
+  // Custom tooltip: show min, q1, q3, max, mean carry/total
+  const DistTooltip = ({ active, label }: any) => {
+    if (!active || !label) return null;
+    const row = rowsByClub.get(label as string);
+    if (!row) return null;
+    const fmt = (n?: number | null) => (n == null || !Number.isFinite(n) ? "—" : n.toFixed(1));
+    return (
+      <div
+        className="rounded-md p-2 border text-xs"
+        style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+      >
+        <div className="font-semibold mb-1">{row.club}</div>
+        <div>Min: {fmt(row.min)} yds</div>
+        <div>Q1: {fmt(row.offset)} yds</div>
+        <div>Q3: {fmt(row.offset + row.iqr)} yds</div>
+        <div>Max: {fmt(row.max)} yds</div>
+        <div className="mt-1">Avg Carry: {fmt(row.meanCarry)} yds</div>
+        <div>Avg Total: {fmt(row.meanTotal)} yds</div>
+      </div>
+    );
+  };
+
   const dist = (
     <div key="dist" draggable onDragStart={onDragStart("dist")} onDragOver={onDragOver("dist")} onDrop={onDrop("dist")}>
       <Card title="Distance Distribution (Boxplot) — Carry + Avgs" theme={T}>
         {distRows.length ? (
-          <div className="h-72">
-            <ResponsiveContainer>
-              <ComposedChart data={distRows} layout="vertical" margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="club" width={80} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Legend />
+          <>
+            <div className="h-72">
+              <ResponsiveContainer>
+                <ComposedChart data={distRows} layout="vertical" margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="club" width={80} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<DistTooltip />} />
+                  <Legend />
 
-                {/* IQR box: offset (transparent) + visible box width (iqr) */}
-                <Bar dataKey="offset" stackId="box" fill="transparent" isAnimationActive={false} />
-                <Bar dataKey="iqr"   stackId="box" name="IQR (Q1–Q3)" />
+                  {/* IQR box: offset (transparent) + visible box width (iqr), colored per club */}
+                  <Bar dataKey="offset" stackId="box" fill="transparent" isAnimationActive={false} legendType="none" />
+                  <Bar dataKey="iqr" stackId="box" name="IQR (Q1–Q3)">
+                    {distRows.map((r, i) => (
+                      <cell key={`c-${i}`} fill={clubColor.get(r.club) ?? CLUB_PALETTE[i % CLUB_PALETTE.length]} />
+                    ))}
+                  </Bar>
 
-                {/* Min / Max whiskers — thin lines at each end of the distribution */}
-                {distRows.map((r, i) => (
-                  <ReferenceLine
-                    key={`min-${i}`}
-                    x={r.min}
-                    y={r.club}
-                    stroke={T.textDim}
-                    ifOverflow="extendDomain"
-                    label={undefined}
+                  {/* Min / Max whiskers — thin lines at each end of the distribution */}
+                  {distRows.map((r, i) => (
+                    <ReferenceLine
+                      key={`min-${i}`}
+                      x={r.min}
+                      y={r.club}
+                      stroke={T.textDim}
+                      ifOverflow="extendDomain"
+                      label={undefined}
+                    />
+                  ))}
+                  {distRows.map((r, i) => (
+                    <ReferenceLine
+                      key={`max-${i}`}
+                      x={r.max}
+                      y={r.club}
+                      stroke={T.textDim}
+                      ifOverflow="extendDomain"
+                      label={undefined}
+                    />
+                  ))}
+
+                  {/* Averages as markers */}
+                  <Scatter
+                    name="Avg Carry"
+                    data={distRows.map(r => ({ x: r.meanCarry, y: r.club }))}
+                    shape="circle"
                   />
-                ))}
-                {distRows.map((r, i) => (
-                  <ReferenceLine
-                    key={`max-${i}`}
-                    x={r.max}
-                    y={r.club}
-                    stroke={T.textDim}
-                    ifOverflow="extendDomain"
-                    label={undefined}
+                  <Scatter
+                    name="Avg Total"
+                    data={distRows.map(r => ({ x: r.meanTotal, y: r.club }))}
+                    shape="diamond"
                   />
-                ))}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
 
-                {/* Averages as markers */}
-                <Scatter
-                  name="Avg Carry"
-                  data={distRows.map(r => ({ x: r.meanCarry, y: r.club }))}
-                  shape="circle"
-                />
-                <Scatter
-                  name="Avg Total"
-                  data={distRows.map(r => ({ x: r.meanTotal, y: r.club }))}
-                  shape="diamond"
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+            {/* Club legend (swatches) */}
+            <div className="mt-2 flex flex-wrap gap-3 text-xs" style={{ color: T.textDim }}>
+              {distRows.map((r, i) => (
+                <div key={`lg-${r.club}-${i}`} className="inline-flex items-center gap-1">
+                  <span
+                    className="inline-block w-3 h-3 rounded"
+                    style={{ background: clubColor.get(r.club) ?? CLUB_PALETTE[i % CLUB_PALETTE.length] }}
+                  />
+                  <span>{r.club}</span>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>No distance data available.</div>
         )}
