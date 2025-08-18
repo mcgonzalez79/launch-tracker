@@ -19,9 +19,9 @@ type Props = {
 
   // from App.tsx
   tableRows: ClubRow[];
-  filteredOutliers: Shot[];           // respects all filters incl outlier toggle
-  filteredNoClubOutliers: Shot[];     // alias of filteredOutliers (kept for app compat)
-  filteredNoClubRaw: Shot[];          // respects filters but no outlier removal
+  filteredOutliers: Shot[];           // respects filters incl. outlier toggle
+  filteredNoClubOutliers: Shot[];     // alias of filteredOutliers (for compatibility)
+  filteredNoClubRaw: Shot[];          // respects filters, no outlier removal
   allClubs: string[];
   insightsOrder: string[];
 
@@ -29,7 +29,7 @@ type Props = {
   onDragOver: (key: string) => (e: React.DragEvent) => void;
   onDrop: (_key: string) => (_: React.DragEvent) => void;
 
-  // NEW (optional): when provided, Highlights will truly ignore filters
+  // Optional: when present, Highlights will truly ignore filters
   allShots?: Shot[];
 };
 
@@ -144,7 +144,7 @@ export default function Insights({
   );
 
   /* ---------- HIGH (Highlights — ignore filters using allShots) ---------- */
-  const ALL = allShots ?? filteredNoClubRaw; // true "all" if App passes allShots
+  const ALL = allShots ?? filteredNoClubRaw;
   const prCarry = useMemo(() => {
     const best = maxBy(ALL, s => isNum(s.CarryDistance_yds) ? s.CarryDistance_yds! : null);
     return best ? { v: best.CarryDistance_yds as number, club: best.Club, ts: best.Timestamp } : null;
@@ -174,6 +174,61 @@ export default function Insights({
           <KpiCell theme={T} label="PR • Total Distance" value={prTotal ? `${Math.round(prTotal.v)} yds` : "—"} sub={prTotal ? `${prTotal.club}${prTotal.ts ? ` • ${new Date(prTotal.ts).toLocaleDateString()}` : ""}` : "No data"} />
           <KpiCell theme={T} label="Most Consistent Club" value={mostConsistent ? mostConsistent.club : "—"} sub={mostConsistent ? `Lowest carry SD ≈ ${mostConsistent.sd!.toFixed(1)} yds` : "Need ≥5 shots"} />
         </div>
+      </Card>
+    </div>
+  );
+
+  /* ---------- SWINGS (per-club averages: AoA, Path, Face, F2P) ---------- */
+  const swingRows = useMemo(() => {
+    const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    const order = new Map(allClubs.map((c,i)=>[c,i]));
+    const out: { club: string; aoa?: number; path?: number; face?: number; f2p?: number }[] = [];
+    for (const [club, shots] of byClub.entries()) {
+      const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
+      const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
+      const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
+      const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
+      out.push({
+        club,
+        aoa:  avg(aoaVals)  ?? undefined,
+        path: avg(pathVals) ?? undefined,
+        face: avg(faceVals) ?? undefined,
+        f2p:  avg(f2pVals)  ?? undefined,
+      });
+    }
+    out.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return out;
+  }, [filteredOutliers, allClubs]);
+
+  const swings = (
+    <div key="swings" draggable onDragStart={onDragStart("swings")} onDragOver={onDragOver("swings")} onDrop={onDrop("swings")}>
+      <Card title="Swing Metrics (Avg per Club)" theme={T}>
+        {swingRows.length ? (
+          <div className="overflow-auto rounded-lg border" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">AoA (°)</th>
+                  <th className="text-right px-2 py-1">Path (°)</th>
+                  <th className="text-right px-2 py-1">Face (°)</th>
+                  <th className="text-right px-2 py-1">F2P (°)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {swingRows.map((r) => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{r.aoa  != null ? r.aoa.toFixed(1)  : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.path != null ? r.path.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.face != null ? r.face.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.f2p  != null ? r.f2p.toFixed(1)  : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="text-sm" style={{ color: T.textDim }}>No swing metric data yet.</div>}
       </Card>
     </div>
   );
@@ -219,9 +274,9 @@ export default function Insights({
                 {recordsRows.map((r) => (
                   <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
                     <td className="px-2 py-1">{r.club}</td>
-                    <td className="px-2 py-1 text-right">{r.carry != null ? Math.round(r.carry) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.total != null ? Math.round(r.total) : ""}</td>
-                    <td className="px-2 py-1 text-right">{r.ball != null ? r.ball.toFixed(1) : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.carry   != null ? Math.round(r.carry)   : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.total   != null ? Math.round(r.total)   : ""}</td>
+                    <td className="px-2 py-1 text-right">{r.ball    != null ? r.ball.toFixed(1)    : ""}</td>
                     <td className="px-2 py-1 text-right">{r.clubspd != null ? r.clubspd.toFixed(1) : ""}</td>
                   </tr>
                 ))}
@@ -298,6 +353,7 @@ export default function Insights({
   const cardMap: Record<string, React.ReactNode> = {
     dist,
     high,
+    swings,      // ← restored
     records,
     gaps,
     progress
