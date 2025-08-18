@@ -5,10 +5,12 @@ import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
 import {
   ResponsiveContainer,
+  ComposedChart,
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine,
-  LineChart, Line
+  LineChart, Line,
+  Scatter
 } from "recharts";
 
 /* =========================
@@ -102,18 +104,38 @@ export default function Insights({
   allShots,
 }: Props) {
 
-  /* ---------- DIST (Distance Distribution — box-ish) ---------- */
-  const distRows = useMemo(() => {
-    const byClub = groupBy(filteredOutliers.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+  /* ---------- DIST (Distance Distribution — horizontal boxplot + averages) ---------- */
+  type DistRow = {
+    club: string;
+    offset: number;      // q1 (for stacking offset)
+    iqr: number;         // q3 - q1 (box width)
+    min: number;
+    max: number;
+    meanCarry?: number;
+    meanTotal?: number;
+  };
+
+  const distRows: DistRow[] = useMemo(() => {
+    const byClub = groupBy(
+      filteredOutliers.filter(s => isNum(s.CarryDistance_yds) || isNum(s.TotalDistance_yds)),
+      s => s.Club || "Unknown"
+    );
     const order = new Map(allClubs.map((c,i)=>[c,i]));
-    const out: { club: string; min: number; q1: number; q3: number; max: number }[] = [];
+    const out: DistRow[] = [];
     for (const [club, shots] of byClub.entries()) {
-      const carries = shots.map(s => s.CarryDistance_yds as number).sort((a,b)=>a-b);
+      const carries = shots.map(s => s.CarryDistance_yds).filter(isNum).sort((a,b)=>a-b) as number[];
       if (!carries.length) continue;
-      const min = carries[0], max = carries[carries.length-1];
-      const q1 = quantile(carries, 0.25)!;
-      const q3 = quantile(carries, 0.75)!;
-      out.push({ club, min, q1, q3, max });
+      const totals  = shots.map(s => s.TotalDistance_yds).filter(isNum) as number[];
+
+      const min = carries[0];
+      const max = carries[carries.length - 1];
+      const q1  = quantile(carries, 0.25)!;
+      const q3  = quantile(carries, 0.75)!;
+      const iqr = Math.max(0, q3 - q1);
+      const meanCarry = avg(carries) ?? undefined;
+      const meanTotal = totals.length ? avg(totals) ?? undefined : undefined;
+
+      out.push({ club, offset: q1, iqr, min, max, meanCarry, meanTotal });
     }
     out.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
     return out;
@@ -121,26 +143,60 @@ export default function Insights({
 
   const dist = (
     <div key="dist" draggable onDragStart={onDragStart("dist")} onDragOver={onDragOver("dist")} onDrop={onDrop("dist")}>
-      <Card title="Distance Distribution (Carry)" theme={T}>
+      <Card title="Distance Distribution (Boxplot) — Carry + Avgs" theme={T}>
         {distRows.length ? (
           <div className="h-72">
             <ResponsiveContainer>
-              <BarChart data={distRows} layout="vertical" margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+              <ComposedChart data={distRows} layout="vertical" margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis type="number" tick={{ fontSize: 12 }} />
                 <YAxis type="category" dataKey="club" width={80} tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Legend />
-                {/* Draw box as stacked bars from q1->q3 */}
-                <Bar dataKey="q3" stackId="q" name="Q3" />
-                <Bar dataKey="q1" stackId="q" name="Q1" />
-                {/* Whiskers */}
-                {distRows.map((r,i)=>(<ReferenceLine key={"min"+i} x={r.min} stroke={T.textDim} strokeDasharray="3 3" />))}
-                {distRows.map((r,i)=>(<ReferenceLine key={"max"+i} x={r.max} stroke={T.textDim} strokeDasharray="3 3" />))}
-              </BarChart>
+
+                {/* IQR box: offset (transparent) + visible box width (iqr) */}
+                <Bar dataKey="offset" stackId="box" fill="transparent" isAnimationActive={false} />
+                <Bar dataKey="iqr"   stackId="box" name="IQR (Q1–Q3)" />
+
+                {/* Min / Max whiskers — thin lines at each end of the distribution */}
+                {distRows.map((r, i) => (
+                  <ReferenceLine
+                    key={`min-${i}`}
+                    x={r.min}
+                    y={r.club}
+                    stroke={T.textDim}
+                    ifOverflow="extendDomain"
+                    label={undefined}
+                  />
+                ))}
+                {distRows.map((r, i) => (
+                  <ReferenceLine
+                    key={`max-${i}`}
+                    x={r.max}
+                    y={r.club}
+                    stroke={T.textDim}
+                    ifOverflow="extendDomain"
+                    label={undefined}
+                  />
+                ))}
+
+                {/* Averages as markers */}
+                <Scatter
+                  name="Avg Carry"
+                  data={distRows.map(r => ({ x: r.meanCarry, y: r.club }))}
+                  shape="circle"
+                />
+                <Scatter
+                  name="Avg Total"
+                  data={distRows.map(r => ({ x: r.meanTotal, y: r.club }))}
+                  shape="diamond"
+                />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No carry data available.</div>}
+        ) : (
+          <div className="text-sm" style={{ color: T.textDim }}>No distance data available.</div>
+        )}
       </Card>
     </div>
   );
@@ -181,13 +237,11 @@ export default function Insights({
   );
 
   /* ---------- SWINGS (Selected club only; 4 KPI tiles) ---------- */
-  // Determine selected clubs from filteredOutliers
   const selectedClubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
     [filteredOutliers]
   );
 
-  // If exactly one club is selected, compute its averages
   const selectedClubMetrics = useMemo(() => {
     if (selectedClubs.length !== 1) return null;
     const club = selectedClubs[0];
@@ -206,7 +260,6 @@ export default function Insights({
     };
   }, [filteredOutliers, selectedClubs]);
 
-  // simple formatter for KPI text
   const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
   const swings = (
@@ -220,30 +273,10 @@ export default function Insights({
       <Card title="Swing Metrics (Selected Club)" theme={T}>
         {selectedClubMetrics ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCell
-              theme={T}
-              label={`${selectedClubMetrics.club} • AoA`}
-              value={`${fmt(selectedClubMetrics.aoa)}°`}
-              sub={`n=${selectedClubMetrics.n}`}
-            />
-            <KpiCell
-              theme={T}
-              label={`${selectedClubMetrics.club} • Path`}
-              value={`${fmt(selectedClubMetrics.path)}°`}
-              sub={`n=${selectedClubMetrics.n}`}
-            />
-            <KpiCell
-              theme={T}
-              label={`${selectedClubMetrics.club} • Face`}
-              value={`${fmt(selectedClubMetrics.face)}°`}
-              sub={`n=${selectedClubMetrics.n}`}
-            />
-            <KpiCell
-              theme={T}
-              label={`${selectedClubMetrics.club} • Face to Path`}
-              value={`${fmt(selectedClubMetrics.f2p)}°`}
-              sub={`n=${selectedClubMetrics.n}`}
-            />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • AoA`}  value={`${fmt(selectedClubMetrics.aoa)}°`}  sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Path`} value={`${fmt(selectedClubMetrics.path)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face`} value={`${fmt(selectedClubMetrics.face)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face to Path`} value={`${fmt(selectedClubMetrics.f2p)}°`} sub={`n=${selectedClubMetrics.n}`} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>
