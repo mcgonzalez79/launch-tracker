@@ -1,14 +1,13 @@
 import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
-import { Card } from "./components/UI";
 import {
   ResponsiveContainer,
   LineChart, Line,
   ScatterChart, Scatter,
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ReferenceLine
+  ReferenceLine, Label
 } from "recharts";
 
 /* =========================
@@ -238,9 +237,9 @@ export default function Insights({
     const groups = groupBy(filteredOutliers, s => s.Club || "Unknown");
     const out: { club: string; aoa?: number; path?: number; face?: number; f2p?: number }[] = [];
     for (const [club, shots] of groups.entries()) {
-      const aoaVals = shots.map(s => s.AoA_deg).filter(isNum) as number[];
+      const aoaVals = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
       const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
-      const faceVals = shots.map(s => s.FaceAngle_deg).filter(isNum) as number[];
+      const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
       const f2pVals = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
       out.push({
         club,
