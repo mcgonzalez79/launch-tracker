@@ -72,8 +72,10 @@ function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
   return best;
 }
 
-/* Lightweight KPI tile */
-function KpiCell({ label, value, sub, theme: T }: { label: string; value: string; sub?: string; theme: Theme; }) {
+/* Lightweight KPI tile used across Insights */
+function KpiCell({
+  label, value, sub, theme: T
+}: { label: string; value: string; sub?: string; theme: Theme; }) {
   return (
     <div className="rounded-xl p-4 border" style={{ background: T.panelAlt, borderColor: T.border }}>
       <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
@@ -178,7 +180,7 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- SWINGS (per-club averages: AoA, Path, Face, F2P) ---------- */
+  /* ---------- SWINGS (per-club averages as KPI tiles; FILTERED clubs only) ---------- */
   const swingRows = useMemo(() => {
     const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
@@ -200,39 +202,40 @@ export default function Insights({
     return out;
   }, [filteredOutliers, allClubs]);
 
-    /* ---------- Swing Metrics ---------- */
- const swings = (
-  <div
-    key="swings"
-    draggable
-    onDragStart={onDragStart("swings")}
-    onDragOver={onDragOver("swings")}
-    onDrop={onDrop("swings")}
-  >
-    <Card title="Swing Metrics (Avg per Club)" theme={T}>
-      {swingRows.length ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {swingRows.map((r) => (
-            <KpiCell
-              key={r.club}
-              theme={T}
-              label={r.club}
-              value={`${fmt(r.f2p)}° F2P`}
-              sub={`AoA ${fmt(r.aoa)}° • Path ${fmt(r.path)}° • Face ${fmt(r.face)}°`}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-sm" style={{ color: T.textDim }}>
-          No swing metric data yet.
-        </div>
-      )}
-    </Card>
-  </div>
-);
+  // simple formatter for KPI text
+  const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
+  const swings = (
+    <div
+      key="swings"
+      draggable
+      onDragStart={onDragStart("swings")}
+      onDragOver={onDragOver("swings")}
+      onDrop={onDrop("swings")}
+    >
+      <Card title="Swing Metrics (Avg per Club)" theme={T}>
+        {swingRows.length ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {swingRows.map((r) => (
+              <KpiCell
+                key={r.club}
+                theme={T}
+                label={r.club}
+                value={`${fmt(r.f2p)}° F2P`}
+                sub={`AoA ${fmt(r.aoa)}° • Path ${fmt(r.path)}° • Face ${fmt(r.face)}°`}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm" style={{ color: T.textDim }}>
+            No swing metric data yet.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
 
-  /* ---------- RECORDS (per-club bests) ---------- */
+  /* ---------- RECORDS (per-club bests; FILTERED) ---------- */
   const recordsRows = useMemo(() => {
     const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
@@ -287,7 +290,7 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- GAPS (simple gapping warnings) ---------- */
+  /* ---------- GAPS (simple gapping warnings; FILTERED) ---------- */
   const gapsRows = useMemo(() => {
     const byClub = groupBy(filteredOutliers.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
@@ -318,7 +321,7 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- PROGRESS (carry over sessions for selected club) ---------- */
+  /* ---------- PROGRESS (carry over sessions for selected club; FILTERED) ---------- */
   const progressRows = useMemo(() => {
     const clubs = Array.from(new Set(filteredNoClubOutliers.map(s => s.Club)));
     if (clubs.length !== 1) return [] as { t: string; carry: number }[];
@@ -352,7 +355,7 @@ export default function Insights({
   const cardMap: Record<string, React.ReactNode> = {
     dist,
     high,
-    swings,      // ← restored
+    swings,
     records,
     gaps,
     progress
