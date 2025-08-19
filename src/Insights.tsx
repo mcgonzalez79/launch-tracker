@@ -241,42 +241,29 @@ export default function Insights({
     </div>
   );
 
-  
-/* ---------- SWINGS (per-club KPIs; respects filters; shows selected clubs or all if none selected) ---------- */
+  /* ---------- SWINGS (Selected club only; 4 KPI tiles) ---------- */
   const selectedClubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
     [filteredOutliers]
   );
 
-  const clubsForMetrics = useMemo(() => {
-    // If user has clubs selected in the Filters, show those; otherwise show all clubs present
-    const unique = selectedClubs.length ? selectedClubs : allClubs;
-    // Preserve natural ordering
-    const order = new Map(allClubs.map((c,i)=>[c,i]));
-    return [...unique].sort((a,b)=>(order.get(a)??999)-(order.get(b)??999));
-  }, [selectedClubs, allClubs]);
-
-  type SwingAgg = { club: string; n: number; aoa?: number; path?: number; face?: number; f2p?: number };
-  const swingAggs = useMemo(() => {
-    const out: SwingAgg[] = [];
-    for (const club of clubsForMetrics) {
-      const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
-      if (!shots.length) continue;
-      const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
-      const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
-      const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
-      const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
-      out.push({
-        club,
-        n: shots.length,
-        aoa:  avg(aoaVals)  ?? undefined,
-        path: avg(pathVals) ?? undefined,
-        face: avg(faceVals) ?? undefined,
-        f2p:  avg(f2pVals)  ?? undefined,
-      });
-    }
-    return out;
-  }, [filteredOutliers, clubsForMetrics]);
+  const selectedClubMetrics = useMemo(() => {
+    if (selectedClubs.length !== 1) return null;
+    const club = selectedClubs[0];
+    const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
+    const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
+    const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
+    const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
+    const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
+    return {
+      club,
+      n: shots.length,
+      aoa:  avg(aoaVals)  ?? undefined,
+      path: avg(pathVals) ?? undefined,
+      face: avg(faceVals) ?? undefined,
+      f2p:  avg(f2pVals)  ?? undefined,
+    };
+  }, [filteredOutliers, selectedClubs]);
 
   const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
@@ -288,30 +275,24 @@ export default function Insights({
       onDragOver={onDragOver("swings")}
       onDrop={onDrop("swings")}
     >
-      <Card title="Swing Metrics (by Club)" right="AoA • Path • Face • Face→Path" theme={T}>
-        {swingAggs.length ? (
-          <div className="space-y-3">
-            {swingAggs.map((m) => (
-              <div key={m.club}>
-                <div className="text-xs font-medium mb-2" style={{ color: T.textDim }}>{m.club}</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <KpiCell theme={T} label={`${m.club} • AoA`}  value={`${fmt(m.aoa)}°`}  sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • Path`} value={`${fmt(m.path)}°`} sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • Face`} value={`${fmt(m.face)}°`} sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • F→P`}  value={`${fmt(m.f2p)}°`}  sub={`n=${m.n}`} />
-                </div>
-              </div>
-            ))}
+      <Card title="Swing Metrics (Selected Club)" theme={T}>
+        {selectedClubMetrics ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • AoA`}  value={`${fmt(selectedClubMetrics.aoa)}°`}  sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Path`} value={`${fmt(selectedClubMetrics.path)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face`} value={`${fmt(selectedClubMetrics.face)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face to Path`} value={`${fmt(selectedClubMetrics.f2p)}°`} sub={`n=${selectedClubMetrics.n}`} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>
-            Import shots to see swing angles (AoA, Path, Face, Face-to-Path).
+            Select a single club to see swing angles (AoA, Path, Face, Face-to-Path).
           </div>
         )}
       </Card>
     </div>
   );
-/* ---------- RECORDS (per-club bests; FILTERED) ---------- */
+
+  /* ---------- RECORDS (per-club bests; FILTERED) ---------- */
   const recordsRows = useMemo(() => {
     const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
@@ -366,11 +347,9 @@ export default function Insights({
     </div>
   );
 
-  
-/* ---------- GAPS (simple gapping warnings; ALL data — ignores filters) ---------- */
+  /* ---------- GAPS (simple gapping warnings; FILTERED) ---------- */
   const gapsRows = useMemo(() => {
-    const BASE = allShots ?? filteredNoClubRaw;
-    const byClub = groupBy(BASE.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    const byClub = groupBy(filteredOutliers.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
     const avgs: { club: string; carry: number }[] = [];
     for (const [club, rows] of byClub.entries()) {
@@ -385,10 +364,9 @@ export default function Insights({
       if (d < 8) out.push({ clubs: `${avgs[i-1].club} ↔ ${avgs[i].club}`, note: `Avg carry gap small (${d.toFixed(1)} yds)` });
     }
     return out;
-  }, [allShots, filteredNoClubRaw, allClubs]);
+  }, [filteredOutliers, allClubs]);
 
   const gaps = (
-
     <div key="gaps" draggable onDragStart={onDragStart("gaps")} onDragOver={onDragOver("gaps")} onDrop={onDrop("gaps")}>
       <Card title="Gapping Warnings" theme={T}>
         {gapsRows.length ? (
@@ -409,30 +387,6 @@ export default function Insights({
       .sort((a,b)=> new Date(a.Timestamp!).getTime() - new Date(b.Timestamp!).getTime());
     return rows.map(s => ({ t: s.Timestamp!, carry: s.CarryDistance_yds as number }));
   }, [filteredNoClubOutliers]);
-  const progressTrend = useMemo(() => {
-    const n = progressRows.length;
-    if (n < 2) return [] as { t: string; trend: number }[];
-    // x as index 0..n-1
-    const xs = progressRows.map((_, i) => i);
-    const ys = progressRows.map(r => r.carry);
-    const sum = (arr: number[]) => arr.reduce((a,b)=>a+b, 0);
-    const Sx = sum(xs);
-    const Sy = sum(ys);
-    const Sxx = sum(xs.map(x=>x*x));
-    const Sxy = sum(xs.map((x,i)=>x*ys[i]));
-    const denom = n * Sxx - Sx * Sx;
-    if (denom === 0) return [] as { t: string; trend: number }[];
-    const slope = (n * Sxy - Sx * Sy) / denom;
-    const intercept = (Sy - slope * Sx) / n;
-    return progressRows.map((r,i)=>({ t: r.t, trend: intercept + slope * i }));
-  }, [progressRows]);
-  const progressChartData = useMemo(() => {
-    if (!progressRows.length) return progressRows as any;
-    if (!progressTrend.length) return progressRows as any;
-    return progressRows.map((r, i) => ({ ...r, trend: progressTrend[i]?.trend ?? null }));
-  }, [progressRows, progressTrend]);
-
-
 
   const progress = (
     <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
@@ -440,14 +394,13 @@ export default function Insights({
         {progressRows.length ? (
           <div className="h-48">
             <ResponsiveContainer>
-              <LineChart data={progressChartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+              <LineChart data={progressRows} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="t" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="carry" name="Carry (yds)" dot={false} />
-                              <Line type="linear" dataKey="trend" name="Trend" dot={false} strokeDasharray="5 5" />
               </LineChart>
             </ResponsiveContainer>
           </div>
