@@ -242,41 +242,38 @@ export default function Insights({
   );
 
   
-/* ---------- SWINGS (per-club KPIs; respects filters; shows selected clubs or all if none selected) ---------- */
+/* ---------- SWINGS (single KPI set; respects filters)
+   - If exactly one club is selected: show that club's averages.
+   - If multiple or no clubs are selected: show averages across the visible shots (selected clubs or all).
+--------------------------------------------------------------------------- */
   const selectedClubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
     [filteredOutliers]
   );
 
-  const clubsForMetrics = useMemo(() => {
-    // If user has clubs selected in the Filters, show those; otherwise show all clubs present
-    const unique = selectedClubs.length ? selectedClubs : allClubs;
-    // Preserve natural ordering
-    const order = new Map(allClubs.map((c,i)=>[c,i]));
-    return [...unique].sort((a,b)=>(order.get(a)??999)-(order.get(b)??999));
-  }, [selectedClubs, allClubs]);
-
-  type SwingAgg = { club: string; n: number; aoa?: number; path?: number; face?: number; f2p?: number };
-  const swingAggs = useMemo(() => {
-    const out: SwingAgg[] = [];
-    for (const club of clubsForMetrics) {
-      const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
-      if (!shots.length) continue;
-      const aoaVals  = shots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
-      const pathVals = shots.map(s => s.ClubPath_deg).filter(isNum) as number[];
-      const faceVals = shots.map(s => s.ClubFace_deg).filter(isNum) as number[];
-      const f2pVals  = shots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
-      out.push({
-        club,
-        n: shots.length,
-        aoa:  avg(aoaVals)  ?? undefined,
-        path: avg(pathVals) ?? undefined,
-        face: avg(faceVals) ?? undefined,
-        f2p:  avg(f2pVals)  ?? undefined,
-      });
+  const swingShots = useMemo(() => {
+    if (!filteredOutliers.length) return [] as Shot[];
+    if (selectedClubs.length === 1) {
+      const c = selectedClubs[0];
+      return filteredOutliers.filter(s => (s.Club || "Unknown") === c);
     }
-    return out;
-  }, [filteredOutliers, clubsForMetrics]);
+    // Multiple clubs selected OR no explicit club filter: show averages across all visible shots
+    return filteredOutliers;
+  }, [filteredOutliers, selectedClubs]);
+
+  const swingAgg = useMemo(() => {
+    const aoaVals  = swingShots.map(s => s.AttackAngle_deg).filter(isNum) as number[];
+    const pathVals = swingShots.map(s => s.ClubPath_deg).filter(isNum) as number[];
+    const faceVals = swingShots.map(s => s.ClubFace_deg).filter(isNum) as number[];
+    const f2pVals  = swingShots.map(s => s.FaceToPath_deg).filter(isNum) as number[];
+    return {
+      n: swingShots.length,
+      aoa:  avg(aoaVals)  ?? undefined,
+      path: avg(pathVals) ?? undefined,
+      face: avg(faceVals) ?? undefined,
+      f2p:  avg(f2pVals)  ?? undefined,
+    };
+  }, [swingShots]);
 
   const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
@@ -288,24 +285,17 @@ export default function Insights({
       onDragOver={onDragOver("swings")}
       onDrop={onDrop("swings")}
     >
-      <Card title="Swing Metrics (by Club)" right="AoA • Path • Face • Face→Path" theme={T}>
-        {swingAggs.length ? (
-          <div className="space-y-3">
-            {swingAggs.map((m) => (
-              <div key={m.club}>
-                <div className="text-xs font-medium mb-2" style={{ color: T.textDim }}>{m.club}</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <KpiCell theme={T} label={`${m.club} • AoA`}  value={`${fmt(m.aoa)}°`}  sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • Path`} value={`${fmt(m.path)}°`} sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • Face`} value={`${fmt(m.face)}°`} sub={`n=${m.n}`} />
-                  <KpiCell theme={T} label={`${m.club} • F→P`}  value={`${fmt(m.f2p)}°`}  sub={`n=${m.n}`} />
-                </div>
-              </div>
-            ))}
+      <Card title="Swing Metrics" right="AoA • Path • Face • Face→Path" theme={T}>
+        {swingShots.length ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCell theme={T} label="AoA"  value={`${fmt(swingAgg.aoa)}°`}  sub={`n=${swingAgg.n}`} />
+            <KpiCell theme={T} label="Path" value={`${fmt(swingAgg.path)}°`} sub={`n=${swingAgg.n}`} />
+            <KpiCell theme={T} label="Face" value={`${fmt(swingAgg.face)}°`} sub={`n=${swingAgg.n}`} />
+            <KpiCell theme={T} label="F→P"  value={`${fmt(swingAgg.f2p)}°`}  sub={`n=${swingAgg.n}`} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>
-            Import shots to see swing angles (AoA, Path, Face, Face-to-Path).
+            Import shots and/or adjust filters to see swing angles (AoA, Path, Face, Face-to-Path).
           </div>
         )}
       </Card>
@@ -426,12 +416,12 @@ export default function Insights({
     const intercept = (Sy - slope * Sx) / n;
     return progressRows.map((r,i)=>({ t: r.t, trend: intercept + slope * i }));
   }, [progressRows]);
+
   const progressChartData = useMemo(() => {
     if (!progressRows.length) return progressRows as any;
     if (!progressTrend.length) return progressRows as any;
     return progressRows.map((r, i) => ({ ...r, trend: progressTrend[i]?.trend ?? null }));
   }, [progressRows, progressTrend]);
-
 
 
   const progress = (
