@@ -1,0 +1,632 @@
+{
+  "generated_at": "2025-08-19T00:44:23.254255Z",
+  "conventions": {
+    "handedness": "Right-handed golfer (RH)",
+    "signs": {
+      "face_angle": "Positive = face right (open), Negative = face left (closed)",
+      "club_path": "Positive = path right (in-to-out), Negative = path left (out-to-in)",
+      "face_to_path": "Face - Path; Positive = face more right than path (fade/slice spin), Negative = more left (draw/hook spin)",
+      "angle_of_attack": "Positive = up on the ball, Negative = down on the ball"
+    }
+  },
+  "optimal_targets": {
+    "driver": {
+      "aoa": "Up (+2\u00b0 to +5\u00b0)",
+      "path": "Neutral to slight In-to-out (0\u00b0 to +2\u00b0)",
+      "face": "Near zero (\u22120.5\u00b0 to +0.5\u00b0)",
+      "face_to_path": "Near zero to slightly negative (0\u00b0 to \u22121\u00b0)"
+    },
+    "irons": {
+      "aoa": "Down (\u22123\u00b0 to \u22125\u00b0; wedges can be \u22125\u00b0 to \u22127\u00b0)",
+      "path": "Neutral (\u22121\u00b0 to +1\u00b0)",
+      "face": "Near zero (\u22120.5\u00b0 to +0.5\u00b0)",
+      "face_to_path": "Near zero (\u22120.5\u00b0 to +0.5\u00b0)"
+    }
+  },
+  "matrix_size": 27,
+  "combinations": [
+    {
+      "aoa_state": "Down",
+      "path_state": "Out-to-in",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Left",
+      "curve": "None",
+      "typical_shot": "Pull-straight",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "Out-to-in",
+      "face_state": "Square",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Straight",
+      "curve": "Right",
+      "typical_shot": "Straight-fade",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "Out-to-in",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "Neutral",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "Neutral",
+      "face_state": "Square",
+      "face_to_path_state": "Zero",
+      "ball_start": "Straight",
+      "curve": "None",
+      "typical_shot": "Straight",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "Neutral",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "In-to-out",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "In-to-out",
+      "face_state": "Square",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Straight",
+      "curve": "Left",
+      "typical_shot": "Straight-draw",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Down",
+      "path_state": "In-to-out",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Right",
+      "curve": "None",
+      "typical_shot": "Push-straight",
+      "tendencies": "Launch \u2193, spin \u2191; good for irons compression, risky for driver (pop-up/spinny).",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Reduce downward AoA: tee higher, move ball forward, tilt spine away from target, feel club sweep up."
+        ],
+        "irons": [
+          "Keep a controlled downward strike: ball slightly forward of center with larger clubs, shift pressure left before impact, compress then brush turf."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Out-to-in",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Left",
+      "curve": "None",
+      "typical_shot": "Pull-straight",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Out-to-in",
+      "face_state": "Square",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Straight",
+      "curve": "Right",
+      "typical_shot": "Straight-fade",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Out-to-in",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Neutral",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Neutral",
+      "face_state": "Square",
+      "face_to_path_state": "Zero",
+      "ball_start": "Straight",
+      "curve": "None",
+      "typical_shot": "Straight",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "Neutral",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "In-to-out",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "In-to-out",
+      "face_state": "Square",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Straight",
+      "curve": "Left",
+      "typical_shot": "Straight-draw",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Neutral",
+      "path_state": "In-to-out",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Right",
+      "curve": "None",
+      "typical_shot": "Push-straight",
+      "tendencies": "Neutral launch/spin; fine baseline but club-dependent.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Nudge AoA slightly up for driver: small setup tilt and higher tee."
+        ],
+        "irons": [
+          "Nudge AoA slightly down for irons: small ball-back shift and earlier lead-side pressure."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Out-to-in",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Left",
+      "curve": "None",
+      "typical_shot": "Pull-straight",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Out-to-in",
+      "face_state": "Square",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Straight",
+      "curve": "Right",
+      "typical_shot": "Straight-fade",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Out-to-in",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce out-to-in path: close stance slightly, trail-foot back, feel the club approach from inside-to-out.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Neutral",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Neutral",
+      "face_state": "Square",
+      "face_to_path_state": "Zero",
+      "ball_start": "Straight",
+      "curve": "None",
+      "typical_shot": "Straight",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "Neutral",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Positive (fade bias)",
+      "ball_start": "Right",
+      "curve": "Right",
+      "typical_shot": "Push-slice",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Face-to-path is positive (fade/slice). Options: close the face a touch OR shift path a bit more right\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "In-to-out",
+      "face_state": "Closed (left)",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Left",
+      "curve": "Left",
+      "typical_shot": "Pull-hook",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Open the face slightly: neutralize/soften grip, add a bit more lead-wrist extension, feel a hold-off through impact.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "In-to-out",
+      "face_state": "Square",
+      "face_to_path_state": "Negative (draw bias)",
+      "ball_start": "Straight",
+      "curve": "Left",
+      "typical_shot": "Straight-draw",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path is negative (draw/hook). Options: open the face a touch OR shift path a bit more left\u2014do one at a time."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    },
+    {
+      "aoa_state": "Up",
+      "path_state": "In-to-out",
+      "face_state": "Open (right)",
+      "face_to_path_state": "Zero",
+      "ball_start": "Right",
+      "curve": "None",
+      "typical_shot": "Push-straight",
+      "tendencies": "Launch \u2191, spin \u2193 (driver); risk thin/heel with irons if too shallow.",
+      "corrections": {
+        "primary": [
+          "Close the face: slightly stronger lead-hand grip, more lead-wrist flexion (bow) through impact, ensure release.",
+          "Reduce in-to-out path: align a touch left, feel lead-hip opening earlier, swing more 'left' through impact.",
+          "Face-to-path near zero\u2014good baseline for straight ball flight."
+        ],
+        "driver": [
+          "Maintain upward AoA: tee high, ball forward, slight trail-shoulder lower, keep head behind ball."
+        ],
+        "irons": [
+          "If irons get too shallow: move ball a hair back, feel lead side pressure earlier, brush turf after ball."
+        ]
+      }
+    }
+  ]
+}
