@@ -241,12 +241,13 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- SWINGS (Selected club only; 4 KPI tiles) ---------- */
+  /* ---------- SWINGS (Selected/Multiple clubs) ---------- */
   const selectedClubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
     [filteredOutliers]
   );
 
+  // Single-club metrics (for KPI tiles)
   const selectedClubMetrics = useMemo(() => {
     if (selectedClubs.length !== 1) return null;
     const club = selectedClubs[0];
@@ -265,7 +266,23 @@ export default function Insights({
     };
   }, [filteredOutliers, selectedClubs]);
 
-  const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
+  // Multi-club table metrics
+  const multiClubRows = useMemo(() => {
+    if (selectedClubs.length <= 1) return [];
+    const order = new Map(allClubs.map((c,i)=>[c,i]));
+    const byClub = groupBy(filteredOutliers, s => s.Club || "Unknown");
+    const rows = Array.from(byClub.entries()).map(([club, shots]) => {
+      const aoa  = avg(shots.map(s => s.AttackAngle_deg).filter(isNum) as number[]) ?? undefined;
+      const path = avg(shots.map(s => s.ClubPath_deg).filter(isNum) as number[]) ?? undefined;
+      const face = avg(shots.map(s => s.ClubFace_deg).filter(isNum) as number[]) ?? undefined;
+      const f2p  = avg(shots.map(s => s.FaceToPath_deg).filter(isNum) as number[]) ?? undefined;
+      return { club, n: shots.length, aoa, path, face, f2p };
+    });
+    rows.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    return rows;
+  }, [filteredOutliers, selectedClubs, allClubs]);
+
+  const fmt1 = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
   const swings = (
     <div
@@ -275,17 +292,46 @@ export default function Insights({
       onDragOver={onDragOver("swings")}
       onDrop={onDrop("swings")}
     >
-      <Card title="Swing Metrics (Selected Club)" theme={T}>
-        {selectedClubMetrics ? (
+      <Card title="Swing Metrics" theme={T}>
+        {selectedClubs.length === 0 && (
+          <div className="text-sm" style={{ color: T.textDim }}>No clubs selected.</div>
+        )}
+
+        {selectedClubMetrics && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCell theme={T} label={`${selectedClubMetrics.club} • AoA`}  value={`${fmt(selectedClubMetrics.aoa)}°`}  sub={`n=${selectedClubMetrics.n}`} />
-            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Path`} value={`${fmt(selectedClubMetrics.path)}°`} sub={`n=${selectedClubMetrics.n}`} />
-            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face`} value={`${fmt(selectedClubMetrics.face)}°`} sub={`n=${selectedClubMetrics.n}`} />
-            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face to Path`} value={`${fmt(selectedClubMetrics.f2p)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • AoA`}  value={`${fmt1(selectedClubMetrics.aoa)}°`}  sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Path`} value={`${fmt1(selectedClubMetrics.path)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face`} value={`${fmt1(selectedClubMetrics.face)}°`} sub={`n=${selectedClubMetrics.n}`} />
+            <KpiCell theme={T} label={`${selectedClubMetrics.club} • Face to Path`} value={`${fmt1(selectedClubMetrics.f2p)}°`} sub={`n=${selectedClubMetrics.n}`} />
           </div>
-        ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>
-            Select a single club to see swing angles (AoA, Path, Face, Face-to-Path).
+        )}
+
+        {multiClubRows.length > 1 && (
+          <div className="overflow-auto rounded-lg border mt-1" style={{ borderColor: T.border }}>
+            <table className="w-full text-sm" style={{ color: T.text }}>
+              <thead style={{ background: T.panelAlt }}>
+                <tr>
+                  <th className="text-left px-2 py-1">Club</th>
+                  <th className="text-right px-2 py-1">AoA (°)</th>
+                  <th className="text-right px-2 py-1">Path (°)</th>
+                  <th className="text-right px-2 py-1">Face (°)</th>
+                  <th className="text-right px-2 py-1">Face→Path (°)</th>
+                  <th className="text-right px-2 py-1">n</th>
+                </tr>
+              </thead>
+              <tbody>
+                {multiClubRows.map(r => (
+                  <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
+                    <td className="px-2 py-1">{r.club}</td>
+                    <td className="px-2 py-1 text-right">{fmt1(r.aoa)}</td>
+                    <td className="px-2 py-1 text-right">{fmt1(r.path)}</td>
+                    <td className="px-2 py-1 text-right">{fmt1(r.face)}</td>
+                    <td className="px-2 py-1 text-right">{fmt1(r.f2p)}</td>
+                    <td className="px-2 py-1 text-right">{r.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
