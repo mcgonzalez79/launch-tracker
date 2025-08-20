@@ -278,11 +278,17 @@ export default function DashboardCards(props: Props) {
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
-  const effRegression = useMemo(() => {
-  const n = efficiencyData.length;
-  if (n < 2) return { m: 1.45, b: 0, points: [] as {x:number;y:number}[] };
-  const xs = efficiencyData.map(p => p.x);
-  const ys = efficiencyData.map(p => p.y);
+  const smash = useMemo(() => {
+  const pairs = efficiencyData;
+  if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
+  const ratios = pairs.map(p => p.y / p.x).filter(v => Number.isFinite(v));
+  const sf = ratios.length ? ratios.reduce((a,b)=>a+b,0) / ratios.length : 1.45;
+  const xs = pairs.map(p => p.x);
+  const x0 = effXMin;
+  const x1 = Math.max(effXMax, Math.max(...xs));
+  return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
+}, [efficiencyData, effXMin, effXMax]);
+const ys = efficiencyData.map(p => p.y);
   const sum = (arr:number[]) => arr.reduce((a,b)=>a+b,0);
   const Sx = sum(xs);
   const Sy = sum(ys);
@@ -299,7 +305,7 @@ export default function DashboardCards(props: Props) {
 
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
-      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Slope ≈ ${effRegression.m.toFixed(3)}`}>
+      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
         {efficiencyData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
@@ -319,7 +325,7 @@ export default function DashboardCards(props: Props) {
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
-                <Line type="linear" data={effRegression.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
+                <Line type="linear" data={smash.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
