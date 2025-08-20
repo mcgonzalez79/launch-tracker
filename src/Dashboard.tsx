@@ -192,7 +192,7 @@ export default function DashboardCards(props: Props) {
                   tick={{ fill: T.tick, fontSize: 12 }}
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                / tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : v as any)}>
+                />
                 <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
@@ -316,7 +316,7 @@ export default function DashboardCards(props: Props) {
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
-                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}  tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))} tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))}/>
                 <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
@@ -330,10 +330,7 @@ export default function DashboardCards(props: Props) {
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
                 <Line type="linear" data={smash.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
+              (
           <div className="text-sm" style={{ color: T.textDim }}>No speed data available.</div>
         )}
       </Card>
@@ -356,7 +353,7 @@ export default function DashboardCards(props: Props) {
                   <th className="text-right py-2 px-2">Avg Total</th>
                   <th className="text-right py-2 px-2">Avg Smash</th>
                   <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right py-2 px-2">Avg CS</th>
+                  <th className="text-right p2 px-2">Avg CS</th>
                   <th className="text-right py-2 px-2">Avg BS</th>
                   <th className="text-right py-2 px-2">Avg LA</th>
                   <th className="text-right py-2 px-2">Avg F2P</th>
