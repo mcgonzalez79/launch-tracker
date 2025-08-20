@@ -160,7 +160,13 @@ export default function DashboardCards(props: Props) {
         })),
     [filteredOutliers]
   );
-  const dispXDomain = useMemo(() => domainOf(dispersionData.map(d => d.x), 5), [dispersionData]);
+  const dispXDomain = useMemo(() => {
+    const xs = dispersionData.map(d => Math.abs(d.x));
+    const maxAbs = xs.length ? Math.max(...xs) : 1;
+    const step = 5;
+    const bound = Math.ceil((maxAbs) / step) * step;
+    return [-bound, bound];
+  }, [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 5), [dispersionData]);
 
   const dispersionCard = (
@@ -241,7 +247,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry" fill="#099d00" />
+                <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -272,21 +278,28 @@ export default function DashboardCards(props: Props) {
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
-  const smashMean = useMemo(() => {
-    const pairs = efficiencyData;
-    if (!pairs.length) return 1.45;
-    const ratios = pairs.map(p => p.y / p.x);
-    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
-  }, [efficiencyData]);
-
-  const trendData = useMemo(() => ([
-    { x: effXMin, y: smashMean * effXMin },
-    { x: effXMax, y: smashMean * effXMax }
-  ]), [smashMean, effXMin, effXMax]);
+  const effRegression = useMemo(() => {
+  const n = efficiencyData.length;
+  if (n < 2) return { m: 1.45, b: 0, points: [] as {x:number;y:number}[] };
+  const xs = efficiencyData.map(p => p.x);
+  const ys = efficiencyData.map(p => p.y);
+  const sum = (arr:number[]) => arr.reduce((a,b)=>a+b,0);
+  const Sx = sum(xs);
+  const Sy = sum(ys);
+  const Sxx = sum(xs.map(x=>x*x));
+  const Sxy = sum(xs.map((x,i)=>x*ys[i]));
+  const denom = n * Sxx - Sx * Sx;
+  if (denom === 0) return { m: 1.45, b: 0, points: [] as {x:number;y:number}[] };
+  const m = (n * Sxy - Sx * Sy) / denom;
+  const b = (Sy - m * Sx) / n;
+  const x0 = effXMin;
+  const x1 = Math.max(effXMax, Math.max(...xs));
+  return { m, b, points: [ { x: x0, y: m * x0 + b }, { x: x1, y: m * x1 + b } ] };
+}, [efficiencyData, effXMin, effXMax]);
 
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
-      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Trend ≈ ${smashMean.toFixed(3)} smash`}>
+      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Slope ≈ ${effRegression.m.toFixed(3)}`}>
         {efficiencyData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
@@ -306,7 +319,7 @@ export default function DashboardCards(props: Props) {
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
-                <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
+                <Line type="linear" data={effRegression.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
