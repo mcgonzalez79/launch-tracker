@@ -270,8 +270,7 @@ export default function DashboardCards(props: Props) {
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
-  }, [efficiencyData]);
-
+  }, [efficiencyData]
   const smash = useMemo(() => {
     const pairs = efficiencyData;
     if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
@@ -282,6 +281,20 @@ export default function DashboardCards(props: Props) {
     const x1 = xs.length ? Math.max(effXMax, Math.max(...xs)) : effXMax;
     return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
   }, [efficiencyData, effXMin, effXMax]);
+);
+
+  const smashMean = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return 1.45;
+    const ratios = pairs.map(p => p.y / p.x);
+    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  }, [efficiencyData]);
+
+  const trendData = useMemo(() => ([
+    { x: effXMin, y: smashMean * effXMin },
+    { x: effXMax, y: smashMean * effXMax }
+  ]), [smashMean, effXMin, effXMax]);
+
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
       <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
@@ -291,7 +304,7 @@ export default function DashboardCards(props: Props) {
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
-                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}  tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))} />
+                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
@@ -300,7 +313,7 @@ export default function DashboardCards(props: Props) {
                     return [val, name];
                   }}
                 />
-                <Legend wrapperStyle={{ display: "none" }} />
+                <Legend wrapperStyle={{ color: T.text }} />
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
