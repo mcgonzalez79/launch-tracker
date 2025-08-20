@@ -307,6 +307,7 @@ export default function DashboardCards(props: Props) {
   }, [efficiencyData, effXMin, effXMax]);
 
 
+  
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
       <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
@@ -315,11 +316,28 @@ export default function DashboardCards(props: Props) {
             <ResponsiveContainer>
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
-                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}  tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))} tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))}/>
-                <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  domain={[effXMin, effXMax] as any}
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }}
+                />
+                <YAxis
+                  dataKey="y"
+                  type="number"
+                  domain={["dataMin", "dataMax"] as any}
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
+                  tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))}
+                />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
-                    const p = item?.payload;
+                    const p = item?.payload as any;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
                     if (name === "y") return [`${val?.toFixed?.(1)} mph`, "Ball"];
                     return [val, name];
@@ -327,15 +345,19 @@ export default function DashboardCards(props: Props) {
                 />
                 <Legend wrapperStyle={{ display: "none" }} />
                 <Scatter name="Shots" data={efficiencyData}>
-                {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
+                  {efficiencyData.map((d, i) => (<Cell key={i} fill={clubColor.get(d.Club) || T.accent} />))}
                 </Scatter>
                 <Line type="linear" data={smash.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
-              (
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
           <div className="text-sm" style={{ color: T.textDim }}>No speed data available.</div>
         )}
       </Card>
     </div>
   );
+
 
   
   /* ---------- Club Averages (spreadsheet) ---------- */
