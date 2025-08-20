@@ -266,17 +266,18 @@ export default function Insights({
   };
 
   function benchKey(clubRaw: string): string | null {
-    const name = (clubRaw || "").toLowerCase().replace(/\s+/g, "");
-    if (!name) return null;
-    if (name.includes("driver") || name === "1w") return "driver";
-    if (name.includes("3wood") || name === "3w") return "3w";
-    if (name.includes("5wood") || name === "5w") return "5w";
-    if (name.includes("hybrid") || /[1-6]h$/.test(name)) return "hybrid";
-    if (/^[2-9]i$/.test(name)) return name;
-    if (name.includes("pitching") || name === "pw") return "pw";
-    if (name.includes("gap") || name === "gw" || name === "aw") return "gw";
-    if (name.includes("sand") || name === "sw") return "sw";
-    if (name.includes("lob") || name === "lw") return "lw";
+    const norm = (clubRaw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!norm) return null;
+    if (norm === "1w" || norm.includes("driver")) return "driver";
+    if (norm === "3w" || norm.includes("3wood")) return "3w";
+    if (norm === "5w" || norm.includes("5wood")) return "5w";
+    if (/^[1-6]h$/.test(norm) || norm.includes("hybrid")) return "hybrid";
+    const mIron = norm.match(/^([2-9])(iron|i)?$/) || norm.match(/^([2-9])i(ron)?$/);
+    if (mIron) return `${mIron[1]}i`;
+    if (norm === "pw" || norm.includes("pitchingwedge") || norm.includes("pitching")) return "pw";
+    if (norm === "gw" || norm === "aw" || norm.includes("gapwedge") || norm.includes("approachwedge") || norm.includes("approach")) return "gw";
+    if (norm === "sw" || norm.includes("sandwedge") || norm.includes("sand")) return "sw";
+    if (norm === "lw" || norm.includes("lobwedge") || norm.includes("lob")) return "lw";
     return null;
   }
 
@@ -313,11 +314,17 @@ export default function Insights({
     const key = benchKey(club);
     const row = key ? benchChart[key] : undefined;
     const cls = row ? classifyBenchmark(row, avgTotal) : { label: "—", idx: -1 };
+    let range = "";
+    if (row && cls.idx >= 0) {
+      if (cls.idx < 4) range = `${row[cls.idx]}–${row[cls.idx+1]} yds`;
+      else range = `≥ ${row[4]} yds`;
+    }
     return {
       club,
       avgTotal,
       n: totals.length || carries.length,
       benchLabel: cls.label,
+      benchRange: range,
     };
   }, [benchClubs, filteredOutliers]);
 
@@ -333,7 +340,7 @@ export default function Insights({
         {benchData ? (
           <div className="grid grid-cols-2 gap-3">
             <KpiCell theme={T} label="Avg Total" value={`${benchData.avgTotal.toFixed(1)} yds`} sub={`n=${benchData.n}`} />
-            <KpiCell theme={T} label="Benchmark" value={benchData.benchLabel} />
+            <KpiCell theme={T} label="Benchmark" value={benchData.benchLabel} sub={benchData.benchRange || undefined} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>Select a single club to see benchmark targets.</div>
