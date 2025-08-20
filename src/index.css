@@ -146,9 +146,9 @@ button, input, select, textarea {
 .filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
 
 
-/* Print only the Club Averages chart (gapping) when triggered */
+/* Print only the Club Averages (spreadsheet) */
 @media print {
   body * { visibility: hidden !important; }
-  #print-club-averages, #print-club-averages * { visibility: visible !important; }
-  #print-club-averages { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #print-club-averages-table, #print-club-averages-table * { visibility: visible !important; }
+  #print-club-averages-table { position: fixed; inset: 0; width: 100%; height: 100%; }
 }
