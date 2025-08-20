@@ -144,3 +144,11 @@ button, input, select, textarea {
 
 /* Prevent date inputs from overflowing the sidebar */
 .filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
+
+
+/* Print only the Club Averages chart (gapping) when triggered */
+@media print {
+  body * { visibility: hidden !important; }
+  #print-club-averages, #print-club-averages * { visibility: visible !important; }
+  #print-club-averages { position: fixed; inset: 0; width: 100%; height: 100%; }
+}
