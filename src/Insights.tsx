@@ -505,6 +505,29 @@ export default function Insights({
       .sort((a,b)=> new Date(a.Timestamp!).getTime() - new Date(b.Timestamp!).getTime());
     return rows.map(s => ({ t: s.Timestamp!, carry: s.CarryDistance_yds as number }));
   }, [filteredNoClubOutliers]);
+  const progressTrend = useMemo(() => {
+    const n = progressRows.length;
+    if (n < 2) return [] as { t: string; trend: number }[];
+    const xs = progressRows.map((_, i) => i);
+    const ys = progressRows.map(r => r.carry);
+    const sum = (arr: number[]) => arr.reduce((a,b)=>a+b, 0);
+    const Sx = sum(xs);
+    const Sy = sum(ys);
+    const Sxx = sum(xs.map(x=>x*x));
+    const Sxy = sum(xs.map((x,i)=>x*ys[i]));
+    const denom = n * Sxx - Sx * Sx;
+    if (denom === 0) return [] as { t: string; trend: number }[];
+    const slope = (n * Sxy - Sx * Sy) / denom;
+    const intercept = (Sy - slope * Sx) / n;
+    return progressRows.map((r,i)=>({ t: r.t, trend: intercept + slope * i }));
+  }, [progressRows]);
+
+  const progressChartData = useMemo(() => {
+    if (!progressRows.length) return progressRows as any;
+    if (!progressTrend.length) return progressRows as any;
+    return progressRows.map((r, i) => ({ ...r, trend: progressTrend[i]?.trend ?? null }));
+  }, [progressRows, progressTrend]);
+
 
   const progress = (
     <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
