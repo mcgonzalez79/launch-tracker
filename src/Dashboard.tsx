@@ -8,7 +8,7 @@ import {
   ScatterChart, Scatter,
   BarChart, Bar,
   Line,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, Cell
 } from "recharts";
 
@@ -30,9 +30,9 @@ type Props = {
   hasData: boolean;
   kpis: KPIs;
 
-  filteredOutliers: Shot[];
-  filtered: Shot[];
-  shots: Shot[];
+  filteredOutliers: Shot[]; // outliers removed
+  filtered: Shot[];         // raw filter by club/date/session
+  shots: Shot[];            // all shots
 
   tableRows: ClubRow[];
   clubs: string[];
@@ -46,7 +46,17 @@ function isNum(x: any): x is number {
 }
 function avg(xs: number[]) { return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0; }
 
-/** Round out domain by step (e.g., nearest 5) with padding */
+function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
+  let best: T | null = null; let bestScore = -Infinity;
+  for (const t of arr) {
+    const s = score(t);
+    if (s == null || Number.isNaN(s)) continue;
+    if (s > bestScore) { bestScore = s; best = t; }
+  }
+  return best;
+}
+
+/** Round domain to a step with padding */
 function domainOf(values: number[], step = 1, pad = step): [number, number] {
   if (!values.length) return [0, 1];
   let lo = Math.min(...values);
@@ -58,7 +68,7 @@ function domainOf(values: number[], step = 1, pad = step): [number, number] {
   return [lo, hi];
 }
 
-/** Build a stable per-club color map */
+/** Build a stable per-club color map (keeps prior look) */
 function buildClubColorMap(clubs: string[]) {
   const PALETTE = [
     "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
@@ -67,7 +77,7 @@ function buildClubColorMap(clubs: string[]) {
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
   ];
   const m = new Map<string, string>();
-  clubs.forEach((c, i) => m.set(c, PALETTE[i % PALETTE.length]));
+  (clubs || []).forEach((c, i) => m.set(c, PALETTE[i % PALETTE.length]));
   return m;
 }
 
@@ -88,14 +98,14 @@ export default function DashboardCards(props: Props) {
     clubs,
   } = props;
 
-  const clubColor = useMemo(() => buildClubColorMap(clubs || []), [clubs]);
-
-  /* ---------- Layout: vertical full-width stack (like Insights) ---------- */
+  // match Insights: full-width vertical stack, each card responsive internally
   const Stack: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="grid gap-4">{children}</div>
   );
 
-  /* ---------- KPI Card ---------- */
+  const clubColor = useMemo(() => buildClubColorMap(clubs || []), [clubs]);
+
+  /* ---------- KPIs ---------- */
   const kpiCard = (
     <div
       key="kpis"
@@ -106,23 +116,23 @@ export default function DashboardCards(props: Props) {
     >
       <Card theme={T} title="KPIs" right={`n=${kpis?.carry?.n ?? 0}`}>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <KpiCell label="Avg Carry" value={`${isNum(kpis?.carry?.mean) ? kpis!.carry.mean.toFixed(1) : "—"} yds`} theme={T} />
-          <KpiCell label="Avg Total" value={`${isNum(kpis?.carry?.mean) ? (kpis!.carry.mean * 1.1).toFixed(1) : "—"} yds`} theme={T} />
-          <KpiCell label="Ball Speed" value={`${isNum(kpis?.ball?.mean) ? kpis!.ball.mean.toFixed(1) : "—"} mph`} theme={T} />
-          <KpiCell label="Club Speed" value={`${isNum(kpis?.club?.mean) ? kpis!.club.mean.toFixed(1) : "—"} mph`} theme={T} />
-          <KpiCell label="Smash (avg)" value={`${isNum(kpis?.smash?.mean) ? kpis!.smash.mean.toFixed(3) : "—"}`} theme={T} />
+          <KpiCell label="Avg Carry" value={isNum(kpis?.carry?.mean) ? `${kpis!.carry.mean.toFixed(1)} yds` : "—"} T={T} />
+          <KpiCell label="Avg Total" value={isNum(kpis?.carry?.mean) ? `${(kpis!.carry.mean * 1.1).toFixed(1)} yds` : "—"} T={T} />
+          <KpiCell label="Ball Speed" value={isNum(kpis?.ball?.mean) ? `${kpis!.ball.mean.toFixed(1)} mph` : "—"} T={T} />
+          <KpiCell label="Club Speed" value={isNum(kpis?.club?.mean) ? `${kpis!.club.mean.toFixed(1)} mph` : "—"} T={T} />
+          <KpiCell label="Smash (avg)" value={isNum(kpis?.smash?.mean) ? kpis!.smash.mean.toFixed(3) : "—"} T={T} />
         </div>
       </Card>
     </div>
   );
 
-  /* ---------- Shot Shape KPIs ---------- */
-  // Use LaunchDirection_deg when available; else fall back to ClubFace_deg as a directional proxy.
+  /* ---------- Shot Shape (restore) ---------- */
   const shapeAngles = useMemo(() => {
-    return (filteredOutliers ?? [])
+    const src = filteredOutliers ?? filtered ?? shots ?? [];
+    return src
       .map(s => (isNum(s.LaunchDirection_deg) ? s.LaunchDirection_deg! : (isNum(s.ClubFace_deg) ? s.ClubFace_deg! : null)))
       .filter(isNum) as number[];
-  }, [filteredOutliers]);
+  }, [filteredOutliers, filtered, shots]);
 
   const shapePercents = useMemo(() => {
     const total = shapeAngles.length || 1;
@@ -145,11 +155,11 @@ export default function DashboardCards(props: Props) {
       <Card title="Shot Shape (percent of shots)" theme={T}>
         {shapeAngles.length ? (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <KpiCell label="Hook" value={`${shapePercents.hook}%`} theme={T} />
-            <KpiCell label="Draw" value={`${shapePercents.draw}%`} theme={T} />
-            <KpiCell label="Straight" value={`${shapePercents.straight}%`} theme={T} />
-            <KpiCell label="Fade" value={`${shapePercents.fade}%`} theme={T} />
-            <KpiCell label="Slice" value={`${shapePercents.slice}%`} theme={T} />
+            <KpiCell label="Hook" value={`${shapePercents.hook}%`} T={T} />
+            <KpiCell label="Draw" value={`${shapePercents.draw}%`} T={T} />
+            <KpiCell label="Straight" value={`${shapePercents.straight}%`} T={T} />
+            <KpiCell label="Fade" value={`${shapePercents.fade}%`} T={T} />
+            <KpiCell label="Slice" value={`${shapePercents.slice}%`} T={T} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>No direction data.</div>
@@ -158,10 +168,10 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Dispersion ---------- */
+  /* ---------- Dispersion (restore) ---------- */
   const dispersionData = useMemo(
     () =>
-      (filteredOutliers ?? [])
+      (filteredOutliers ?? filtered ?? shots ?? [])
         .filter(s => isNum(s.CarryDeviationDistance_yds) && isNum(s.CarryDistance_yds))
         .map(s => ({
           x: (s.CarryDeviationDistance_yds as number) * -1, // left negative, right positive
@@ -170,7 +180,7 @@ export default function DashboardCards(props: Props) {
           SessionId: s.SessionId,
           Timestamp: s.Timestamp,
         })),
-    [filteredOutliers]
+    [filteredOutliers, filtered, shots]
   );
   const dispXDomain = useMemo(() => domainOf(dispersionData.map(d => d.x), 5), [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 10), [dispersionData]);
@@ -235,7 +245,6 @@ export default function DashboardCards(props: Props) {
 
   /* ---------- Gapping (avg carry per club) ---------- */
   const gapData = useMemo(() => {
-    // Preserve display order using incoming clubs array
     const byClub = new Map<string, ClubRow>();
     for (const r of (tableRows || []) as any[]) byClub.set((r as any).club, r as any);
     return (clubs || []).map(club => ({
@@ -252,7 +261,7 @@ export default function DashboardCards(props: Props) {
       onDragOver={onDragOver("gap")}
       onDrop={onDrop("gap")}
     >
-      <Card title="Gapping (avg carry per club)" theme={T}>
+      <Card title="Gapping (Avg Carry per Club)" theme={T}>
         {gapData.length ? (
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
@@ -275,7 +284,7 @@ export default function DashboardCards(props: Props) {
   /* ---------- Efficiency (Ball vs Club speed) ---------- */
   const efficiencyData = useMemo(
     () =>
-      (filteredOutliers ?? [])
+      (filteredOutliers ?? filtered ?? shots ?? [])
         .filter(s => isNum(s.ClubSpeed_mph) && isNum(s.BallSpeed_mph))
         .map(s => ({
           x: s.ClubSpeed_mph as number,
@@ -283,17 +292,15 @@ export default function DashboardCards(props: Props) {
           Club: s.Club,
           Timestamp: s.Timestamp,
         })),
-    [filteredOutliers]
+    [filteredOutliers, filtered, shots]
   );
 
-  // X domain starts at 50 mph as you requested earlier; auto-extend upper bound based on data
   const effXMin = 50;
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin + 20) : effXMin + 20;
   }, [efficiencyData]);
 
-  // Smash trendline: y = m * x where m is average smash across visible points
   const smashMean = useMemo(() => {
     const ratios = efficiencyData.map(d => (d.x ? d.y / d.x : NaN)).filter(isNum);
     return ratios.length ? avg(ratios) : NaN;
@@ -401,11 +408,11 @@ export default function DashboardCards(props: Props) {
                 {tableRows.map((r: any) => (
                   <tr key={r.club} style={{ borderTop: `1px solid ${T.border}` }}>
                     <td className="py-2 px-2">{r.club}</td>
-                    <td className="text-right py-2 px-2">{(r as any).count}</td>
+                    <td className="text-right py-2 px-2">{(r as any).count ?? (r as any).n ?? 0}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgCarry ?? 0).toFixed(1)}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgTotal ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgSmash ?? 0).toFixed(3)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgSpin ?? 0).toFixed(0)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgSmash ?? (r as any).smash ?? 0).toFixed(3)}</td>
+                    <td className="text-right py-2 px-2">{Number((r as any).avgSpin ?? (r as any).spin ?? 0).toFixed(0)}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgCS ?? 0).toFixed(1)}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgBS ?? 0).toFixed(1)}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgLA ?? 0).toFixed(1)}</td>
@@ -422,7 +429,7 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Card map & render ---------- */
+  /* ---------- Render in requested order (full-width stack) ---------- */
   const cardMap: Record<string, JSX.Element> = {
     kpis: kpiCard,
     shape: shapeCard,
@@ -442,13 +449,11 @@ export default function DashboardCards(props: Props) {
 /* =========================
    Small presentational components
 ========================= */
-function KpiCell({
-  label, value, theme: T
-}: { label: string; value: string; theme: Theme; }) {
+function KpiCell({ label, value, T }: { label: string; value: string; T: Theme }) {
   return (
-    <div className="rounded-xl p-4 border" style={{ background: T.panelAlt, borderColor: T.border }}>
+    <div className="rounded-xl p-4 border" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}>
       <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
-      <div className="text-xl md:text-2xl font-semibold" style={{ color: T.text }}>{value}</div>
+      <div className="text-xl md:text-2xl font-semibold">{value}</div>
     </div>
   );
 }
