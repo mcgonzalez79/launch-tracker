@@ -226,13 +226,7 @@ export default function App() {
   /* =========================
      Actions
   ========================= */
-  function onPrintClubAverages() {
-  setTab("dashboard");
-  requestAnimationFrame(() => {
-    try { document.getElementById('print-club-averages-table')?.scrollIntoView({ block: 'center' }); } catch {}
-    requestAnimationFrame(() => window.print());
-  });
-}
+  function onPrintClubAverages() { window.print(); }
   function onDeleteSession() {
     if (!shots.length || sessionFilter === "ALL") return;
     if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
@@ -323,7 +317,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights ordering
-  const INSIGHTS_DEFAULT = ["dist", "high", "swings", "records", "gaps", "progress"];
+  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "swings", "records", "gaps", "progress"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");

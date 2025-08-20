@@ -39,7 +39,6 @@ type Props = {
 export default function FiltersPanel(props: Props) {
   const {
     theme: T,
-    shots,
     sessions,
     clubs,
     selectedClubs,
@@ -87,20 +86,26 @@ export default function FiltersPanel(props: Props) {
     input.click();
   };
 
-  const sortedClubs = useMemo(() => [...(clubs ?? [])], [clubs]);
+  const allSelected = useMemo(
+    () => selectedClubs.length > 0 && selectedClubs.length === clubs.length,
+    [selectedClubs, clubs]
+  );
 
   const toggleClub = (c: string) => {
-    const set = new Set(selectedClubs ?? []);
-    if (set.has(c)) set.delete(c); else set.add(c);
-    setSelectedClubs([...set]);
+    if (selectedClubs.includes(c)) {
+      setSelectedClubs(selectedClubs.filter(x => x !== c));
+    } else {
+      setSelectedClubs([...selectedClubs, c]);
+    }
   };
+
+  const selectAllClubs = () => setSelectedClubs(clubs.slice());
   const clearClubs = () => setSelectedClubs([]);
-  const selectAllClubs = () => setSelectedClubs(sortedClubs);
 
   return (
-    <aside
-      className="filters-panel rounded-xl overflow-hidden"
-      style={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+    <section
+      className="rounded-xl border shadow-sm"
+      style={{ background: T.panel, color: T.text, borderColor: T.border }}
     >
       <header
         className="px-4 py-2 rounded-t-xl"
@@ -145,23 +150,20 @@ export default function FiltersPanel(props: Props) {
         <div className="mb-3">
           <label className="text-xs block mb-1" style={{ color: T.textDim }}>Date range</label>
 
-          {/* single-row, responsive, no overflow */}
-          <div
-            className="grid items-center gap-2"
-            style={{ gridTemplateColumns: "1fr auto 1fr" }}
-          >
+          {/* force single row inside sidebar */}
+          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
             <input
               type="date"
-              className="rounded-md px-2 py-1 border w-full min-w-0"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
             <span className="text-xs" style={{ color: T.textDim }}>to</span>
             <input
               type="date"
-              className="rounded-md px-2 py-1 border w-full min-w-0"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
@@ -182,12 +184,11 @@ export default function FiltersPanel(props: Props) {
           </div>
         </div>
 
-        {/* 5) Exclude outliers checkbox row */}
+        {/* 5) Exclude outliers — simple row */}
         <div className="mb-3">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              className="rounded-sm"
               checked={excludeOutliers}
               onChange={(e) => setExcludeOutliers(e.target.checked)}
             />
@@ -224,19 +225,19 @@ export default function FiltersPanel(props: Props) {
 
           {hasClubs ? (
             <div className="grid grid-cols-2 gap-2">
-              {sortedClubs.map((c) => {
-                const active = selectedClubs?.includes(c);
+              {clubs.map((c) => {
+                const selected = selectedClubs.includes(c);
                 return (
                   <button
                     key={c}
-                    className="rounded-md px-2 py-1 text-xs border text-left"
+                    className="rounded-md px-2 py-1 border text-xs text-left"
                     style={{
-                      background: active ? T.brand : T.panelAlt,
-                      color: active ? T.white : T.text,
-                      borderColor: active ? T.brand : T.border,
+                      background: selected ? T.brandMuted : T.panelAlt,
+                      color: T.text,
+                      borderColor: selected ? T.brand : T.border,
                     }}
                     onClick={() => toggleClub(c)}
-                    title={active ? "Selected" : "Click to select"}
+                    title={c}
                   >
                     {c}
                   </button>
@@ -255,16 +256,12 @@ export default function FiltersPanel(props: Props) {
           <label className="text-xs block mb-1" style={{ color: T.textDim }}>
             Carry distance range (yds)
           </label>
-
-          <div
-            className="grid items-center gap-2"
-            style={{ gridTemplateColumns: "1fr auto 1fr" }}
-          >
+          <div className="flex items-center gap-2" style={{ flexWrap: "nowrap" }}>
             <input
               type="number"
               inputMode="decimal"
-              className="rounded-md px-2 py-1 border w-full min-w-0"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               placeholder={Number.isFinite(carryBounds.min) ? String(carryBounds.min) : "min"}
               value={carryMin}
               onChange={(e) => setCarryMin(e.target.value)}
@@ -273,14 +270,13 @@ export default function FiltersPanel(props: Props) {
             <input
               type="number"
               inputMode="decimal"
-              className="rounded-md px-2 py-1 border w-full min-w-0"
-              style={{ background: T.bg, color: T.text, borderColor: T.border }}
+              className="rounded-md px-2 py-1 border"
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               placeholder={Number.isFinite(carryBounds.max) ? String(carryBounds.max) : "max"}
               value={carryMax}
               onChange={(e) => setCarryMax(e.target.value)}
             />
           </div>
-
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs" style={{ color: T.textDim }}>
               Bounds: {Number.isFinite(carryBounds.min) ? carryBounds.min : "—"}–{Number.isFinite(carryBounds.max) ? carryBounds.max : "—"} yds
@@ -314,19 +310,27 @@ export default function FiltersPanel(props: Props) {
           Export CSV
         </button>
 
-        {/* 9) Delete controls (row) */}
-        <div className="flex items-center gap-2 mt-2">
+        {/* 9) Delete row: Session + All */}
+        <div className="grid grid-cols-2 gap-2">
           <button
-            className="w-1/2 rounded-md px-3 py-2 border text-sm"
-            style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+            className="rounded-md px-3 py-2 border text-sm"
+            style={{
+              background: "rgba(200,0,0,0.08)",
+              borderColor: "rgba(200,0,0,0.35)",
+              color: T.text,
+            }}
             onClick={onDeleteSession}
-            title="Delete selected session"
+            title="Delete current session"
           >
             Delete Session
           </button>
           <button
-            className="w-1/2 rounded-md px-3 py-2 border text-sm"
-            style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+            className="rounded-md px-3 py-2 border text-sm"
+            style={{
+              background: "rgba(200,0,0,0.12)",
+              borderColor: "rgba(200,0,0,0.45)",
+              color: T.text,
+            }}
             onClick={onDeleteAll}
             title="Delete all shots"
           >
@@ -334,10 +338,11 @@ export default function FiltersPanel(props: Props) {
           </button>
         </div>
       </div>
-    </aside>
+    </section>
   );
 }
 
+/* ----- little quick-range pill ----- */
 function QuickBtn({ label, onClick, T }: { label: string; onClick: () => void; T: Theme }) {
   return (
     <button

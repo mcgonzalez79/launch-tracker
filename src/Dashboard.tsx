@@ -159,8 +159,14 @@ export default function DashboardCards(props: Props) {
           Timestamp: s.Timestamp,
         })),
     [filteredOutliers]
-  );
-  const dispXDomain = useMemo(() => domainOf(dispersionData.map(d => d.x), 5), [dispersionData]);
+  );;
+  const dispXDomain = useMemo(() => {
+  const xs = dispersionData.map(d => Math.abs(d.x));
+  const maxAbs = xs.length ? Math.max(...xs) : 1;
+  const step = 5;
+  const bound = Math.ceil(maxAbs / step) * step;
+  return [-bound, bound];
+}, [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 5), [dispersionData]);
 
   const dispersionCard = (
@@ -241,7 +247,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry" fill="#099d00" />
+                <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -265,12 +271,17 @@ export default function DashboardCards(props: Props) {
         })),
     [filteredOutliers]
   );
+  
 
   const effXMin = 50;
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
+
+;
+
+  
 
   const smashMean = useMemo(() => {
     const pairs = efficiencyData;
@@ -284,29 +295,59 @@ export default function DashboardCards(props: Props) {
     { x: effXMax, y: smashMean * effXMax }
   ]), [smashMean, effXMin, effXMax]);
 
+  const smash = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
+    const ratios = pairs.map(p => p.y / p.x).filter(v => Number.isFinite(v));
+    const sf = ratios.length ? ratios.reduce((a,b)=>a+b,0) / ratios.length : 1.45;
+    const xs = pairs.map(p => p.x);
+    const x0 = effXMin;
+    const x1 = xs.length ? Math.max(effXMax, Math.max(...xs)) : effXMax;
+    return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
+  }, [efficiencyData, effXMin, effXMax]);
+
+
+  
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
-      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Trend ≈ ${smashMean.toFixed(3)} smash`}>
+      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
         {efficiencyData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
-                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
-                <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  domain={[effXMin, effXMax] as any}
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }}
+                />
+                <YAxis
+                  dataKey="y"
+                  type="number"
+                  domain={["dataMin", "dataMax"] as any}
+                  tick={{ fill: T.tick, fontSize: 12 }}
+                  stroke={T.tick}
+                  label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
+                  tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : (v as any))}
+                />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
-                    const p = item?.payload;
+                    const p = item?.payload as any;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
                     if (name === "y") return [`${val?.toFixed?.(1)} mph`, "Ball"];
                     return [val, name];
                   }}
                 />
-                <Legend wrapperStyle={{ color: T.text }} />
+                <Legend wrapperStyle={{ display: "none" }} />
                 <Scatter name="Shots" data={efficiencyData}>
-                {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
+                  {efficiencyData.map((d, i) => (<Cell key={i} fill={clubColor.get(d.Club) || T.accent} />))}
                 </Scatter>
-                <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
+                <Line type="linear" data={smash.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -317,10 +358,11 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
+
   
   /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
-    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")} id="print-club-averages-table">
+    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
@@ -333,7 +375,7 @@ export default function DashboardCards(props: Props) {
                   <th className="text-right py-2 px-2">Avg Total</th>
                   <th className="text-right py-2 px-2">Avg Smash</th>
                   <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right py-2 px-2">Avg CS</th>
+                  <th className="text-right p2 px-2">Avg CS</th>
                   <th className="text-right py-2 px-2">Avg BS</th>
                   <th className="text-right py-2 px-2">Avg LA</th>
                   <th className="text-right py-2 px-2">Avg F2P</th>

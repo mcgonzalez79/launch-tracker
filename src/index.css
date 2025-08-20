@@ -111,27 +111,36 @@ button, input, select, textarea {
 }
 
 /* ---- Print tweaks (for Print club averages) ---- */
-
-/* Print only the Club Averages (spreadsheet) — robust version that preserves ancestors */
 @media print {
-  /* Hide everything except the target, its descendants, and its ancestors */
-  #root :not(#print-club-averages-table):not(#print-club-averages-table *):not(:has(#print-club-averages-table)) {
-    display: none !important;
+  body {
+    color: #000;
+    background: #fff;
   }
 
-  /* Make sure the target renders normally */
-  #print-club-averages-table {
-    display: block !important;
-    position: static !important;
+  /* Avoid background colors and borders when printing */
+  .no-print-border {
+    border: none !important;
   }
-
-  /* Keep table semantics for proper pagination */
-  #print-club-averages-table table { display: table !important; width: 100% !important; }
-  #print-club-averages-table thead { display: table-header-group !important; }
-  #print-club-averages-table tbody { display: table-row-group !important; }
-  #print-club-averages-table tr { display: table-row !important; }
-  #print-club-averages-table th, #print-club-averages-table td { display: table-cell !important; }
-
-  /* Optional: nicer print margins */
-  @page { margin: 0.5in; }
+  .no-print-bg {
+    background: transparent !important;
+  }
 }
+
+/* Sidebar width safety so large selects/inputs don't overflow */
+.sidebar-fix select,
+.sidebar-fix input,
+.sidebar-fix .field,
+.sidebar-fix .control,
+.sidebar-fix .w-full {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* If a row uses flex without wrapping, allow wrap in the sidebar */
+.sidebar-fix .flex {
+  flex-wrap: wrap;
+}
+
+
+/* Prevent date inputs from overflowing the sidebar */
+.filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
