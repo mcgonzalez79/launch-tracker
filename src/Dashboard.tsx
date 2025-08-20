@@ -161,12 +161,12 @@ export default function DashboardCards(props: Props) {
     [filteredOutliers]
   );
   const dispXDomain = useMemo(() => {
-    const xs = dispersionData.map(d => Math.abs(d.x));
-    const maxAbs = xs.length ? Math.max(...xs) : 1;
-    const step = 5;
-    const bound = Math.ceil((maxAbs) / step) * step;
-    return [-bound, bound];
-  }, [dispersionData]);
+  const xs = dispersionData.map(d => Math.abs(d.x));
+  const maxAbs = xs.length ? Math.max(...xs) : 1;
+  const step = 5;
+  const bound = Math.ceil(maxAbs / step) * step;
+  return [-bound, bound];
+}, [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 5), [dispersionData]);
 
   const dispersionCard = (
@@ -270,7 +270,18 @@ export default function DashboardCards(props: Props) {
           Timestamp: s.Timestamp,
         })),
     [filteredOutliers]
-  );
+  )
+  const smash = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
+    const ratios = pairs.map(p => p.y / p.x).filter(v => Number.isFinite(v));
+    const sf = ratios.length ? ratios.reduce((a,b)=>a+b,0) / ratios.length : 1.45;
+    const xs = pairs.map(p => p.x);
+    const x0 = effXMin;
+    const x1 = xs.length ? Math.max(effXMax, Math.max(...xs)) : effXMax;
+    return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
+  }, [efficiencyData, effXMin, effXMax]);
+;
 
   const effXMin = 50;
   const effXMax = useMemo(() => {
@@ -278,30 +289,17 @@ export default function DashboardCards(props: Props) {
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
-  const smash = useMemo(() => {
-  const pairs = efficiencyData;
-  if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
-  const ratios = pairs.map(p => p.y / p.x).filter(v => Number.isFinite(v));
-  const sf = ratios.length ? ratios.reduce((a,b)=>a+b,0) / ratios.length : 1.45;
-  const xs = pairs.map(p => p.x);
-  const x0 = effXMin;
-  const x1 = Math.max(effXMax, Math.max(...xs));
-  return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
-}, [efficiencyData, effXMin, effXMax]);
-const ys = efficiencyData.map(p => p.y);
-  const sum = (arr:number[]) => arr.reduce((a,b)=>a+b,0);
-  const Sx = sum(xs);
-  const Sy = sum(ys);
-  const Sxx = sum(xs.map(x=>x*x));
-  const Sxy = sum(xs.map((x,i)=>x*ys[i]));
-  const denom = n * Sxx - Sx * Sx;
-  if (denom === 0) return { m: 1.45, b: 0, points: [] as {x:number;y:number}[] };
-  const m = (n * Sxy - Sx * Sy) / denom;
-  const b = (Sy - m * Sx) / n;
-  const x0 = effXMin;
-  const x1 = Math.max(effXMax, Math.max(...xs));
-  return { m, b, points: [ { x: x0, y: m * x0 + b }, { x: x1, y: m * x1 + b } ] };
-}, [efficiencyData, effXMin, effXMax]);
+  const smashMean = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return 1.45;
+    const ratios = pairs.map(p => p.y / p.x);
+    return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  }, [efficiencyData]);
+
+  const trendData = useMemo(() => ([
+    { x: effXMin, y: smashMean * effXMin },
+    { x: effXMax, y: smashMean * effXMax }
+  ]), [smashMean, effXMin, effXMax]);
 
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
