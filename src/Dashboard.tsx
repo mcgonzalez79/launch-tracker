@@ -231,7 +231,7 @@ export default function DashboardCards(props: Props) {
   }, [filteredOutliers, clubs]);
 
   const gapCard = (
-    <div key="gap" id="print-club-averages" draggable onDragStart={onDragStart("gap")} onDragOver={onDragOver("gap")} onDrop={onDrop("gap")}>
+    <div key="gap" draggable onDragStart={onDragStart("gap")} onDragOver={onDragOver("gap")} onDrop={onDrop("gap")}>
       <Card title="Gapping (avg carry per club)" theme={T}>
         {gapData.length ? (
           <div style={{ height: 300 }}>
@@ -320,7 +320,7 @@ export default function DashboardCards(props: Props) {
   
   /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
-    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
+    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")} id="print-club-averages-table">
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
