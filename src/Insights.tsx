@@ -535,13 +535,14 @@ export default function Insights({
         {progressRows.length ? (
           <div className="h-48">
             <ResponsiveContainer>
-              <LineChart data={progressRows} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+              <LineChart data={progressChartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="t" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="carry" name="Carry (yds)" dot={false} />
+                              <Line type="linear" dataKey="trend" name="Trend" dot={false} stroke={T.textDim} strokeDasharray="5 5" />
               </LineChart>
             </ResponsiveContainer>
           </div>
