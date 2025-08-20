@@ -7,7 +7,7 @@ import {
   ScatterChart, Scatter,
   BarChart, Bar,
   Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, Cell
 } from "recharts";
 
@@ -186,7 +186,7 @@ export default function DashboardCards(props: Props) {
                   tick={{ fill: T.tick, fontSize: 12 }}
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                />
+                 tickFormatter={(v:any)=>Number(v).toFixed(2)}/>
                 <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
@@ -241,7 +241,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry" fill="#099d00" />
+                <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -293,7 +293,7 @@ export default function DashboardCards(props: Props) {
               <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="x" type="number" domain={[effXMin, effXMax] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Club speed (mph)", position: "insideBottom", dy: 10, fill: T.textDim, fontSize: 12 }} />
-                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
+                <YAxis dataKey="y" type="number" domain={["dataMin - 2", "dataMax + 2"] as any} tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Ball speed (mph)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}  tickFormatter={(v:any)=>Number(v).toFixed(2)}/>
                 <Tooltip cursor={{ strokeDasharray: "3 3" }} contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
@@ -302,7 +302,6 @@ export default function DashboardCards(props: Props) {
                     return [val, name];
                   }}
                 />
-                <Legend wrapperStyle={{ color: T.text }} />
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
@@ -375,7 +374,7 @@ export default function DashboardCards(props: Props) {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
       {cardOrder.map((key) => cardMap[key] ?? null)}
     </div>
   );
