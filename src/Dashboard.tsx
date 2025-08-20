@@ -192,7 +192,7 @@ export default function DashboardCards(props: Props) {
                   tick={{ fill: T.tick, fontSize: 12 }}
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
-                />
+                / tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : v as any)}>
                 <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
@@ -325,7 +325,7 @@ export default function DashboardCards(props: Props) {
                     return [val, name];
                   }}
                 />
-                <Legend wrapperStyle={{ color: T.text }} />
+                <Legend wrapperStyle={{ display: "none" }} />
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
