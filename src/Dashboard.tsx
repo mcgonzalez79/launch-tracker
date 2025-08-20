@@ -8,7 +8,7 @@ import {
   ScatterChart, Scatter,
   BarChart, Bar,
   Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, Cell
 } from "recharts";
 
@@ -30,9 +30,9 @@ type Props = {
   hasData: boolean;
   kpis: KPIs;
 
-  filteredOutliers: Shot[]; // outliers removed
-  filtered: Shot[];         // raw filter by club/date/session
-  shots: Shot[];            // all shots
+  filteredOutliers: Shot[];
+  filtered: Shot[];
+  shots: Shot[];
 
   tableRows: ClubRow[];
   clubs: string[];
@@ -45,18 +45,6 @@ function isNum(x: any): x is number {
   return typeof x === "number" && Number.isFinite(x);
 }
 function avg(xs: number[]) { return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0; }
-
-function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
-  let best: T | null = null; let bestScore = -Infinity;
-  for (const t of arr) {
-    const s = score(t);
-    if (s == null || Number.isNaN(s)) continue;
-    if (s > bestScore) { bestScore = s; best = t; }
-  }
-  return best;
-}
-
-/** Round domain to a step with padding */
 function domainOf(values: number[], step = 1, pad = step): [number, number] {
   if (!values.length) return [0, 1];
   let lo = Math.min(...values);
@@ -67,8 +55,6 @@ function domainOf(values: number[], step = 1, pad = step): [number, number] {
   if (lo === hi) hi = lo + step;
   return [lo, hi];
 }
-
-/** Build a stable per-club color map (keeps prior look) */
 function buildClubColorMap(clubs: string[]) {
   const PALETTE = [
     "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
@@ -98,7 +84,7 @@ export default function DashboardCards(props: Props) {
     clubs,
   } = props;
 
-  // match Insights: full-width vertical stack, each card responsive internally
+  /* Layout: full-width vertical stack, like Insights */
   const Stack: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="grid gap-4">{children}</div>
   );
@@ -114,14 +100,18 @@ export default function DashboardCards(props: Props) {
       onDragOver={onDragOver("kpis")}
       onDrop={onDrop("kpis")}
     >
-      <Card theme={T} title="KPIs" right={`n=${kpis?.carry?.n ?? 0}`}>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <KpiCell label="Avg Carry" value={isNum(kpis?.carry?.mean) ? `${kpis!.carry.mean.toFixed(1)} yds` : "—"} T={T} />
-          <KpiCell label="Avg Total" value={isNum(kpis?.carry?.mean) ? `${(kpis!.carry.mean * 1.1).toFixed(1)} yds` : "—"} T={T} />
-          <KpiCell label="Ball Speed" value={isNum(kpis?.ball?.mean) ? `${kpis!.ball.mean.toFixed(1)} mph` : "—"} T={T} />
-          <KpiCell label="Club Speed" value={isNum(kpis?.club?.mean) ? `${kpis!.club.mean.toFixed(1)} mph` : "—"} T={T} />
-          <KpiCell label="Smash (avg)" value={isNum(kpis?.smash?.mean) ? kpis!.smash.mean.toFixed(3) : "—"} T={T} />
-        </div>
+      <Card theme={T} title="KPIs" right={isNum(kpis?.carry?.n) ? `n=${kpis!.carry.n}` : undefined}>
+        {hasData ? (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <KpiCell label="Avg Carry" value={isNum(kpis?.carry?.mean) ? `${kpis!.carry.mean.toFixed(1)} yds` : "—"} T={T} />
+            <KpiCell label="Avg Total" value={isNum(kpis?.carry?.mean) ? `${(kpis!.carry.mean * 1.1).toFixed(1)} yds` : "—"} T={T} />
+            <KpiCell label="Ball Speed" value={isNum(kpis?.ball?.mean) ? `${kpis!.ball.mean.toFixed(1)} mph` : "—"} T={T} />
+            <KpiCell label="Club Speed" value={isNum(kpis?.club?.mean) ? `${kpis!.club.mean.toFixed(1)} mph` : "—"} T={T} />
+            <KpiCell label="Smash (avg)" value={isNum(kpis?.smash?.mean) ? kpis!.smash.mean.toFixed(3) : "—"} T={T} />
+          </div>
+        ) : (
+          <div className="text-sm" style={{ color: T.textDim }}>Import some shots to see KPIs.</div>
+        )}
       </Card>
     </div>
   );
@@ -219,8 +209,7 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  formatter={(val: any, name: string, item: any) => {
-                    const p = item?.payload;
+                  formatter={(val: any, name: string) => {
                     if (name === "x") return [Number(val).toFixed(1), "Lateral (yds)"];
                     if (name === "y") return [Number(val).toFixed(1), "Carry (yds)"];
                     return [val, name];
@@ -429,8 +418,8 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Render in requested order (full-width stack) ---------- */
-  const cardMap: Record<string, JSX.Element> = {
+  /* ---------- Render in requested order ---------- */
+  const cardMap: Record<string, React.ReactNode> = {
     kpis: kpiCard,
     shape: shapeCard,
     dispersion: dispersionCard,
