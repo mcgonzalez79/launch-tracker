@@ -318,7 +318,7 @@ export default function DashboardCards(props: Props) {
   
   /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
-    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
+    <div key="table" id="print-club-averages-table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
