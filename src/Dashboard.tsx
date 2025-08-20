@@ -241,7 +241,7 @@ export default function DashboardCards(props: Props) {
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
-                <Bar dataKey="carry" fill="#099d00" />
+                <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -270,7 +270,18 @@ export default function DashboardCards(props: Props) {
   const effXMax = useMemo(() => {
     const xs = efficiencyData.map(d => d.x);
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
-  }, [efficiencyData]);
+  }, [efficiencyData]
+  const smash = useMemo(() => {
+    const pairs = efficiencyData;
+    if (!pairs.length) return { sf: 1.45, points: [] as {x:number;y:number}[] };
+    const ratios = pairs.map(p => p.y / p.x).filter(v => Number.isFinite(v));
+    const sf = ratios.length ? ratios.reduce((a,b)=>a+b,0) / ratios.length : 1.45;
+    const xs = pairs.map(p => p.x);
+    const x0 = effXMin;
+    const x1 = xs.length ? Math.max(effXMax, Math.max(...xs)) : effXMax;
+    return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
+  }, [efficiencyData, effXMin, effXMax]);
+);
 
   const smashMean = useMemo(() => {
     const pairs = efficiencyData;
@@ -286,7 +297,7 @@ export default function DashboardCards(props: Props) {
 
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
-      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Trend ≈ ${smashMean.toFixed(3)} smash`}>
+      <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
         {efficiencyData.length ? (
           <div style={{ height: 300 }}>
             <ResponsiveContainer>
@@ -306,7 +317,7 @@ export default function DashboardCards(props: Props) {
                 <Scatter name="Shots" data={efficiencyData}>
                 {efficiencyData.map((d,i)=>(<Cell key={i} fill={clubColor.get(d.Club)||T.accent} />))}
                 </Scatter>
-                <Line type="linear" data={trendData as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
+                <Line type="linear" data={smash.points as any} dataKey="y" dot={false} stroke={T.textDim} strokeDasharray="4 4" />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -320,7 +331,7 @@ export default function DashboardCards(props: Props) {
   
   /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
-    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")} id="print-club-averages-table">
+    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
