@@ -227,11 +227,12 @@ export default function App() {
      Actions
   ========================= */
   function onPrintClubAverages() {
-    // Show dashboard, print only the 'Club Averages' chart (gapping) via CSS target
-    setTab("dashboard");
-    // let the DOM update then print
-    requestAnimationFrame(() => setTimeout(() => window.print(), 100));
-  }
+  setTab("dashboard");
+  requestAnimationFrame(() => {
+    try { document.getElementById('print-club-averages-table')?.scrollIntoView({ block: 'center' }); } catch {}
+    requestAnimationFrame(() => window.print());
+  });
+}
   function onDeleteSession() {
     if (!shots.length || sessionFilter === "ALL") return;
     if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
@@ -270,36 +271,7 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    // Tukey IQR trimming per club using CarryDistance_yds
-    const byClub = new Map<string, Shot[]>();
-    for (const s of filteredBase) {
-      const key = s.Club || "Unknown";
-      if (!byClub.has(key)) byClub.set(key, []);
-      byClub.get(key)!.push(s);
-    }
-    const out: Shot[] = [];
-    const quantile = (arr: number[], q: number) => {
-      if (!arr.length) return NaN;
-      const pos = (arr.length - 1) * q;
-      const base = Math.floor(pos);
-      const rest = pos - base;
-      if (arr[base+1] !== undefined) return arr[base] + rest * (arr[base+1] - arr[base]);
-      return arr[base];
-    };
-    for (const [club, rows] of byClub.entries()) {
-      const xs = rows.map(r => r.CarryDistance_yds).filter(isNum).slice().sort((a,b)=>a-b) as number[];
-      if (xs.length < 8) { out.push(...rows); continue; } // not enough to trim
-      const q1 = quantile(xs, 0.25);
-      const q3 = quantile(xs, 0.75);
-      const iqr = q3 - q1;
-      const lo = q1 - 1.5 * iqr;
-      const hi = q3 + 1.5 * iqr;
-      for (const r of rows) {
-        const v = r.CarryDistance_yds;
-        if (!isNum(v) || (v >= lo && v <= hi)) out.push(r);
-      }
-    }
-    return out;
+    return filteredBase; // plug in IQR trimming per club in a later pass
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
