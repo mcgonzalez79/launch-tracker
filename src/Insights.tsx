@@ -242,6 +242,7 @@ export default function Insights({
   );
 
   
+  
   /* ---------- BENCHMARKS (single club only) ---------- */
   const benchLevels = ["Beginner","Average","Good","Advanced","PGA Tour"] as const;
   const benchChart: Record<string, number[]> = {
@@ -276,7 +277,6 @@ export default function Insights({
     if (name.includes("gap") || name === "gw" || name === "aw") return "gw";
     if (name.includes("sand") || name === "sw") return "sw";
     if (name.includes("lob") || name === "lw") return "lw";
-    // fallbacks with trailing letters/numbers already stripped above
     return null;
   }
 
@@ -295,9 +295,15 @@ export default function Insights({
     return { label: benchLevels[4], idx: 4 };
   }
 
+  // Derive the currently visible clubs (based on filters) locally to avoid ordering issues.
+  const benchClubs = useMemo(
+    () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
+    [filteredOutliers]
+  );
+
   const benchData = useMemo(() => {
-    if (selectedClubs.length !== 1) return null;
-    const club = selectedClubs[0];
+    if (benchClubs.length !== 1) return null;
+    const club = benchClubs[0];
     const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
     if (!shots.length) return null;
     const totals = shots.map(s => s.TotalDistance_yds).filter(isNum) as number[];
@@ -313,7 +319,7 @@ export default function Insights({
       n: totals.length || carries.length,
       benchLabel: cls.label,
     };
-  }, [selectedClubs, filteredOutliers]);
+  }, [benchClubs, filteredOutliers]);
 
   const bench = (
     <div
@@ -323,7 +329,7 @@ export default function Insights({
       onDragOver={onDragOver("bench")}
       onDrop={onDrop("bench")}
     >
-      <Card title="Benchmarks" right={selectedClubs.length === 1 ? selectedClubs[0] : ""} theme={T}>
+      <Card title="Benchmarks" right={benchClubs.length === 1 ? benchClubs[0] : ""} theme={T}>
         {benchData ? (
           <div className="grid grid-cols-2 gap-3">
             <KpiCell theme={T} label="Avg Total" value={`${benchData.avgTotal.toFixed(1)} yds`} sub={`n=${benchData.n}`} />
