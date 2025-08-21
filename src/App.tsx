@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LIGHT, DARK, Theme } from "./theme";
 import FiltersPanel from "./Filters";
@@ -15,6 +14,7 @@ import {
 /* =========================
    Toasts
 ========================= */
+type ToastType = "info" | "warn" | "success" | "error";
 function useToasts() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const remove = (id: number) => setMsgs(prev => prev.filter(x => x.id !== id));
@@ -47,35 +47,63 @@ const applyDerived = (s: Shot): Shot => {
    App
 ========================= */
 export default function App() {
-  // Theme
   const [theme, setTheme] = useState<Theme>(() => {
-    try { return (localStorage.getItem("launch-tracker:theme") || "dark") === "light" ? LIGHT : DARK; } catch { return DARK; }
+    try { return (localStorage.getItem("launch-tracker:theme") === "dark") ? DARK : LIGHT; } catch { return LIGHT; }
   });
-  useEffect(() => {
-    try { localStorage.setItem("launch-tracker:theme", theme === LIGHT ? "light" : "dark"); } catch {}
-    document.documentElement.style.setProperty("color-scheme", theme === LIGHT ? "light" : "dark");
-  }, [theme]);
+  const T = theme;
 
-  // View
-  const [tab, setTab] = useState<ViewKey>(() => {
-    try { return (localStorage.getItem("launch-tracker:tab") as ViewKey) || "dashboard"; } catch { return "dashboard"; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:tab", tab); } catch {} }, [tab]);
-
-  // Toasts
   const { msgs, push: toast, remove: removeToast } = useToasts();
 
-  // Data
+  /* =========================
+     Data (shots)
+  ========================= */
   const [shots, setShots] = useState<Shot[]>(() => {
-    try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try {
+      const raw = localStorage.getItem("launch-tracker:shots");
+      if (!raw) return [];
+      const arr = JSON.parse(raw) as Shot[];
+      return arr.map(applyDerived);
+    } catch { return []; }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
+  useEffect(() => {
+    try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {}
+  }, [shots]);
 
-  // Sessions & clubs (always derived from current shots)
-  const sessions = useMemo(
-    () => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()],
-    [shots]
-  );
+  /* =========================
+     Journal
+  ========================= */
+  const [journalHTML, setJournalHTML] = useState<string>(() => {
+    try { return localStorage.getItem("launch-tracker:journal") ?? ""; } catch { return ""; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
+
+  /* =========================
+     Layout / tabs
+  ========================= */
+  const [tab, setTab] = useState<ViewKey>("dashboard");
+
+  /* =========================
+     Filters UI (mobile open/close)
+  ========================= */
+  const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
+  const filtersRef = useRef<HTMLDivElement | null>(null);
+  const [filtersHeight, setFiltersHeight] = useState<number>(420);
+  useEffect(() => {
+    const el = filtersRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(() => setFiltersHeight(el.getBoundingClientRect().height));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  /* =========================
+     Derived session list / club list / carry bounds
+  ========================= */
+  const sessions = useMemo(() => {
+    const s = new Set<string>();
+    shots.forEach(x => s.add((x.SessionId ?? "Unknown Session")));
+    return ["ALL", ...Array.from(s).sort()];
+  }, [shots]);
   const clubs = useMemo(
     () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [shots]
@@ -105,44 +133,35 @@ export default function App() {
   }
 
   function rowsToShots(headerRow: any[], dataRows: any[][], filename: string): Shot[] {
-    const header = headerRow.map(h => String(h ?? ""));
-    const hNorm = header.map(h => normalizeHeader(h));
-    const idx = (name: string) => hNorm.findIndex(h => h === name);
+    try {
+      const norm = headerRow.map(h => normalizeHeader(String(h ?? "")));
+      const idx = (name: string) => norm.indexOf(name);
+      const shots: Shot[] = [];
 
-    return dataRows.map((row) => {
-      const dateRaw = String(row[idx("date")] ?? row[idx("timestamp")] ?? row[idx("datetime")] ?? "").trim();
-      const sessionByDay = (dateRaw.split(" ")[0] || "Unknown Session");
-      const clubIdx = (() => { for (const c of ["club name", "club", "club type"]) { const i = idx(c); if (i >= 0) return i; } return -1; })();
-      const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "Unknown Club";
-
-      const s: Shot = {
-        SessionId: sessionByDay,
-        Club: clubVal,
-        Timestamp: isoDate(dateRaw),
-
-        ClubSpeed_mph:      numOrUndef(row[idx("club speed")]),
-        AttackAngle_deg:    numOrUndef(row[idx("attack angle")]),
-        ClubPath_deg:       numOrUndef(row[idx("club path")]),
-        ClubFace_deg:       numOrUndef(row[idx("club face")]),
-        FaceToPath_deg:     numOrUndef(row[idx("face to path")]),
-        BallSpeed_mph:      numOrUndef(row[idx("ball speed")]),
-        SmashFactor:        numOrUndef(row[idx("smash factor")]),
-        LaunchAngle_deg:    numOrUndef(row[idx("launch angle")]),
-        LaunchDirection_deg:numOrUndef(row[idx("launch direction")]),
-        ApexHeight_yds:     numOrUndef(row[idx("apex height")]),
-        CarryDistance_yds:  numOrUndef(row[idx("carry distance")]),
-        CarryDeviationDistance_yds: numOrUndef(row[idx("carry deviation distance")]),
-        TotalDeviationDistance_yds: numOrUndef(row[idx("total deviation distance")]),
-        TotalDistance_yds:  numOrUndef(row[idx("total distance")]),
-        Backspin_rpm:       numOrUndef(row[idx("backspin")]),
-        Sidespin_rpm:       numOrUndef(row[idx("sidespin")]),
-        SpinRate_rpm:       numOrUndef(row[idx("spin rate")]),
-        SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
-        SpinAxis_deg:       numOrUndef(row[idx("spin axis")]),
-      };
-
-      return applyDerived(s);
-    });
+      for (const r of dataRows) {
+        if (!r || !r.length) continue;
+        const shot: Shot = {
+          Timestamp: String(r[idx("timestamp")] ?? ""),
+          SessionId: String(r[idx("sessionid")] ?? "") || undefined,
+          Club: String(r[idx("club")] ?? ""),
+          CarryDistance_yds: numOrUndef(r[idx("carrydistance_yds")]),
+          TotalDistance_yds: numOrUndef(r[idx("totaldistance_yds")]),
+          BallSpeed_mph: numOrUndef(r[idx("ballspeed_mph")]),
+          ClubSpeed_mph: numOrUndef(r[idx("clubspeed_mph")]),
+          SpinRate_rpm: numOrUndef(r[idx("spinrate_rpm")]),
+          LaunchAngle_deg: numOrUndef(r[idx("launchangle_deg")]),
+          ClubPath_deg: numOrUndef(r[idx("clubpath_deg")]),
+          ClubFace_deg: numOrUndef(r[idx("clubface_deg")]),
+          FaceToPath_deg: numOrUndef(r[idx("facetopath_deg")]),
+          SmashFactor: numOrUndef(r[idx("smashfactor")]),
+        };
+        shots.push(applyDerived(shot));
+      }
+      return shots;
+    } catch (e) {
+      toast({ type: "error", text: `Could not parse ${filename}: ${(e as Error).message}` });
+      return [];
+    }
   }
 
   function processWorkbook(wb: XLSX.WorkBook, filename: string) {
@@ -174,46 +193,33 @@ export default function App() {
       } catch (wbErr) {
         try {
           const text = await file.text();
-          const parsed = parseWeirdLaunchCSV(text);
-          if (parsed) {
-            const shotsFromCsv = weirdRowsToShots(parsed.header, parsed.dataRows, file.name.replace(/\.\w+$/, ""));
-            mergeImportedShots(shotsFromCsv, file.name);
-          } else {
-            throw wbErr;
-          }
-        } catch (csvErr) {
-          console.error(csvErr);
-          toast({ type: "error", text: `Import failed: ${(csvErr as Error).message}` });
+          const { header, rows } = parseWeirdLaunchCSV(text);
+          const newShots = weirdRowsToShots(header, rows);
+          mergeImportedShots(newShots, file.name);
+        } catch (e) {
+          toast({ type: "error", text: `Failed to read file: ${(e as Error).message}` });
         }
       }
     })();
   }
 
   function onLoadSample() {
-    const sample: Shot[] = [
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
-        ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
-        CarryDistance_yds: 255, TotalDistance_yds: 280, LaunchDirection_deg: -2, ClubPath_deg: 3.0, ClubFace_deg: 2.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:07:00Z", Club: "Driver",
-        ClubSpeed_mph: 104, BallSpeed_mph: 153, LaunchAngle_deg: 12.5, Backspin_rpm: 2400,
-        CarryDistance_yds: 258, TotalDistance_yds: 284, LaunchDirection_deg: 1, ClubPath_deg: 2.5, ClubFace_deg: 1.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:12:00Z", Club: "7 Iron",
-        ClubSpeed_mph: 84, BallSpeed_mph: 114, LaunchAngle_deg: 18, Backspin_rpm: 6200,
-        CarryDistance_yds: 158, TotalDistance_yds: 168, LaunchDirection_deg: 0, ClubPath_deg: 1.0, ClubFace_deg: 0.5 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:31:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 70, BallSpeed_mph: 92, LaunchAngle_deg: 29, Backspin_rpm: 8500,
-        CarryDistance_yds: 118, TotalDistance_yds: 124, LaunchDirection_deg: -1, ClubPath_deg: -0.5, ClubFace_deg: -1.0 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:34:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 71, BallSpeed_mph: 93, LaunchAngle_deg: 30, Backspin_rpm: 8700,
-        CarryDistance_yds: 120, TotalDistance_yds: 126, LaunchDirection_deg: 0.5, ClubPath_deg: 0.0, ClubFace_deg: 0.2 },
-    ].map(applyDerived);
-    mergeImportedShots(sample, "Sample Data");
+    try {
+      const sample = (window as any).__LAUNCH_TRACKER_SAMPLE__ as Shot[] | undefined;
+      if (!sample || !Array.isArray(sample)) { toast({ type: "warn", text: "No sample data embedded." }); return; }
+      mergeImportedShots(sample, "Sample");
+    } catch {
+      toast({ type: "error", text: "Could not load sample data." });
+    }
   }
 
-  function exportShotsCSV() { exportCSV(shots); }
+  function exportShotsCSV() {
+    try { exportCSV(shots, "launch-tracker-export.csv"); }
+    catch (e) { toast({ type: "error", text: `CSV export failed: ${(e as Error).message}` }); }
+  }
 
   /* =========================
-     Filters state
+     Filters (state)
   ========================= */
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
@@ -265,7 +271,46 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    return filteredBase; // plug in IQR trimming per club in a later pass
+
+    // group visible shots by club
+    const byClub = new Map<string, Shot[]>();
+    for (const s of filteredBase) {
+      const k = s.Club || "Unknown";
+      if (!byClub.has(k)) byClub.set(k, []);
+      byClub.get(k)!.push(s);
+    }
+
+    // simple quantile helper
+    const quantile = (sorted: number[], q: number) => {
+      if (!sorted.length) return NaN;
+      const pos = (sorted.length - 1) * q;
+      const base = Math.floor(pos);
+      const rest = pos - base;
+      const a = sorted[base];
+      const b = sorted[base + 1] ?? a;
+      return a + rest * (b - a);
+    };
+
+    const keep: Shot[] = [];
+    for (const arr of byClub.values()) {
+      const carries = arr.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+
+      // Not enough data for robust IQR: keep all for this club
+      if (carries.length < 8) { keep.push(...arr); continue; }
+
+      const sorted = [...carries].sort((a, b) => a - b);
+      const q1 = quantile(sorted, 0.25);
+      const q3 = quantile(sorted, 0.75);
+      const iqr = q3 - q1;
+      const lo = q1 - 1.5 * iqr;
+      const hi = q3 + 1.5 * iqr;
+
+      for (const s of arr) {
+        const c = s.CarryDistance_yds;
+        if (!isNum(c) || (c >= lo && c <= hi)) keep.push(s);
+      }
+    }
+    return keep;
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
@@ -288,9 +333,8 @@ export default function App() {
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     for (const s of filteredOutliers) {
-      const k = s.Club || "Unknown";
-      if (!byClub.has(k)) byClub.set(k, []);
-      byClub.get(k)!.push(s);
+      if (!byClub.has(s.Club)) byClub.set(s.Club, []);
+      byClub.get(s.Club)!.push(s);
     }
     const rows: ClubRow[] = [];
     Array.from(byClub.keys()).sort((a,b)=>orderIndex(a)-orderIndex(b)).forEach(club => {
@@ -299,7 +343,9 @@ export default function App() {
         const xs = arr.map(r => r[key]).filter(isNum) as number[];
         return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
       };
-      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"), avgSmash: avg("SmashFactor"), avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"), avgCS: avg("ClubSpeed_mph"), avgBS: avg("BallSpeed_mph"), avgLA: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
+      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"),
+        avgSmash: avg("SmashFactor"), avgSpin: avg("SpinRate_rpm"), avgCS: avg("ClubSpeed_mph"),
+        avgBS: avg("BallSpeed_mph"), avgLA: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
     });
     return rows;
   }, [filteredOutliers]);
@@ -328,43 +374,25 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
-  /* =========================
-     Journal
-  ========================= */
-  const journalRef = useRef<HTMLDivElement>(null);
-  const [journalHTML, setJournalHTML] = useState<string>(() => {
-    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
-  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
+  const [selectedTab, setSelectedTab] = useState<ViewKey>("dashboard");
+
+  const sessionLabel = useMemo(() => {
+    if (sessionFilter === "ALL") return "All Data";
+    return `Session: ${sessionFilter}`;
+  }, [sessionFilter]);
 
   /* =========================
-     Layout / Filters drawer
+     Layout
   ========================= */
-  const filtersRef = useRef<HTMLDivElement | null>(null);
-  const [filtersHeight, setFiltersHeight] = useState<number>(340);
-  useEffect(() => {
-    const el = filtersRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => { setFiltersHeight(el.getBoundingClientRect().height); });
-    ro.observe(el);
-    setFiltersHeight(el.getBoundingClientRect().height);
-    return () => ro.disconnect();
-  }, [filtersRef.current, shots, selectedClubs, sessionFilter, excludeOutliers, carryMin, carryMax, dateFrom, dateTo]);
-
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
-  const T = theme;
+  const journalRef = useRef<HTMLDivElement | null>(null);
 
   return (
-    <div style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
-      {/* Header with tabs + theme */}
-      <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
+      <header className="sticky top-0 z-40 border-b" style={{ borderColor: T.border, background: T.bg }}>
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {/* Mobile: open filters drawer */}
             <button
-              className="md:hidden rounded-md px-2 py-1 border text-sm"
+              className="px-2 py-1 rounded-md border text-xs md:hidden"
               style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
               onClick={() => setFiltersOpen(true)}
               title="Filters"
@@ -395,18 +423,17 @@ export default function App() {
           <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
           <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
           <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-          <div className="flex-1" />
-          <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
         </div>
       </div>
 
-      {/* Mobile Filters Drawer */}
-      {filtersOpen ? (
-        <div className="md:hidden fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setFiltersOpen(false)}>
-          <div className="absolute left-0 top-0 bottom-0 w-[90%] max-w-sm overflow-y-auto" style={{ background: T.panel, color: T.text }} onClick={(e) => e.stopPropagation()}>
-            <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: T.border }}>
-              <div className="text-sm">Filters</div>
-              <button className="text-xs underline" style={{ color: T.brand }} onClick={() => setFiltersOpen(false)}>Close</button>
+      {/* Drawer for filters on mobile */}
+      {filtersOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setFiltersOpen(false)} />
+          <div className="absolute top-0 right-0 bottom-0 w-[360px] max-w-[90%] bg-white shadow-xl sidebar-fix">
+            <div className="flex items-center justify-between px-3 py-2 border-b">
+              <div className="font-medium">Filters</div>
+              <button className="px-2 py-1 rounded-md border text-xs" onClick={() => setFiltersOpen(false)}>Close</button>
             </div>
             <div className="p-3">
               <FiltersPanel
@@ -439,7 +466,7 @@ export default function App() {
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
       <div className="max-w-6xl mx-auto px-4 py-3">
         <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
@@ -481,57 +508,40 @@ export default function App() {
                 theme={T}
                 cardOrder={cardOrder}
                 setCardOrder={setCardOrder}
-                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
-                onDragOver={(_key) => (e) => e.preventDefault()}
-                onDrop={(targetKey) => (e) => {
-                  e.preventDefault();
-                  const sourceKey = e.dataTransfer.getData("text/plain");
-                  if (!sourceKey || sourceKey === targetKey) return;
-                  setCardOrder(prev => {
-                    const cur = [...prev];
-                    const si = cur.indexOf(sourceKey);
-                    const ti = cur.indexOf(targetKey);
-                    if (si < 0 || ti < 0) return cur;
-                    cur.splice(si, 1);
-                    cur.splice(ti, 0, sourceKey);
-                    return cur;
-                  });
+                onDragStart={(key) => (e) => { e.dataTransfer.setData("text/x", key); }}
+                onDragOver={() => (e) => { e.preventDefault(); }}
+                onDrop={(key) => (e) => {
+                  try {
+                    const from = e.dataTransfer.getData("text/x");
+                    if (!from || from === key) return;
+                    setCardOrder((cur) => {
+                      const a = cur.indexOf(from);
+                      const b = cur.indexOf(key);
+                      if (a < 0 || b < 0) return cur;
+                      const copy = [...cur];
+                      const [moved] = copy.splice(a, 1);
+                      copy.splice(b, 0, moved);
+                      return copy;
+                    });
+                  } catch {}
                 }}
                 hasData={hasData}
-                kpis={kpis as any}
+                kpis={kpis}
                 filteredOutliers={filteredOutliers}
-                filtered={filteredBase}
+                filtered={filteredOutliers}
                 shots={shots}
-                tableRows={tableRows as any}
+                tableRows={tableRows}
                 clubs={clubs}
               />
             )}
             {tab === "insights" && (
               <InsightsView
                 theme={T}
-                tableRows={tableRows as any}
+                order={insightsOrder}
+                setOrder={setInsightsOrder}
                 filteredOutliers={filteredOutliers}
                 filteredNoClubOutliers={filteredOutliers}
-                filteredNoClubRaw={filteredBase}
-                allClubs={clubs}
-                allShots={shots}
-                insightsOrder={insightsOrder}
-                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
-                onDragOver={(_key) => (e) => e.preventDefault()}
-                onDrop={(targetKey) => (e) => {
-                  e.preventDefault();
-                  const sourceKey = e.dataTransfer.getData("text/plain");
-                  if (!sourceKey || sourceKey === targetKey) return;
-                  setInsightsOrder(prev => {
-                    const cur = [...prev];
-                    const si = cur.indexOf(sourceKey);
-                    const ti = cur.indexOf(targetKey);
-                    if (si < 0 || ti < 0) return cur;
-                    cur.splice(si, 1);
-                    cur.splice(ti, 0, sourceKey);
-                    return cur;
-                  });
-                }}
+                clubs={clubs}
               />
             )}
             {tab === "journal" && (
@@ -559,14 +569,14 @@ export default function App() {
             style={{ background: T.panel, borderColor: T.border, color: T.text }}
             onClick={() => removeToast(m.id)}
           >
-            {m.text}
+            <div className="font-medium">{m.type.toUpperCase()}</div>
+            <div className="opacity-90">{m.text}</div>
           </button>
         ))}
       </div>
     </div>
   );
 }
-
 
 /* =========================
    Footer
