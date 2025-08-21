@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { LIGHT, DARK, Theme } from "./theme";
+import { LIGHT, DARK, Theme, orderIndex } from "./theme";
 import FiltersPanel from "./Filters";
 import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
-  Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
+  Shot, Msg, ViewKey, mean, stddev, exportCSV,
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots,
+  coalesceSmash, fpOf
 } from "./utils";
 
 /* =========================
@@ -21,7 +21,7 @@ function useToasts() {
   const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
     const id = m.id ?? Math.floor(Date.now() + Math.random() * 1000);
     setMsgs(prev => [...prev, { id, text: m.text, type: m.type }]);
-    setTimeout(() => remove(id), 10000); // auto-clear after 10s
+    setTimeout(() => remove(id), 8000);
   };
   return { msgs, push, remove };
 }
@@ -30,38 +30,27 @@ function useToasts() {
    Helpers
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-
-function safeNum(n: unknown): number | undefined {
-  if (typeof n === "string" && n.trim() === "") return undefined;
-  const x = Number(n);
-  return Number.isFinite(x) ? x : undefined;
-}
-
-function clampNum(n: number | undefined, lo: number, hi: number): number | undefined {
-  return n === undefined ? undefined : Math.max(lo, Math.min(hi, n));
-}
-
-function tryParseDate(s: string): string | undefined {
-  if (!s) return undefined;
-  const d = new Date(s);
-  if (isNaN(+d)) return undefined;
-  return d.toISOString();
-}
+const toISODate = (ts?: string) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(+d)) return "";
+  return d.toISOString().slice(0,10);
+};
+const sessionLabelOf = (s: Shot) => s.SessionId || toISODate(s.Timestamp) || "Unknown Session";
 
 /* =====================================================
    UI: Simple pill for toast
 ===================================================== */
 function ToastRow({ msg, onClose, theme: T }: { msg: Msg; onClose: () => void; theme: Theme }) {
-  const C =
-    msg.type === "success" ? T.success :
-    msg.type === "warn"    ? T.warn :
-    msg.type === "error"   ? T.error :
-                             T.info;
+  const border = T.border;
+  const base = T.panel;
+  const color = T.text;
   return (
-    <div className="rounded px-3 py-2 text-sm shadow" style={{ background: C.bg, color: C.fg, border: `1px solid ${T.border}` }}>
+    <div className="rounded px-3 py-2 text-sm shadow"
+         style={{ background: base, color, border: `1px solid ${border}` }}>
       <div className="flex items-center gap-3">
         <div>{msg.text}</div>
-        <button className="ml-auto underline" onClick={onClose} style={{ color: C.fg }}>dismiss</button>
+        <button className="ml-auto underline" onClick={onClose} style={{ color }}>dismiss</button>
       </div>
     </div>
   );
@@ -96,18 +85,13 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
 
   // Filters
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
-  // Orders
-  const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    try { const raw = localStorage.getItem("launch-tracker:card-order"); return raw ? JSON.parse(raw) : ["kpis", "gapping", "efficiency", "shape", "dispersion", "table"]; } catch { return ["kpis", "gapping", "efficiency", "shape", "dispersion", "table"]; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
-
-  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
-    try { const raw = localStorage.getItem("launch-tracker:insights-order"); return raw ? JSON.parse(raw) : ["distance", "highlights", "records", "swing", "progress", "benchmarks"]; } catch { return ["distance", "highlights", "records", "swing", "progress", "benchmarks"]; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+  const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
+  const [sessionFilter, setSessionFilter] = useState<string>("All Sessions");
+  const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
+  const [dateFrom, setDateFrom] = useState<string>(""); // yyyy-mm-dd
+  const [dateTo, setDateTo] = useState<string>("");     // yyyy-mm-dd
+  const [carryMin, setCarryMin] = useState<number | undefined>(undefined);
+  const [carryMax, setCarryMax] = useState<number | undefined>(undefined);
 
   // Journal content
   const [journalHTML, setJournalHTML] = useState<string>(() => {
@@ -115,223 +99,188 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
 
-  // Theme alias
+  // Orders
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem("launch-tracker:card-order"); return raw ? JSON.parse(raw) : ["kpis","gapping","efficiency","shape","dispersion","table"]; } catch { return ["kpis","gapping","efficiency","shape","dispersion","table"]; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
+
+  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem("launch-tracker:insights-order"); return raw ? JSON.parse(raw) : ["distance","highlights","records","swing","progress","benchmarks"]; } catch { return ["distance","highlights","records","swing","progress","benchmarks"]; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+
+  // Refs
+  const journalRef = useRef<HTMLDivElement>(null);
+
   const T = theme;
 
-  // Derived data & filters
-  const [session, setSession] = useState<string>("All Sessions");
-  const [clubsSel, setClubsSel] = useState<string[]>([]);
-  const [dateStart, setDateStart] = useState<string | undefined>();
-  const [dateEnd, setDateEnd] = useState<string | undefined>();
-  const [carryMin, setCarryMin] = useState<number | undefined>();
-  const [carryMax, setCarryMax] = useState<number | undefined>();
-  const [carryAuto, setCarryAuto] = useState<boolean>(false);
-  const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
-
+  /* ---------- Derived lists ---------- */
   const sessions = useMemo(() => {
     const set = new Set<string>();
-    shots.forEach(s => set.add(s.Session || "Unknown Session"));
+    shots.forEach(s => set.add(sessionLabelOf(s)));
     return ["All Sessions", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [shots]);
 
   const clubs = useMemo(() => {
     const set = new Set<string>();
-    shots.forEach(s => set.add(s.Club));
+    shots.forEach(s => s.Club && set.add(s.Club));
     return Array.from(set).sort((a, b) => orderIndex(a) - orderIndex(b));
   }, [shots]);
 
-  // Filtered shots
-  const filtered = useMemo(() => {
+  const allClubs = clubs;
+
+  const carryBounds = useMemo(() => {
+    const vals = shots.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+    const min = vals.length ? Math.floor(Math.min(...vals)) : 0;
+    const max = vals.length ? Math.ceil(Math.max(...vals)) : 0;
+    return { min, max };
+  }, [shots]);
+
+  /* ---------- Filtering ---------- */
+  function inDateRange(s: Shot) {
+    const day = toISODate(s.Timestamp);
+    if (dateFrom && day && day < dateFrom) return false;
+    if (dateTo && day && day > dateTo) return false;
+    return true;
+  }
+
+  const filteredBase = useMemo(() => {
     let arr = shots.slice();
-    if (session !== "All Sessions") arr = arr.filter(s => (s.Session || "Unknown Session") === session);
-    if (clubsSel.length > 0) arr = arr.filter(s => clubsSel.includes(s.Club));
-
-    // Date filter
-    if (dateStart) {
-      const s = new Date(dateStart).getTime();
-      arr = arr.filter(x => {
-        const t = new Date(x.Date).getTime();
-        return !isNaN(t) && t >= s;
-      });
-    }
-    if (dateEnd) {
-      const e = new Date(dateEnd).getTime();
-      arr = arr.filter(x => {
-        const t = new Date(x.Date).getTime();
-        return !isNaN(t) && t <= e;
-      });
-    }
-
-    // Carry range
-    if (carryMin !== undefined) arr = arr.filter(s => isNum(s.Carry) && s.Carry! >= carryMin);
-    if (carryMax !== undefined) arr = arr.filter(s => isNum(s.Carry) && s.Carry! <= carryMax);
-
-    // Outlier exclusion (Tukey IQR on Carry)
-    if (excludeOutliers) {
-      const carries = arr.map(s => s.Carry).filter(isNum) as number[];
-      if (carries.length >= 4) {
-        const sorted = carries.slice().sort((a, b) => a - b);
-        const q1 = sorted[Math.floor(sorted.length * 0.25)];
-        const q3 = sorted[Math.floor(sorted.length * 0.75)];
-        const iqr = q3 - q1;
-        const lo = q1 - 1.5 * iqr;
-        const hi = q3 + 1.5 * iqr;
-        arr = arr.filter(s => !isNum(s.Carry) || (s.Carry! >= lo && s.Carry! <= hi));
-      }
-    }
-
+    if (sessionFilter !== "All Sessions") arr = arr.filter(s => sessionLabelOf(s) === sessionFilter);
+    if (selectedClubs.length) arr = arr.filter(s => selectedClubs.includes(s.Club));
+    arr = arr.filter(inDateRange);
+    if (carryMin !== undefined) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! >= carryMin);
+    if (carryMax !== undefined) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! <= carryMax);
     return arr;
-  }, [shots, session, clubsSel, dateStart, dateEnd, carryMin, carryMax, excludeOutliers]);
+  }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
-  // Table rows by club
-  const tableRows: ClubRow[] = useMemo(() => {
+  const filteredOutliers = useMemo(() => {
+    if (!excludeOutliers) return filteredBase;
+    const carries = filteredBase.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+    if (carries.length < 4) return filteredBase;
+    const sorted = carries.slice().sort((a,b)=>a-b);
+    const q1 = sorted[Math.floor(sorted.length*0.25)];
+    const q3 = sorted[Math.floor(sorted.length*0.75)];
+    const iqr = q3 - q1;
+    const lo = q1 - 1.5*iqr, hi = q3 + 1.5*iqr;
+    return filteredBase.filter(s => !isNum(s.CarryDistance_yds) || (s.CarryDistance_yds! >= lo && s.CarryDistance_yds! <= hi));
+  }, [filteredBase, excludeOutliers]);
+
+  const filtered = filteredBase;
+
+  /* ---------- KPIs ---------- */
+  const kpis = useMemo(() => {
+    const carries = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+    const clubsSpd = filteredOutliers.map(s => s.ClubSpeed_mph).filter(isNum) as number[];
+    const ballsSpd = filteredOutliers.map(s => s.BallSpeed_mph).filter(isNum) as number[];
+    const smashes = filteredOutliers.map(s => isNum(s.SmashFactor) ? s.SmashFactor! : (isNum(s.BallSpeed_mph) && isNum(s.ClubSpeed_mph) && s.ClubSpeed_mph!>0 ? s.BallSpeed_mph!/s.ClubSpeed_mph! : undefined)).filter(isNum) as number[];
+
+    const wrap = (arr: number[]) => ({ mean: mean(arr), n: arr.length, std: stddev(arr) });
+    return { carry: wrap(carries), ball: wrap(ballsSpd), club: wrap(clubsSpd), smash: wrap(smashes) };
+  }, [filteredOutliers]);
+
+  /* ---------- Table rows ---------- */
+  const tableRows = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
-    filtered.forEach(s => {
+    filteredOutliers.forEach(s => {
       if (!byClub.has(s.Club)) byClub.set(s.Club, []);
       byClub.get(s.Club)!.push(s);
     });
-    const rows: ClubRow[] = Array.from(byClub.entries()).map(([club, arr]) => {
-      const n = arr.length;
-      const avgCarry = mean(arr.map(x => x.Carry));
-      const avgTotal = mean(arr.map(x => x.Total));
-      const avgCS = mean(arr.map(x => x.ClubSpeed));
-      const avgBS = mean(arr.map(x => x.BallSpeed));
-      const avgLA = mean(arr.map(x => x.LaunchAngle));
-      const avgF2P = mean(arr.map(x => x.FaceToPath_deg));
-      return { club, count: n, avgCarry, avgTotal, avgCS, avgBS, avgLA, avgF2P };
-    }).sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
-    return rows;
-  }, [filtered]);
+    const rows = Array.from(byClub.entries()).map(([club, arr]) => {
+      const count = arr.length;
+      const avgCarry = mean(arr.map(x => x.CarryDistance_yds!).filter(isNum as any));
+      const avgTotal = mean(arr.map(x => x.TotalDistance_yds!).filter(isNum as any));
+      const avgCS = mean(arr.map(x => x.ClubSpeed_mph!).filter(isNum as any));
+      const avgBS = mean(arr.map(x => x.BallSpeed_mph!).filter(isNum as any));
+      const avgLA = mean(arr.map(x => x.LaunchAngle_deg!).filter(isNum as any));
+      const avgF2P = mean(arr.map(x => x.FaceToPath_deg!).filter(isNum as any));
+      const avgSmash = mean(arr.map(x => {
+        if (isNum(x.SmashFactor)) return x.SmashFactor!;
+        if (isNum(x.BallSpeed_mph) && isNum(x.ClubSpeed_mph) && x.ClubSpeed_mph!>0) return x.BallSpeed_mph!/x.ClubSpeed_mph!;
+        return NaN as any;
+      }).filter(isNum as any));
+      const avgSpin = mean(arr.map(x => x.SpinRate_rpm!).filter(isNum as any));
+      return { club, count, avgCarry, avgTotal, avgSmash, avgSpin, avgCS, avgBS, avgLA, avgF2P } as any;
+    }).sort((a,b)=>orderIndex(a.club)-orderIndex(b.club));
+    return rows as any[];
+  }, [filteredOutliers]);
 
-  // Stats for KPIs
-  const kpis = useMemo(() => {
-    const carries = filtered.map(s => s.Carry).filter(isNum) as number[];
-    const clubs = filtered.map(s => s.ClubSpeed).filter(isNum) as number[];
-    const balls = filtered.map(s => s.BallSpeed).filter(isNum) as number[];
+  /* ---------- IO ---------- */
+  async function onImportFile(file: File) {
+    const text = await file.text();
+    // very simple CSV -> rows
+    const rows = text.split(/\r?\n/).map(line => line.split(","));
+    const header = rows[0]?.map(h => normalizeHeader(String(h))) ?? [];
+    const idx = (name: string) => header.indexOf(name);
+    const dataRows = rows.slice(1).filter(r => r.some(x => (x ?? "").trim() !== ""));
 
-    const smash = coalesceSmash(filtered.map(coalesceSmash)).filter(isNum) as number[];
-    const carryM = mean(carries), carryN = carries.length, carrySD = stddev(carries);
-    const clubM = mean(clubs), clubN = clubs.length, clubSD = stddev(clubs);
-    const ballM = mean(balls), ballN = balls.length, ballSD = stddev(balls);
-    const smashM = mean(smash), smashN = smash.length, smashSD = stddev(smash);
-
-    return {
-      carry: { mean: carryM, n: carryN, std: carrySD },
-      club:  { mean: clubM,  n: clubN,  std: clubSD },
-      ball:  { mean: ballM,  n: ballN,  std: ballSD },
-      smash: { mean: smashM, n: smashN, std: smashSD }
+    const toNum = (v: any) => {
+      if (v==null) return undefined;
+      const n = Number(String(v).trim());
+      return Number.isFinite(n) ? n : undefined;
     };
-  }, [filtered]);
 
-  // Journal ref
-  const journalRef = useRef<HTMLDivElement>(null);
-
-  // File input ref
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Import handlers
-  async function onImportCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const rows = text.split(/\r?\n/).map(line => line.split(","));
-      const header = rows[0] || [];
-      const data = rows.slice(1).filter(r => r.length > 1 && r.some(x => x.trim() !== ""));
-      const shots = rowsToShots(header, data, file.name);
-      setShots(prev => [...prev, ...shots]);
-      toast({ type: "success", text: `Imported ${shots.length} shots from ${file.name}` });
-    } catch (err: any) {
-      toast({ type: "error", text: `Import failed: ${err?.message || err}` });
-    } finally {
-      e.target.value = "";
-    }
-  }
-
-  function rowsToShots(headerRow: any[], dataRows: any[][], filename: string): Shot[] {
-    const header = headerRow.map(h => String(h ?? ""));
-    const hNorm = header.map(h => normalizeHeader(h));
-    const idx = (name: string) => hNorm.findIndex(h => h === name);
-
-    return dataRows.map((row) => {
-      const dateRaw = String(row[idx("date")] ?? row[idx("timestamp")] ?? row[idx("datetime")] ?? "").trim();
-      const sessionByDay = (dateRaw.split(" ")[0] || "Unknown Session");
-      const clubIdx = (() => { for (const c of ["club name", "club", "stick", "stick name"]) { const i = idx(c); if (i >= 0) return i; } return -1; })();
-      const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "Unknown Club";
-
-      const s: Shot = {
-        Date: tryParseDate(dateRaw) || new Date().toISOString(),
-        Session: sessionByDay || "Unknown Session",
-        Club: clubVal,
-        Carry:  safeNum(row[idx("carry")]),
-        Total:  safeNum(row[idx("total")]),
-        ClubSpeed: safeNum(row[idx("club speed")]),
-        BallSpeed: safeNum(row[idx("ball speed")]),
-        LaunchAngle: clampNum(safeNum(row[idx("launch angle")]), -5, 45),
-        FaceToPath_deg: clampNum(safeNum(row[idx("face to path")]), -15, 15),
-        // Optional/raw metrics
-        SmashFactor: clampNum(safeNum(row[idx("smash factor")]), 0.5, 1.95),
-        // For weird CSVs:
-        _filename: filename
+    const parsed: Shot[] = dataRows.map((r) => {
+      const get = (nm: string) => {
+        const i = idx(nm);
+        return i>=0 ? r[i] : undefined;
       };
-
-      // Derive smash if missing but speeds present
-      if (!isNum(s.SmashFactor) && isNum(s.BallSpeed) && isNum(s.ClubSpeed) && s.ClubSpeed! > 0) {
-        s.SmashFactor = clamp(s.BallSpeed! / s.ClubSpeed!, 0.5, 1.95);
-      }
-
-      return s;
+      const shot: Shot = {
+        SessionId: String(get("session") ?? get("session id") ?? "") || undefined,
+        Timestamp: String(get("timestamp") ?? get("date") ?? get("datetime") ?? "") || undefined,
+        Club: String(get("club") ?? get("club name") ?? "").trim(),
+        CarryDistance_yds: toNum(get("carry") ?? get("carry distance yds")),
+        TotalDistance_yds: toNum(get("total") ?? get("total distance yds")),
+        ClubSpeed_mph: toNum(get("club speed") ?? get("club speed mph")),
+        BallSpeed_mph: toNum(get("ball speed") ?? get("ball speed mph")),
+        LaunchAngle_deg: toNum(get("launch angle") ?? get("launch angle deg")),
+        FaceToPath_deg: toNum(get("face to path") ?? get("face to path deg")),
+        SmashFactor: toNum(get("smash") ?? get("smash factor")),
+        SpinRate_rpm: toNum(get("spin") ?? get("spin rate rpm")),
+      };
+      return shot;
     });
+
+    setShots(prev => [...prev, ...parsed]);
+    toast({ type: "success", text: `Imported ${parsed.length} shots from ${file.name}` });
   }
 
-  // Export CSV
-  function onExportCSV() {
-    const rows = shots.map(s => ({
-      Date: s.Date,
-      Session: s.Session,
-      Club: s.Club,
-      Carry: s.Carry,
-      Total: s.Total,
-      ClubSpeed: s.ClubSpeed,
-      BallSpeed: s.BallSpeed,
-      LaunchAngle: s.LaunchAngle,
-      FaceToPath_deg: s.FaceToPath_deg,
-      SmashFactor: s.SmashFactor
+  async function onLoadSample() {
+    const url = `${import.meta.env.BASE_URL}sampledata.csv`;
+    const resp = await fetch(url);
+    if (!resp.ok) { toast({ type: "error", text: "Failed to load sample data" }); return; }
+    const blob = await resp.blob();
+    await onImportFile(new File([blob], "sampledata.csv", { type: "text/csv" }));
+  }
+
+  function onExport() {
+    const rows = filteredOutliers.map(s => ({
+      SessionId: s.SessionId, Timestamp: s.Timestamp, Club: s.Club,
+      CarryDistance_yds: s.CarryDistance_yds, TotalDistance_yds: s.TotalDistance_yds,
+      ClubSpeed_mph: s.ClubSpeed_mph, BallSpeed_mph: s.BallSpeed_mph,
+      LaunchAngle_deg: s.LaunchAngle_deg, FaceToPath_deg: s.FaceToPath_deg,
+      SmashFactor: s.SmashFactor, SpinRate_rpm: s.SpinRate_rpm
     }));
-    const csv = exportCSV(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "launch-tracker-export.csv"; a.click();
-    URL.revokeObjectURL(url);
+    exportCSV(rows);
   }
 
-  // Weird CSV import (XLSX path)
-  async function onImportWeirdCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 }) as any[][];
-      const header = rows[0] || [];
-      const data = rows.slice(1).filter(r => r.length > 1 && r.some(x => String(x ?? "").trim() !== ""));
-      const shots = weirdRowsToShots(header, data, file.name);
-      setShots(prev => [...prev, ...shots]);
-      toast({ type: "success", text: `Imported ${shots.length} shots from ${file.name}` });
-    } catch (err: any) {
-      toast({ type: "error", text: `Weird CSV import failed: ${err?.message || err}` });
-    } finally {
-      e.target.value = "";
-    }
+  function onDeleteAll() {
+    if (!confirm("Delete ALL shots? This cannot be undone.")) return;
+    setShots([]);
+  }
+  function onDeleteSession() {
+    if (sessionFilter==="All Sessions") return;
+    if (!confirm(`Delete session "${sessionFilter}"?`)) return;
+    setShots(prev => prev.filter(s => sessionLabelOf(s) !== sessionFilter));
   }
 
-  // Printing
   function onPrintClubAverages() {
-    // Print the table (Dashboard table) only
-    const el = document.getElementById("club-averages-table");
-    if (!el) return;
+    const el = document.querySelector("div key") as any;
+    const table = document.querySelector("table.min-w-full.text-sm");
+    // safer: look up by title container id if present
+    const t = document.getElementById("club-averages-table") || table;
+    if (!t) return;
     const w = window.open("", "_blank", "width=1200,height=800");
     if (!w) return;
     w.document.write(`
@@ -345,7 +294,7 @@ export default function App() {
             th:first-child, td:first-child { text-align: left; }
           </style>
         </head>
-        <body>${el.outerHTML}</body>
+        <body>${(t as HTMLElement).outerHTML}</body>
       </html>
     `);
     w.document.close();
@@ -354,7 +303,7 @@ export default function App() {
     w.close();
   }
 
-  // Drag helpers
+  /* ---------- Drag helpers ---------- */
   const dragKeyRef = useRef<string | null>(null);
   const onDragStart = (key: string) => (e: React.DragEvent) => { dragKeyRef.current = key; e.dataTransfer?.setData("text/plain", key); };
   const onDragOver  = (key: string) => (e: React.DragEvent) => { e.preventDefault(); };
@@ -370,19 +319,20 @@ export default function App() {
     setOrder(arr);
   };
 
-  // UI
+  const hasData = shots.length > 0;
+
+  /* ---------- UI ---------- */
   return (
-    <div className="min-h-screen" style={{ background: T.appBg, color: T.text }}>
-      {/* Top bar: tabs + theme */}
+    <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
+      {/* Top bar */}
       <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {/* Mobile: open filters drawer */}
             <button
               className="md:hidden rounded-md px-2 py-1 border text-sm"
               style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-              onClick={() => setFiltersOpen(true)}
               title="Filters"
+              onClick={() => {/* drawer handled within Filters on small screens if implemented */}}
             >Filters</button>
             <div
               className="text-lg font-semibold"
@@ -417,36 +367,40 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main */}
       <div className="max-w-6xl mx-auto px-4 py-4">
-        {/* Filters + content */}
         <div className="flex gap-4">
-          {/* Filters panel (drawer on mobile) */}
+          {/* Filters panel (left) */}
           <div className="w-72 shrink-0">
             <FiltersPanel
               theme={T}
               shots={shots}
-              filtered={filtered}
               sessions={sessions}
-              session={session} setSession={setSession}
               clubs={clubs}
-              clubsSel={clubsSel} setClubsSel={setClubsSel}
-              dateStart={dateStart} setDateStart={setDateStart}
-              dateEnd={dateEnd} setDateEnd={setDateEnd}
-              carryMin={carryMin} setCarryMin={setCarryMin}
-              carryMax={carryMax} setCarryMax={setCarryMax}
-              carryAuto={carryAuto} setCarryAuto={setCarryAuto}
-              excludeOutliers={excludeOutliers} setExcludeOutliers={setExcludeOutliers}
-              onImportCSV={onImportCSV}
-              onImportWeirdCSV={onImportWeirdCSV}
-              onExportCSV={onExportCSV}
+              selectedClubs={selectedClubs}
+              setSelectedClubs={setSelectedClubs}
+              sessionFilter={sessionFilter}
+              setSessionFilter={setSessionFilter}
+              excludeOutliers={excludeOutliers}
+              setExcludeOutliers={setExcludeOutliers}
+              dateFrom={dateFrom}
+              setDateFrom={setDateFrom}
+              dateTo={dateTo}
+              setDateTo={setDateTo}
+              carryMin={carryMin}
+              setCarryMin={setCarryMin}
+              carryMax={carryMax}
+              setCarryMax={setCarryMax}
+              carryBounds={carryBounds}
+              onImportFile={onImportFile}
+              onLoadSample={onLoadSample}
+              onExportCSV={onExport}
               onPrintClubAverages={onPrintClubAverages}
-              setFiltersOpen={setFiltersOpen}
-              filtersOpen={filtersOpen}
+              onDeleteSession={onDeleteSession}
+              onDeleteAll={onDeleteAll}
             />
           </div>
 
-          {/* Content area */}
+          {/* Content */}
           <div className="flex-1 min-w-0">
             {tab === "dashboard" && (
               <DashboardCards
@@ -456,33 +410,38 @@ export default function App() {
                 onDragStart={onDragStart}
                 onDragOver={onDragOver}
                 onDrop={(key) => onDrop(key, cardOrder, setCardOrder)}
-                shots={shots}
+                hasData={hasData}
+                kpis={kpis}
+                filteredOutliers={filteredOutliers}
                 filtered={filtered}
-                tableRows={tableRows}
+                shots={shots}
+                tableRows={tableRows as any}
+                clubs={allClubs}
               />
             )}
             {tab === "insights" && (
               <InsightsView
                 theme={T}
+                tableRows={tableRows as any}
+                filteredOutliers={filteredOutliers}
+                filteredNoClubOutliers={filteredOutliers}
+                filteredNoClubRaw={filtered}
+                allClubs={allClubs}
                 insightsOrder={insightsOrder}
-                setInsightsOrder={setInsightsOrder}
                 onDragStart={onDragStart}
                 onDragOver={onDragOver}
                 onDrop={(key) => onDrop(key, insightsOrder, setInsightsOrder)}
-                shots={shots}
-                filtered={filtered}
-                clubs={clubs}
-                journalRef={journalRef}
+                allShots={shots}
               />
             )}
             {tab === "journal" && (
               <JournalView
                 theme={T}
-                refEl={journalRef}
-                html={journalHTML}
-                setHTML={setJournalHTML}
-                label="Notes"
-                minHeightPx={260}
+                editorRef={journalRef}
+                value={journalHTML}
+                onInputHTML={setJournalHTML}
+                sessionLabel={`Journal — ${sessionFilter}`}
+                defaultHeightPx={260}
               />
             )}
           </div>
