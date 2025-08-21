@@ -8,7 +8,7 @@ import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, XLSX, orderIndex,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV, n
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV, n, ClubRow
 } from "./utils";
 
 /* =========================
@@ -303,21 +303,19 @@ export default function App() {
   /* =========================
      Derived for children
   ========================= */
-  // Club list for ordering/labels (stable)
   const clubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
     [filteredOutliers]
   );
 
-  // Club Averages table rows expected by Dashboard/Insights
-  const tableRows = useMemo(() => {
+  const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     for (const s of filteredOutliers) {
       const arr = byClub.get(s.Club) || [];
       arr.push(s);
       byClub.set(s.Club, arr);
     }
-    const rows = Array.from(byClub.entries()).map(([club, arr]) => {
+    const rows: ClubRow[] = Array.from(byClub.entries()).map(([club, arr]) => {
       const g = <T extends (keyof Shot)>(k: T) => arr.map(a => a[k]).filter(isNum) as number[];
       const avg = (xs: number[]) => xs.length ? mean(xs) : 0;
       const carry = avg(g("CarryDistance_yds"));
@@ -330,14 +328,13 @@ export default function App() {
         club,
         count: arr.length,
         avgCarry: carry,
-        avgTotal: total || carry, // fall back to carry if total missing
+        avgTotal: total || carry,
         avgCS: cs,
         avgBS: bs,
         avgLA: la,
         avgF2P: f2p,
-      };
+      } as ClubRow;
     });
-    // Keep the same ordering as clubs list
     rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
     return rows;
   }, [filteredOutliers]);
