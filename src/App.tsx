@@ -8,7 +8,7 @@ import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV, n
 } from "./utils";
 
 /* =========================
@@ -31,20 +31,16 @@ function useToasts() {
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /* =========================
-   Theme helpers
+   Derived helpers
 ========================= */
-function setFavicon(mode: "light" | "dark") {
-  const linkId = "favicon";
-  const href = mode === "light" ? "/launch-tracker/favicon-light.svg" : "/launch-tracker/favicon-dark.svg";
-  let link = document.getElementById(linkId) as HTMLLinkElement | null;
-  if (!link) {
-    link = document.createElement("link");
-    link.id = linkId;
-    link.rel = "icon";
-    document.head.appendChild(link);
-  }
-  link.href = href;
-}
+const applyDerived = (s: Shot): Shot => {
+  const s2 = { ...s };
+  const Sm = coalesceSmash(s2);
+  const F2P = coalesceFaceToPath(s2);
+  if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
+  if (F2P !== undefined) s2.FaceToPath_deg = F2P;
+  return s2;
+};
 
 /* =========================
    App
@@ -111,48 +107,57 @@ export default function App() {
     return dataRows.map((row) => {
       const dateRaw = String(row[idx("date")] ?? row[idx("timestamp")] ?? row[idx("datetime")] ?? "").trim();
       const sessionByDay = (dateRaw.split(" ")[0] || "Unknown Session");
-      const clubIdx = (() => { for (const c of ["club name", "club", "clubtype", "club type"]) { const i = idx(c); if (i >= 0) return i; } return -1; })();
+      const clubIdx = (() => { for (const c of ["club name", "club", "club type"]) { const i = idx(c); if (i >= 0) return i; } return -1; })();
       const clubVal = clubIdx >= 0 ? String(row[clubIdx] ?? "").trim() : "Unknown Club";
 
       const s: Shot = {
         SessionId: sessionByDay,
-        Timestamp: dateRaw || undefined,
-        Club: clubVal || "Unknown Club",
+        Club: clubVal,
+        Timestamp: isoDate(dateRaw),
+
+        ClubSpeed_mph:      n(row[idx("club speed")]),
+        AttackAngle_deg:    n(row[idx("attack angle")]),
+        ClubPath_deg:       n(row[idx("club path")]),
+        ClubFace_deg:       n(row[idx("club face")]),
+        FaceToPath_deg:     n(row[idx("face to path")]),
+        BallSpeed_mph:      n(row[idx("ball speed")]),
+        SmashFactor:        n(row[idx("smash factor")]),
+        LaunchAngle_deg:    n(row[idx("launch angle")]),
+        LaunchDirection_deg:n(row[idx("launch direction")]),
+        ApexHeight_yds:     n(row[idx("apex height")]),
+        CarryDistance_yds:  n(row[idx("carry distance")]),
+        CarryDeviationDistance_yds: n(row[idx("carry deviation distance")]),
+        TotalDeviationDistance_yds: n(row[idx("total deviation distance")]),
+        TotalDistance_yds:  n(row[idx("total distance")]),
+        Backspin_rpm:       n(row[idx("backspin")]),
+        Sidespin_rpm:       n(row[idx("sidespin")]),
+        SpinRate_rpm:       n(row[idx("spin rate")]),
+        SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
+        SpinAxis_deg:       n(row[idx("spin axis")]),
       };
-      const s2 = fpOf(s);
 
-      const C = Number(row[idx("carry")] ?? row[idx("carry distance")] ?? row[idx("carry yards")]);
-      const BS = Number(row[idx("ball speed")] ?? row[idx("ball mph")]);
-      const CS = Number(row[idx("club speed")] ?? row[idx("club mph")]);
-      const LA = Number(row[idx("launch angle")] ?? row[idx("la")]);
-      const SP = Number(row[idx("backspin")] ?? row[idx("spin")] ?? row[idx("spin rpm")]);
-      const Sm = coalesceSmash(BS, CS);
-      const F2P = coalesceFaceToPath(
-        Number(row[idx("club path")]),
-        Number(row[idx("club face")] ?? row[idx("face angle")])
-      );
-
-      if (Number.isFinite(C)) s2.CarryDistance_yds = Math.max(0, C);
-      if (Number.isFinite(BS)) s2.BallSpeed_mph = Math.max(0, BS);
-      if (Number.isFinite(CS)) s2.ClubSpeed_mph = Math.max(0, CS);
-      if (Number.isFinite(LA)) s2.LaunchAngle_deg = LA;
-      if (Number.isFinite(SP)) s2.Backspin_rpm = Math.max(0, SP);
-      if (Sm !== undefined) s2.SmashFactor = clamp(Sm, 0.5, 1.95);
-      if (F2P !== undefined) s2.FaceToPath_deg = F2P;
-      return s2;
+      return applyDerived(s);
     });
   }
 
-  function processWorkbook(wb: any, filename: string) {
-    const sheets = wb.SheetNames || [];
-    for (const sn of sheets) {
-      const ws = wb.Sheets[sn];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-      const header = rows[0] || [];
-      const dataRows = rows.slice(1);
-      const shotsFromXlsx = rowsToShots(header, dataRows, filename.replace(/\.\w+$/, ""));
-      mergeImportedShots(shotsFromXlsx, filename);
-    }
+  function processWorkbook(wb: XLSX.WorkBook, filename: string) {
+    const valid = wb.SheetNames.find(n => {
+      const ws = wb.Sheets[n];
+      const rr = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+      return rr && rr.flat().some(v => v !== null && v !== "");
+    }) || wb.SheetNames[0];
+
+    const ws = wb.Sheets[valid];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true }) as any[][];
+    if (!rows.length) { toast({ type: "warn", text: `No rows detected in ${filename}` }); return; }
+
+    const header = rows[0].map((h) => String(h ?? ""));
+    const second = rows[1]?.map((h) => String(h ?? "")) ?? [];
+    const hasUnitsRow = second.length && second.some(s => /\b(mph|rpm|yds|deg)\b/i.test(s));
+    const dataRows = hasUnitsRow ? rows.slice(2) : rows.slice(1);
+
+    const newShots = rowsToShots(header, dataRows, filename);
+    mergeImportedShots(newShots, filename);
   }
 
   function onImportFile(file: File) {
@@ -191,60 +196,32 @@ export default function App() {
     mergeImportedShots(sample, "Sample");
   }
 
-  function exportShotsCSV() {
-    const hdr = ["SessionId","Timestamp","Club","CarryDistance_yds","TotalDistance_yds","BallSpeed_mph","ClubSpeed_mph","SmashFactor","Backspin_rpm","LaunchAngle_deg","FaceToPath_deg"];
-    exportCSV(hdr, shots.map(s => ({
-      SessionId: s.SessionId ?? "",
-      Timestamp: s.Timestamp ?? "",
-      Club: s.Club,
-      CarryDistance_yds: s.CarryDistance_yds ?? "",
-      TotalDistance_yds: s.TotalDistance_yds ?? "",
-      BallSpeed_mph: s.BallSpeed_mph ?? "",
-      ClubSpeed_mph: s.ClubSpeed_mph ?? "",
-      SmashFactor: s.SmashFactor ?? "",
-      Backspin_rpm: s.Backspin_rpm ?? "",
-      LaunchAngle_deg: s.LaunchAngle_deg ?? "",
-      FaceToPath_deg: s.FaceToPath_deg ?? "",
-    })));
-  }
+  function exportShotsCSV() { exportCSV(shots); }
 
   /* =========================
      Print — Club Averages only
   ========================= */
   function onPrintClubAverages() {
-    // Find the "Club Averages" table inside its Card (Dashboard view)
     try {
-      // Look for any Card header whose textContent is exactly "Club Averages"
-      const headers = Array.from(document.querySelectorAll('section > header'));
-      const header = headers.find(h => (h.textContent || '').trim() === 'Club Averages');
+      // Find the Card header whose text is exactly "Club Averages"
+      const headers = Array.from(document.querySelectorAll("section > header"));
+      const header = headers.find(h => (h.textContent || "").trim() === "Club Averages");
       const cardSection = header ? (header.parentElement as HTMLElement | null) : null;
-      const table = cardSection ? (cardSection.querySelector('table') as HTMLTableElement | null) : null;
+      const table = cardSection ? (cardSection.querySelector("table") as HTMLTableElement | null) : null;
 
       if (!table) {
-        // Fallback to the previous behavior if we can't find the table on the page
-        window.print();
+        window.print(); // graceful fallback
         return;
       }
 
-      // Open a lightweight print window with only the table
-      const w = window.open('', '_blank', 'noopener,noreferrer');
-      if (!w) {
-        // Popup blocked: fallback
-        window.print();
-        return;
-      }
+      const w = window.open("", "_blank", "noopener,noreferrer");
+      if (!w) { window.print(); return; }
 
-      // Minimal styles for clean table printing (no external deps)
       const css = `
         :root { color-scheme: light; }
         * { box-sizing: border-box; }
         html, body { height: 100%; }
-        body {
-          margin: 16px;
-          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-          color: #000;
-          background: #fff;
-        }
+        body { margin: 16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; color: #000; background: #fff; }
         h1 { font-size: 16px; margin: 0 0 8px 0; }
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; text-align: right; }
@@ -253,7 +230,6 @@ export default function App() {
         @page { margin: 12mm; }
       `;
 
-      // Clone only the table HTML so we don't mutate the app DOM
       const tableHTML = table.outerHTML;
 
       w.document.open();
@@ -268,11 +244,9 @@ export default function App() {
     <h1>Club Averages</h1>
     ${tableHTML}
     <script>
-      // Defer print to ensure layout is ready
       window.addEventListener('load', function () {
         window.focus();
         window.print();
-        // Close after print in most browsers; if not supported, user can close tab
         setTimeout(function(){ window.close(); }, 50);
       });
     <\/script>
@@ -285,7 +259,7 @@ export default function App() {
   }
 
   /* =========================
-     Filtering
+     Filters state
   ========================= */
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [sessionFilter, setSessionFilter] = useState<string>("ALL");
@@ -295,6 +269,24 @@ export default function App() {
   const [carryMin, setCarryMin] = useState<string>("");
   const [carryMax, setCarryMax] = useState<string>("");
 
+  /* =========================
+     Actions
+  ========================= */
+  function onDeleteSession() {
+    if (!shots.length || sessionFilter === "ALL") return;
+    if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
+    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
+    setShots(keep);
+  }
+  function onDeleteAll() {
+    if (!shots.length) return;
+    if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
+    setShots([]);
+  }
+
+  /* =========================
+     Filtering
+  ========================= */
   const filteredBase = useMemo(() => {
     const inClubs = (s: Shot) => !selectedClubs.length || selectedClubs.includes(s.Club);
     const inSession = (s: Shot) => sessionFilter === "ALL" || (s.SessionId ?? "Unknown Session") === sessionFilter;
@@ -318,7 +310,8 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    return filteredBase; // plug in IQR trimming per club in a later pass
+    // Placeholder: keep behavior identical for now (no-op). We can add IQR trimming later without changing props/DOM.
+    return filteredBase;
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
@@ -367,6 +360,8 @@ export default function App() {
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  const year = new Date().getFullYear();
+
   return (
     <div className="min-h-full" style={{ background: T.bg, color: T.text }}>
       {/* Header */}
@@ -377,7 +372,7 @@ export default function App() {
             <nav className="hidden md:flex items-center gap-1">
               <TopTab label="Dashboard" active={tab === "dashboard"} theme={T} onClick={() => setTab("dashboard")} />
               <TopTab label="Insights"   active={tab === "insights"}  theme={T} onClick={() => setTab("insights")} />
-              <TopTab label="Journal"    active={tab === "journal"}   theme={T} onClick={() => setTab("journal")}  />
+              <TopTab label="Journal"    active={tab === "journal"}   theme={T} onClick={() => setTab("journal")} />
             </nav>
           </div>
           <div className="flex items-center gap-2">
@@ -431,17 +426,8 @@ export default function App() {
             onLoadSample={onLoadSample}
             onExportCSV={exportShotsCSV}
             onPrintClubAverages={onPrintClubAverages}
-            onDeleteSession={() => {
-              if (!shots.length || sessionFilter === "ALL") return;
-              if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
-              const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
-              setShots(keep);
-            }}
-            onDeleteAll={() => {
-              if (!shots.length) return;
-              if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
-              setShots([]);
-            }}
+            onDeleteSession={onDeleteSession}
+            onDeleteAll={onDeleteAll}
           />
         </div>
 
@@ -495,21 +481,16 @@ export default function App() {
       </main>
 
       {/* Toasts */}
-      <div className="fixed bottom-3 right-3 space-y-2 z-50">
-        {msgs.map(m => (
-          <div
+      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+        {msgs.map((m) => (
+          <button
             key={m.id}
-            className="rounded-md px-3 py-2 border text-sm"
-            style={{
-              background: m.type === "error" ? "rgba(200,0,0,0.1)" : "rgba(0,0,0,0.6)",
-              color: m.type === "error" ? "#000" : "#fff",
-              borderColor: m.type === "error" ? "rgba(200,0,0,0.4)" : "transparent",
-            }}
+            className="px-3 py-2 rounded-md border text-sm shadow-sm text-left"
+            style={{ background: T.panel, borderColor: T.border, color: T.text }}
             onClick={() => removeToast(m.id)}
-            role="status"
           >
             {m.text}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -517,7 +498,7 @@ export default function App() {
       <footer className="mt-6 border-t" style={{ borderColor: theme.border, background: theme.bg }}>
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
           <div className="text-xs" style={{ color: theme.textDim }}>
-            © {new Date().getFullYear()} Launch Tracker
+            © {year} Launch Tracker
           </div>
           <nav className="flex items-center gap-3 text-xs" style={{ color: theme.textDim }}>
             <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
