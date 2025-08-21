@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LIGHT, DARK, Theme } from "./theme";
 import FiltersPanel from "./Filters";
@@ -7,8 +8,8 @@ import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, XLSX, orderIndex,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV, n, ClubRow
+  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
 } from "./utils";
 
 /* =========================
@@ -20,7 +21,7 @@ function useToasts() {
   const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
     const id = m.id ?? Math.floor(Date.now() + Math.random() * 1000);
     setMsgs(prev => [...prev, { id, text: m.text, type: m.type }]);
-    setTimeout(() => remove(id), 10000);
+    setTimeout(() => remove(id), 10000); // auto-clear after 10s
   };
   return { msgs, push, remove };
 }
@@ -29,8 +30,10 @@ function useToasts() {
    Helpers
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-
-/* derive Smash/Face-to-Path when partially present */
+const numOrUndef = (v: any): number | undefined => {
+  const x = fpOf(v);
+  return typeof x === "number" ? x : undefined;
+};
 const applyDerived = (s: Shot): Shot => {
   const s2 = { ...s };
   const Sm = coalesceSmash(s2);
@@ -68,15 +71,19 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
 
-  const [cardOrder, setCardOrder] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:cardOrder") || `["kpis","shape","dispersion","gap","eff","table"]`); } catch { return ["kpis","shape","dispersion","gap","eff","table"]; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:cardOrder", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
-
-  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:insightsOrder") || `[]`); } catch { return []; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:insightsOrder", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
+  // Sessions & clubs (always derived from current shots)
+  const sessions = useMemo(
+    () => ["ALL", ...Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session"))).sort()],
+    [shots]
+  );
+  const clubs = useMemo(
+    () => Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
+    [shots]
+  );
+  const carryBounds = useMemo(() => {
+    const xs = shots.map(s => s.CarryDistance_yds).filter(isNum);
+    return xs.length ? { min: Math.floor(Math.min(...xs)), max: Math.ceil(Math.max(...xs)) } : { min: 0, max: 0 };
+  }, [shots]);
 
   /* =========================
      Import / Export
@@ -88,10 +95,11 @@ export default function App() {
     let added = 0;
     for (const s of newShots) {
       const k = keyOf(s);
-      if (!existing.has(k)) { existing.set(k, applyDerived(s)); added++; }
+      if (!existing.has(k)) { existing.set(k, s); added++; }
     }
     const merged = Array.from(existing.values());
     setShots(merged);
+    // Ensure session filter reflects everything after import
     setSessionFilter("ALL");
     toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
   }
@@ -112,25 +120,25 @@ export default function App() {
         Club: clubVal,
         Timestamp: isoDate(dateRaw),
 
-        ClubSpeed_mph:      n(row[idx("club speed")]),
-        AttackAngle_deg:    n(row[idx("attack angle")]),
-        ClubPath_deg:       n(row[idx("club path")]),
-        ClubFace_deg:       n(row[idx("club face")]),
-        FaceToPath_deg:     n(row[idx("face to path")]),
-        BallSpeed_mph:      n(row[idx("ball speed")]),
-        SmashFactor:        n(row[idx("smash factor")]),
-        LaunchAngle_deg:    n(row[idx("launch angle")]),
-        LaunchDirection_deg:n(row[idx("launch direction")]),
-        ApexHeight_yds:     n(row[idx("apex height")]),
-        CarryDistance_yds:  n(row[idx("carry distance")]),
-        CarryDeviationDistance_yds: n(row[idx("carry deviation distance")]),
-        TotalDeviationDistance_yds: n(row[idx("total deviation distance")]),
-        TotalDistance_yds:  n(row[idx("total distance")]),
-        Backspin_rpm:       n(row[idx("backspin")]),
-        Sidespin_rpm:       n(row[idx("sidespin")]),
-        SpinRate_rpm:       n(row[idx("spin rate")]),
+        ClubSpeed_mph:      numOrUndef(row[idx("club speed")]),
+        AttackAngle_deg:    numOrUndef(row[idx("attack angle")]),
+        ClubPath_deg:       numOrUndef(row[idx("club path")]),
+        ClubFace_deg:       numOrUndef(row[idx("club face")]),
+        FaceToPath_deg:     numOrUndef(row[idx("face to path")]),
+        BallSpeed_mph:      numOrUndef(row[idx("ball speed")]),
+        SmashFactor:        numOrUndef(row[idx("smash factor")]),
+        LaunchAngle_deg:    numOrUndef(row[idx("launch angle")]),
+        LaunchDirection_deg:numOrUndef(row[idx("launch direction")]),
+        ApexHeight_yds:     numOrUndef(row[idx("apex height")]),
+        CarryDistance_yds:  numOrUndef(row[idx("carry distance")]),
+        CarryDeviationDistance_yds: numOrUndef(row[idx("carry deviation distance")]),
+        TotalDeviationDistance_yds: numOrUndef(row[idx("total deviation distance")]),
+        TotalDistance_yds:  numOrUndef(row[idx("total distance")]),
+        Backspin_rpm:       numOrUndef(row[idx("backspin")]),
+        Sidespin_rpm:       numOrUndef(row[idx("sidespin")]),
+        SpinRate_rpm:       numOrUndef(row[idx("spin rate")]),
         SpinRateType:       (() => { const i = idx("spin rate type"); const v = i >= 0 ? row[i] : undefined; return v == null ? undefined : String(v); })(),
-        SpinAxis_deg:       n(row[idx("spin axis")]),
+        SpinAxis_deg:       numOrUndef(row[idx("spin axis")]),
       };
 
       return applyDerived(s);
@@ -185,77 +193,24 @@ export default function App() {
     const sample: Shot[] = [
       { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
         ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
-        CarryDistance_yds: 245, SmashFactor: 1.470 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:06:00Z", Club: "7 Iron",
-        ClubSpeed_mph: 83, BallSpeed_mph: 115, LaunchAngle_deg: 17, Backspin_rpm: 6200,
-        CarryDistance_yds: 152, SmashFactor: 1.386 },
-    ];
-    mergeImportedShots(sample, "Sample");
+        CarryDistance_yds: 255, TotalDistance_yds: 280, LaunchDirection_deg: -2, ClubPath_deg: 3.0, ClubFace_deg: 2.0 },
+      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:07:00Z", Club: "Driver",
+        ClubSpeed_mph: 104, BallSpeed_mph: 153, LaunchAngle_deg: 12.5, Backspin_rpm: 2400,
+        CarryDistance_yds: 258, TotalDistance_yds: 284, LaunchDirection_deg: 1, ClubPath_deg: 2.5, ClubFace_deg: 1.0 },
+      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:12:00Z", Club: "7 Iron",
+        ClubSpeed_mph: 84, BallSpeed_mph: 114, LaunchAngle_deg: 18, Backspin_rpm: 6200,
+        CarryDistance_yds: 158, TotalDistance_yds: 168, LaunchDirection_deg: 0, ClubPath_deg: 1.0, ClubFace_deg: 0.5 },
+      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:31:00Z", Club: "Pitching Wedge",
+        ClubSpeed_mph: 70, BallSpeed_mph: 92, LaunchAngle_deg: 29, Backspin_rpm: 8500,
+        CarryDistance_yds: 118, TotalDistance_yds: 124, LaunchDirection_deg: -1, ClubPath_deg: -0.5, ClubFace_deg: -1.0 },
+      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:34:00Z", Club: "Pitching Wedge",
+        ClubSpeed_mph: 71, BallSpeed_mph: 93, LaunchAngle_deg: 30, Backspin_rpm: 8700,
+        CarryDistance_yds: 120, TotalDistance_yds: 126, LaunchDirection_deg: 0.5, ClubPath_deg: 0.0, ClubFace_deg: 0.2 },
+    ].map(applyDerived);
+    mergeImportedShots(sample, "Sample Data");
   }
 
-  function exportShotsCSV() {
-    // preserve util contract: exportCSV(rows)
-    exportCSV(shots as unknown as Record<string, any>[]);
-  }
-
-  /* =========================
-     Print — Club Averages only
-  ========================= */
-  function onPrintClubAverages() {
-    try {
-      const headers = Array.from(document.querySelectorAll("section > header"));
-      const header = headers.find(h => (h.textContent || "").trim() === "Club Averages");
-      const cardSection = header ? (header.parentElement as HTMLElement | null) : null;
-      const table = cardSection ? (cardSection.querySelector("table") as HTMLTableElement | null) : null;
-
-      if (!table) {
-        window.print();
-        return;
-      }
-
-      const w = window.open("", "_blank", "noopener,noreferrer");
-      if (!w) { window.print(); return; }
-
-      const css = `
-        :root { color-scheme: light; }
-        * { box-sizing: border-box; }
-        html, body { height: 100%; }
-        body { margin: 16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; color: #000; background: #fff; }
-        h1 { font-size: 16px; margin: 0 0 8px 0; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; text-align: right; }
-        th:first-child, td:first-child { text-align: left; }
-        thead th { font-weight: 600; }
-        @page { margin: 12mm; }
-      `;
-
-      const tableHTML = table.outerHTML;
-
-      w.document.open();
-      w.document.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8"/>
-    <title>Club Averages</title>
-    <style>${css}</style>
-  </head>
-  <body>
-    <h1>Club Averages</h1>
-    ${tableHTML}
-    <script>
-      window.addEventListener('load', function () {
-        window.focus();
-        window.print();
-        setTimeout(function(){ window.close(); }, 50);
-      });
-    <\/script>
-  </body>
-</html>`);
-      w.document.close();
-    } catch {
-      window.print();
-    }
-  }
+  function exportShotsCSV() { exportCSV(shots); }
 
   /* =========================
      Filters state
@@ -269,9 +224,25 @@ export default function App() {
   const [carryMax, setCarryMax] = useState<string>("");
 
   /* =========================
+     Actions
+  ========================= */
+  function onPrintClubAverages() { window.print(); }
+  function onDeleteSession() {
+    if (!shots.length || sessionFilter === "ALL") return;
+    if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
+    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
+    setShots(keep);
+  }
+  function onDeleteAll() {
+    if (!shots.length) return;
+    if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
+    setShots([]);
+  }
+
+  /* =========================
      Filtering
   ========================= */
-  const filtered = useMemo(() => {
+  const filteredBase = useMemo(() => {
     const inClubs = (s: Shot) => !selectedClubs.length || selectedClubs.includes(s.Club);
     const inSession = (s: Shot) => sessionFilter === "ALL" || (s.SessionId ?? "Unknown Session") === sessionFilter;
 
@@ -293,68 +264,69 @@ export default function App() {
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
   const filteredOutliers = useMemo(() => {
-    if (!excludeOutliers) return filtered;
-    // Keep existing behavior (no-op) for now; we can add per-club IQR trimming later without API changes.
-    return filtered;
-  }, [filtered, excludeOutliers]);
-
-  const hasData = filtered.length > 0;
+    if (!excludeOutliers) return filteredBase;
+    return filteredBase; // plug in IQR trimming per club in a later pass
+  }, [filteredBase, excludeOutliers]);
 
   /* =========================
-     Derived for children
+     Derived for child views
   ========================= */
-  const clubs = useMemo(
-    () => Array.from(new Set(filteredOutliers.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
-    [filteredOutliers]
-  );
+  const hasData = filteredBase.length > 0;
+  const kpis = useMemo(() => {
+    const vCarry = filteredOutliers.map(s => s.CarryDistance_yds).filter(isNum);
+    const vBall  = filteredOutliers.map(s => s.BallSpeed_mph).filter(isNum);
+    const vClub  = filteredOutliers.map(s => s.ClubSpeed_mph).filter(isNum);
+    const vSmash = filteredOutliers.map(s => s.SmashFactor).filter(isNum);
+    return {
+      carry: { mean: mean(vCarry), n: vCarry.length, std: stddev(vCarry) },
+      ball:  { mean: mean(vBall),  n: vBall.length,  std: stddev(vBall)  },
+      club:  { mean: mean(vClub),  n: vClub.length,  std: stddev(vClub)  },
+      smash: { mean: mean(vSmash), n: vSmash.length, std: stddev(vSmash) },
+    } as any;
+  }, [filteredOutliers]);
 
   const tableRows: ClubRow[] = useMemo(() => {
     const byClub = new Map<string, Shot[]>();
     for (const s of filteredOutliers) {
-      const arr = byClub.get(s.Club) || [];
-      arr.push(s);
-      byClub.set(s.Club, arr);
+      const k = s.Club || "Unknown";
+      if (!byClub.has(k)) byClub.set(k, []);
+      byClub.get(k)!.push(s);
     }
-    const rows: ClubRow[] = Array.from(byClub.entries()).map(([club, arr]) => {
-      const g = <T extends (keyof Shot)>(k: T) => arr.map(a => a[k]).filter(isNum) as number[];
-      const avg = (xs: number[]) => xs.length ? mean(xs) : 0;
-      const carry = avg(g("CarryDistance_yds"));
-      const total = avg(g("TotalDistance_yds"));
-      const cs = avg(g("ClubSpeed_mph"));
-      const bs = avg(g("BallSpeed_mph"));
-      const la = avg(g("LaunchAngle_deg"));
-      const f2p = avg(g("FaceToPath_deg"));
-      return {
-        club,
-        count: arr.length,
-        avgCarry: carry,
-        avgTotal: total || carry,
-        avgCS: cs,
-        avgBS: bs,
-        avgLA: la,
-        avgF2P: f2p,
-      } as ClubRow;
+    const rows: ClubRow[] = [];
+    Array.from(byClub.keys()).sort((a,b)=>orderIndex(a)-orderIndex(b)).forEach(club => {
+      const arr = byClub.get(club)!;
+      const avg = (key: keyof Shot) => {
+        const xs = arr.map(r => r[key]).filter(isNum) as number[];
+        return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : 0;
+      };
+      rows.push({ club, count: arr.length, avgCarry: avg("CarryDistance_yds"), avgTotal: avg("TotalDistance_yds"), avgSmash: avg("SmashFactor"), avgSpin: avg("Backspin_rpm") || avg("SpinRate_rpm"), avgCS: avg("ClubSpeed_mph"), avgBS: avg("BallSpeed_mph"), avgLA: avg("LaunchAngle_deg"), avgF2P: avg("FaceToPath_deg") } as any);
     });
-    rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
     return rows;
   }, [filteredOutliers]);
 
-  // KPIs for dashboard header tiles
-  const kpis = useMemo(() => {
-    const xs = (arr: number[]) => arr.filter(isNum) as number[];
-    const carry = xs(filteredOutliers.map(s => s.CarryDistance_yds as number));
-    const ball = xs(filteredOutliers.map(s => s.BallSpeed_mph as number));
-    const club = xs(filteredOutliers.map(s => s.ClubSpeed_mph as number));
-    const smash = xs(filteredOutliers.map(s => s.SmashFactor as number));
-    return {
-      carry: { mean: mean(carry), n: carry.length, std: stddev(carry) },
-      ball:  { mean: mean(ball),  n: ball.length,  std: stddev(ball)  },
-      club:  { mean: mean(club),  n: club.length,  std: stddev(club)  },
-      smash: { mean: mean(smash), n: smash.length, std: stddev(smash) },
-    };
-  }, [filteredOutliers]);
+  // Card ordering
+  const [cardOrder, setCardOrder] = useState<string[]>(() => {
+    const DEFAULT = ["kpis", "shape", "dispersion", "gap", "eff", "table"];
+    try {
+      const raw = localStorage.getItem("launch-tracker:card-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...DEFAULT])).filter(k => DEFAULT.includes(k));
+      return DEFAULT;
+    } catch { return DEFAULT; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
-  const T = theme;
+  // Insights ordering
+  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "swings", "records", "gaps", "progress"];
+  const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("launch-tracker:insights-order");
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length) return Array.from(new Set([...saved, ...INSIGHTS_DEFAULT]));
+      return INSIGHTS_DEFAULT;
+    } catch { return INSIGHTS_DEFAULT; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
   /* =========================
      Journal
@@ -382,162 +354,201 @@ export default function App() {
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const year = new Date().getFullYear();
+  const T = theme;
 
   return (
-    <div className="min-h-full" style={{ background: T.bg, color: T.text }}>
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b" style={{ background: T.bg, borderColor: T.border }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold">Launch Tracker</span>
-            <nav className="hidden md:flex items-center gap-1">
-              <TopTab label="Dashboard" active={tab === "dashboard"} theme={T} onClick={() => setTab("dashboard")} />
-              <TopTab label="Insights"   active={tab === "insights"}  theme={T} onClick={() => setTab("insights")} />
-              <TopTab label="Journal"    active={tab === "journal"}   theme={T} onClick={() => setTab("journal")} />
-            </nav>
+    <div style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
+      {/* Header with tabs + theme */}
+      <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {/* Mobile: open filters drawer */}
+            <button
+              className="md:hidden rounded-md px-2 py-1 border text-sm"
+              style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+              onClick={() => setFiltersOpen(true)}
+              title="Filters"
+            >Filters</button>
+            <div className="text-lg font-semibold">Launch Tracker</div>
           </div>
           <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+              <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+              <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+              <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+            </div>
             <button
-              className="rounded-md px-2 py-1 border text-xs"
+              className="px-2 py-1 rounded-md border text-xs"
               style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
               onClick={() => setTheme(theme === LIGHT ? DARK : LIGHT)}
-              aria-label="Toggle theme"
               title="Toggle theme"
             >
-              {theme === LIGHT ? <IconMoon /> : <IconSun />}
-            </button>
-            <button
-              className="md:hidden rounded-md px-2 py-1 border text-xs"
-              style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-              onClick={() => setFiltersOpen(v => !v)}
-              aria-label="Filters"
-              title="Filters"
-            >
-              Filters
+              {theme === LIGHT ? <IconMoon/> : <IconSun/>}
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="max-w-6xl mx-auto px-4 py-4 grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] gap-4">
-        {/* Left sidebar (filters) */}
-        <div ref={filtersRef} className="filters-panel">
-          <FiltersPanel
-            theme={T}
-            shots={shots}
-            sessions={Array.from(new Set(shots.map(s => s.SessionId ?? "Unknown Session")))}
-            clubs={Array.from(new Set(shots.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b))}
-            selectedClubs={selectedClubs}
-            setSelectedClubs={setSelectedClubs}
-            sessionFilter={sessionFilter}
-            setSessionFilter={setSessionFilter}
-            excludeOutliers={excludeOutliers}
-            setExcludeOutliers={setExcludeOutliers}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            setDateFrom={setDateFrom}
-            setDateTo={setDateTo}
-            carryMin={carryMin}
-            carryMax={carryMax}
-            setCarryMin={setCarryMin}
-            setCarryMax={setCarryMax}
-            carryBounds={{ min: 0, max: 500 }}
-            onImportFile={onImportFile}
-            onLoadSample={onLoadSample}
-            onExportCSV={exportShotsCSV}
-            onPrintClubAverages={onPrintClubAverages}
-            onDeleteSession={() => {
-              if (!shots.length || sessionFilter === "ALL") return;
-              if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
-              const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
-              setShots(keep);
-            }}
-            onDeleteAll={() => {
-              if (!shots.length) return;
-              if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
-              setShots([]);
-            }}
-          />
+      {/* Mobile tabs row */}
+      <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
+          <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+          <div className="flex-1" />
+          <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
         </div>
+      </div>
 
-        {/* Right content */}
-        <div>
-          {tab === "dashboard" && (
-            <DashboardCards
+      {/* Mobile Filters Drawer */}
+      {filtersOpen ? (
+        <div className="md:hidden fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setFiltersOpen(false)}>
+          <div className="absolute left-0 top-0 bottom-0 w-[90%] max-w-sm overflow-y-auto" style={{ background: T.panel, color: T.text }} onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: T.border }}>
+              <div className="text-sm">Filters</div>
+              <button className="text-xs underline" style={{ color: T.brand }} onClick={() => setFiltersOpen(false)}>Close</button>
+            </div>
+            <div className="p-3">
+              <FiltersPanel
+                theme={T}
+                shots={shots}
+                sessions={sessions}
+                clubs={clubs}
+                selectedClubs={selectedClubs}
+                setSelectedClubs={setSelectedClubs}
+                sessionFilter={sessionFilter}
+                setSessionFilter={setSessionFilter}
+                excludeOutliers={excludeOutliers}
+                setExcludeOutliers={setExcludeOutliers}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                setDateFrom={setDateFrom}
+                setDateTo={setDateTo}
+                carryMin={carryMin}
+                carryMax={carryMax}
+                setCarryMin={setCarryMin}
+                setCarryMax={setCarryMax}
+                carryBounds={carryBounds}
+                onImportFile={onImportFile}
+                onLoadSample={onLoadSample}
+                onExportCSV={exportShotsCSV}
+                onPrintClubAverages={onPrintClubAverages}
+                onDeleteSession={onDeleteSession}
+                onDeleteAll={onDeleteAll}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
+          {/* Left rail (desktop) */}
+          <div ref={filtersRef} className="hidden md:block filters-panel">
+            <FiltersPanel
               theme={T}
-              cardOrder={cardOrder}
-              setCardOrder={setCardOrder}
-              onDragStart={(key: string) => (e: React.DragEvent) => {
-                e.dataTransfer.setData("text/plain", key);
-              }}
-              onDragOver={(key: string) => (e: React.DragEvent) => {
-                e.preventDefault();
-                const cur = [...cardOrder];
-                const fromKey = e.dataTransfer.getData("text/plain");
-                if (!fromKey || fromKey === key) return;
-                if (!cur.includes(fromKey)) return;
-                const from = cur.indexOf(fromKey);
-                const to = cur.indexOf(key);
-                cur.splice(from, 1);
-                cur.splice(to, 0, fromKey);
-                setCardOrder(cur);
-              }}
-              onDrop={(_key: string) => (e: React.DragEvent) => {
-                e.preventDefault();
-              }}
-              hasData={hasData}
-              kpis={kpis}
-              filteredOutliers={filteredOutliers}
-              filtered={filtered}
               shots={shots}
-              tableRows={tableRows}
+              sessions={sessions}
               clubs={clubs}
+              selectedClubs={selectedClubs}
+              setSelectedClubs={setSelectedClubs}
+              sessionFilter={sessionFilter}
+              setSessionFilter={setSessionFilter}
+              excludeOutliers={excludeOutliers}
+              setExcludeOutliers={setExcludeOutliers}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              setDateFrom={setDateFrom}
+              setDateTo={setDateTo}
+              carryMin={carryMin}
+              carryMax={carryMax}
+              setCarryMin={setCarryMin}
+              setCarryMax={setCarryMax}
+              carryBounds={carryBounds}
+              onImportFile={onImportFile}
+              onLoadSample={onLoadSample}
+              onExportCSV={exportShotsCSV}
+              onPrintClubAverages={onPrintClubAverages}
+              onDeleteSession={onDeleteSession}
+              onDeleteAll={onDeleteAll}
             />
-          )}
+          </div>
 
-          {tab === "insights" && (
-            <InsightsView
-              theme={T}
-              tableRows={tableRows}
-              filteredOutliers={filteredOutliers}
-              filteredNoClubOutliers={filteredOutliers}
-              filteredNoClubRaw={filtered}
-              allClubs={clubs}
-              insightsOrder={insightsOrder}
-              onDragStart={(key: string) => (e: React.DragEvent) => {
-                e.dataTransfer.setData("text/plain", key);
-              }}
-              onDragOver={(key: string) => (e: React.DragEvent) => {
-                e.preventDefault();
-                const cur = [...insightsOrder];
-                const fromKey = e.dataTransfer.getData("text/plain");
-                if (!fromKey || fromKey === key) return;
-                if (!cur.includes(fromKey)) return;
-                const from = cur.indexOf(fromKey);
-                const to = cur.indexOf(key);
-                cur.splice(from, 1);
-                cur.splice(to, 0, fromKey);
-                setInsightsOrder(cur);
-              }}
-              onDrop={(_key: string) => (_e: React.DragEvent) => {}}
-              allShots={shots}
-            />
-          )}
-
-          {tab === "journal" && (
-            <JournalView
-              theme={T}
-              editorRef={journalRef}
-              value={journalHTML}
-              onInputHTML={setJournalHTML}
-              sessionLabel={sessionLabel}
-              defaultHeightPx={Math.max(200, Math.floor(filtersHeight))}
-            />
-          )}
+          {/* Right content */}
+          <div>
+            {tab === "dashboard" && (
+              <DashboardCards
+                theme={T}
+                cardOrder={cardOrder}
+                setCardOrder={setCardOrder}
+                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
+                onDragOver={(_key) => (e) => e.preventDefault()}
+                onDrop={(targetKey) => (e) => {
+                  e.preventDefault();
+                  const sourceKey = e.dataTransfer.getData("text/plain");
+                  if (!sourceKey || sourceKey === targetKey) return;
+                  setCardOrder(prev => {
+                    const cur = [...prev];
+                    const si = cur.indexOf(sourceKey);
+                    const ti = cur.indexOf(targetKey);
+                    if (si < 0 || ti < 0) return cur;
+                    cur.splice(si, 1);
+                    cur.splice(ti, 0, sourceKey);
+                    return cur;
+                  });
+                }}
+                hasData={hasData}
+                kpis={kpis as any}
+                filteredOutliers={filteredOutliers}
+                filtered={filteredBase}
+                shots={shots}
+                tableRows={tableRows as any}
+                clubs={clubs}
+              />
+            )}
+            {tab === "insights" && (
+              <InsightsView
+                theme={T}
+                tableRows={tableRows as any}
+                filteredOutliers={filteredOutliers}
+                filteredNoClubOutliers={filteredOutliers}
+                filteredNoClubRaw={filteredBase}
+                allClubs={clubs}
+                allShots={shots}
+                insightsOrder={insightsOrder}
+                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
+                onDragOver={(_key) => (e) => e.preventDefault()}
+                onDrop={(targetKey) => (e) => {
+                  e.preventDefault();
+                  const sourceKey = e.dataTransfer.getData("text/plain");
+                  if (!sourceKey || sourceKey === targetKey) return;
+                  setInsightsOrder(prev => {
+                    const cur = [...prev];
+                    const si = cur.indexOf(sourceKey);
+                    const ti = cur.indexOf(targetKey);
+                    if (si < 0 || ti < 0) return cur;
+                    cur.splice(si, 1);
+                    cur.splice(ti, 0, sourceKey);
+                    return cur;
+                  });
+                }}
+              />
+            )}
+            {tab === "journal" && (
+              <JournalView
+                theme={T}
+                editorRef={journalRef}
+                value={journalHTML}
+                onInputHTML={setJournalHTML}
+                sessionLabel={sessionLabel}
+                defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
+              />
+            )}
+          </div>
         </div>
-      </main>
+      </div>
+
+      <Footer T={T} />
 
       {/* Toasts */}
       <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
@@ -552,20 +563,28 @@ export default function App() {
           </button>
         ))}
       </div>
-
-      {/* Footer */}
-      <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
-          <div className="text-xs" style={{ color: T.textDim }}>
-            © {year} Launch Tracker
-          </div>
-          <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
-            <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
-            <span>·</span>
-            <span>v1.0.0+</span>
-          </nav>
-        </div>
-      </footer>
     </div>
+  );
+}
+
+
+/* =========================
+   Footer
+========================= */
+function Footer({ T }: { T: Theme }) {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
+        <div className="text-xs" style={{ color: T.textDim }}>
+          © {year} Launch Tracker
+        </div>
+        <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
+          <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
+          <span>·</span>
+          <span>v1.0.0+</span>
+        </nav>
+      </div>
+    </footer>
   );
 }
