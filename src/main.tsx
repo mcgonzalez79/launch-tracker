@@ -1,9 +1,14 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import './index.css'; // <- add this line
+import './index.css';
 
 const el = document.getElementById('root');
 if (el) {
-  createRoot(el).render(<App />);
+  const RootApp = App as React.FC;
+  createRoot(el).render(
+    <React.StrictMode>
+      <RootApp />
+    </React.StrictMode>
+  );
 }
