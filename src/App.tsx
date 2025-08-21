@@ -7,7 +7,7 @@ import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
-  coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
+  coalesceSmash, coalesceFaceToPath, XLSX, orderIndex,
   normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV, n
 } from "./utils";
 
@@ -20,7 +20,7 @@ function useToasts() {
   const push = (m: Omit<Msg, "id"> & Partial<Pick<Msg, "id">>) => {
     const id = m.id ?? Math.floor(Date.now() + Math.random() * 1000);
     setMsgs(prev => [...prev, { id, text: m.text, type: m.type }]);
-    setTimeout(() => remove(id), 10000); // auto-clear after 10s
+    setTimeout(() => remove(id), 10000);
   };
   return { msgs, push, remove };
 }
@@ -30,9 +30,7 @@ function useToasts() {
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/* =========================
-   Derived helpers
-========================= */
+/* derive Smash/Face-to-Path when partially present */
 const applyDerived = (s: Shot): Shot => {
   const s2 = { ...s };
   const Sm = coalesceSmash(s2);
@@ -90,11 +88,10 @@ export default function App() {
     let added = 0;
     for (const s of newShots) {
       const k = keyOf(s);
-      if (!existing.has(k)) { existing.set(k, s); added++; }
+      if (!existing.has(k)) { existing.set(k, applyDerived(s)); added++; }
     }
     const merged = Array.from(existing.values());
     setShots(merged);
-    // Ensure session filter reflects everything after import
     setSessionFilter("ALL");
     toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
   }
@@ -196,21 +193,23 @@ export default function App() {
     mergeImportedShots(sample, "Sample");
   }
 
-  function exportShotsCSV() { exportCSV(shots); }
+  function exportShotsCSV() {
+    // preserve util contract: exportCSV(rows)
+    exportCSV(shots as unknown as Record<string, any>[]);
+  }
 
   /* =========================
      Print — Club Averages only
   ========================= */
   function onPrintClubAverages() {
     try {
-      // Find the Card header whose text is exactly "Club Averages"
       const headers = Array.from(document.querySelectorAll("section > header"));
       const header = headers.find(h => (h.textContent || "").trim() === "Club Averages");
       const cardSection = header ? (header.parentElement as HTMLElement | null) : null;
       const table = cardSection ? (cardSection.querySelector("table") as HTMLTableElement | null) : null;
 
       if (!table) {
-        window.print(); // graceful fallback
+        window.print();
         return;
       }
 
@@ -270,24 +269,9 @@ export default function App() {
   const [carryMax, setCarryMax] = useState<string>("");
 
   /* =========================
-     Actions
-  ========================= */
-  function onDeleteSession() {
-    if (!shots.length || sessionFilter === "ALL") return;
-    if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
-    const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
-    setShots(keep);
-  }
-  function onDeleteAll() {
-    if (!shots.length) return;
-    if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
-    setShots([]);
-  }
-
-  /* =========================
      Filtering
   ========================= */
-  const filteredBase = useMemo(() => {
+  const filtered = useMemo(() => {
     const inClubs = (s: Shot) => !selectedClubs.length || selectedClubs.includes(s.Club);
     const inSession = (s: Shot) => sessionFilter === "ALL" || (s.SessionId ?? "Unknown Session") === sessionFilter;
 
@@ -309,15 +293,56 @@ export default function App() {
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
   const filteredOutliers = useMemo(() => {
-    if (!excludeOutliers) return filteredBase;
-    // Placeholder: keep behavior identical for now (no-op). We can add IQR trimming later without changing props/DOM.
-    return filteredBase;
-  }, [filteredBase, excludeOutliers]);
+    if (!excludeOutliers) return filtered;
+    // Keep existing behavior (no-op) for now; we can add per-club IQR trimming later without API changes.
+    return filtered;
+  }, [filtered, excludeOutliers]);
+
+  const hasData = filtered.length > 0;
 
   /* =========================
-     Derived for child views
+     Derived for children
   ========================= */
-  const hasData = filteredBase.length > 0;
+  // Club list for ordering/labels (stable)
+  const clubs = useMemo(
+    () => Array.from(new Set(filteredOutliers.map(s => s.Club))).sort((a, b) => orderIndex(a) - orderIndex(b)),
+    [filteredOutliers]
+  );
+
+  // Club Averages table rows expected by Dashboard/Insights
+  const tableRows = useMemo(() => {
+    const byClub = new Map<string, Shot[]>();
+    for (const s of filteredOutliers) {
+      const arr = byClub.get(s.Club) || [];
+      arr.push(s);
+      byClub.set(s.Club, arr);
+    }
+    const rows = Array.from(byClub.entries()).map(([club, arr]) => {
+      const g = <T extends (keyof Shot)>(k: T) => arr.map(a => a[k]).filter(isNum) as number[];
+      const avg = (xs: number[]) => xs.length ? mean(xs) : 0;
+      const carry = avg(g("CarryDistance_yds"));
+      const total = avg(g("TotalDistance_yds"));
+      const cs = avg(g("ClubSpeed_mph"));
+      const bs = avg(g("BallSpeed_mph"));
+      const la = avg(g("LaunchAngle_deg"));
+      const f2p = avg(g("FaceToPath_deg"));
+      return {
+        club,
+        count: arr.length,
+        avgCarry: carry,
+        avgTotal: total || carry, // fall back to carry if total missing
+        avgCS: cs,
+        avgBS: bs,
+        avgLA: la,
+        avgF2P: f2p,
+      };
+    });
+    // Keep the same ordering as clubs list
+    rows.sort((a, b) => orderIndex(a.club) - orderIndex(b.club));
+    return rows;
+  }, [filteredOutliers]);
+
+  // KPIs for dashboard header tiles
   const kpis = useMemo(() => {
     const xs = (arr: number[]) => arr.filter(isNum) as number[];
     const carry = xs(filteredOutliers.map(s => s.CarryDistance_yds as number));
@@ -426,8 +451,17 @@ export default function App() {
             onLoadSample={onLoadSample}
             onExportCSV={exportShotsCSV}
             onPrintClubAverages={onPrintClubAverages}
-            onDeleteSession={onDeleteSession}
-            onDeleteAll={onDeleteAll}
+            onDeleteSession={() => {
+              if (!shots.length || sessionFilter === "ALL") return;
+              if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
+              const keep = shots.filter(s => (s.SessionId ?? "Unknown Session") !== sessionFilter);
+              setShots(keep);
+            }}
+            onDeleteAll={() => {
+              if (!shots.length) return;
+              if (!window.confirm("Delete ALL shots? This cannot be undone.")) return;
+              setShots([]);
+            }}
           />
         </div>
 
@@ -453,28 +487,56 @@ export default function App() {
                 cur.splice(to, 0, fromKey);
                 setCardOrder(cur);
               }}
-              filteredOutliers={filteredOutliers}
+              onDrop={(_key: string) => (e: React.DragEvent) => {
+                e.preventDefault();
+              }}
               hasData={hasData}
               kpis={kpis}
+              filteredOutliers={filteredOutliers}
+              filtered={filtered}
+              shots={shots}
+              tableRows={tableRows}
+              clubs={clubs}
             />
           )}
+
           {tab === "insights" && (
             <InsightsView
               theme={T}
-              order={insightsOrder}
-              setOrder={setInsightsOrder}
+              tableRows={tableRows}
               filteredOutliers={filteredOutliers}
+              filteredNoClubOutliers={filteredOutliers}
+              filteredNoClubRaw={filtered}
+              allClubs={clubs}
+              insightsOrder={insightsOrder}
+              onDragStart={(key: string) => (e: React.DragEvent) => {
+                e.dataTransfer.setData("text/plain", key);
+              }}
+              onDragOver={(key: string) => (e: React.DragEvent) => {
+                e.preventDefault();
+                const cur = [...insightsOrder];
+                const fromKey = e.dataTransfer.getData("text/plain");
+                if (!fromKey || fromKey === key) return;
+                if (!cur.includes(fromKey)) return;
+                const from = cur.indexOf(fromKey);
+                const to = cur.indexOf(key);
+                cur.splice(from, 1);
+                cur.splice(to, 0, fromKey);
+                setInsightsOrder(cur);
+              }}
+              onDrop={(_key: string) => (_e: React.DragEvent) => {}}
               allShots={shots}
             />
           )}
+
           {tab === "journal" && (
             <JournalView
               theme={T}
-              ref={journalRef}
-              html={journalHTML}
-              setHTML={setJournalHTML}
-              label={sessionLabel}
-              minHeightPx={Math.max(200, Math.floor(filtersHeight))}
+              editorRef={journalRef}
+              value={journalHTML}
+              onInputHTML={setJournalHTML}
+              sessionLabel={sessionLabel}
+              defaultHeightPx={Math.max(200, Math.floor(filtersHeight))}
             />
           )}
         </div>
@@ -495,12 +557,12 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <footer className="mt-6 border-t" style={{ borderColor: theme.border, background: theme.bg }}>
+      <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
-          <div className="text-xs" style={{ color: theme.textDim }}>
+          <div className="text-xs" style={{ color: T.textDim }}>
             © {year} Launch Tracker
           </div>
-          <nav className="flex items-center gap-3 text-xs" style={{ color: theme.textDim }}>
+          <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
             <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
             <span>·</span>
             <span>v1.0.0+</span>
