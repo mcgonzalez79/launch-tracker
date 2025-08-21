@@ -329,7 +329,7 @@ export default function App() {
   /* ---------- UI ---------- */
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
-           {/* Top bar */}
+      {/* Top bar */}
       <header className="border-b" style={{ borderColor: T.border, background: T.panel, height: "150px" }}>
         <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -342,8 +342,8 @@ export default function App() {
             <div
               className="text-lg font-semibold"
               style={{
-                width: 120,
-                height: 32,
+                width: 300,
+                height: 100,
                 backgroundImage: `url(${new URL('logo_horiz_color_120w.png', document.baseURI).toString()})`,
                 backgroundRepeat: "no-repeat",
                 backgroundSize: "contain",
@@ -352,7 +352,7 @@ export default function App() {
                 overflow: "hidden",
                 whiteSpace: "nowrap"
               }}
-            >Launch Tracker</div>
+            >SwingTrackr</div>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2">
@@ -371,7 +371,6 @@ export default function App() {
           </div>
         </div>
       </header>
-
 
       <div className="max-w-6xl mx-auto px-4 py-4">
         <div className="flex gap-4">
