@@ -7,8 +7,7 @@ import JournalView from "./Journal";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, exportCSV,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots,
-  coalesceSmash, fpOf
+  normalizeHeader
 } from "./utils";
 
 /* =========================
@@ -216,7 +215,6 @@ export default function App() {
   /* ---------- IO ---------- */
   async function onImportFile(file: File) {
     const text = await file.text();
-    // very simple CSV -> rows
     const rows = text.split(/\r?\n/).map(line => line.split(","));
     const header = rows[0]?.map(h => normalizeHeader(String(h))) ?? [];
     const idx = (name: string) => header.indexOf(name);
@@ -354,7 +352,15 @@ export default function App() {
               }}
             >SwingTrackr</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2"
+            style={{
+              alignSelf: "flex-end",
+              // Header is 150px tall, logo is 100px high and vertically centered,
+              // so its bottom sits 25px above the header bottom.
+              marginBottom: "25px"
+            }}
+          >
             <div className="hidden md:flex items-center gap-2">
               <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
               <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
@@ -452,6 +458,13 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="border-t mt-6" style={{ borderColor: T.border, background: T.panel }}>
+        <div className="max-w-6xl mx-auto px-4 py-4 text-sm" style={{ color: T.text }}>
+          <div>© {new Date().getFullYear()} SwingTrackr</div>
+        </div>
+      </footer>
 
       {/* Toasts */}
       <div className="fixed bottom-4 right-4 flex flex-col gap-2">
