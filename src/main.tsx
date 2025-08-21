@@ -8,7 +8,7 @@ if (el) {
   const RootApp = App as React.FC;
   createRoot(el).render(
     <React.StrictMode>
-      <App />
+      <RootApp />
     </React.StrictMode>
   );
 }
