@@ -5,10 +5,10 @@ import './index.css';
 
 const el = document.getElementById('root');
 if (el) {
-  const RootApp = App as React.FC;
+  const App = App as React.FC;
   createRoot(el).render(
     <React.StrictMode>
-      <RootApp />
+      <App />
     </React.StrictMode>
   );
 }
