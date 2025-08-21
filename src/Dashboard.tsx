@@ -75,7 +75,7 @@ export default function DashboardCards(props: Props) {
   ];
   const clubColor = useMemo(() => {
     const m = new Map<string, string>();
-    (clubs ?? []).forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
+    clubs.forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
     return m;
   }, [clubs]);
 
@@ -159,14 +159,14 @@ export default function DashboardCards(props: Props) {
           Timestamp: s.Timestamp,
         })),
     [filteredOutliers]
-  );
+  );;
   const dispXDomain = useMemo(() => {
-    const xs = dispersionData.map(d => Math.abs(d.x));
-    const maxAbs = xs.length ? Math.max(...xs) : 1;
-    const step = 5;
-    const bound = Math.ceil(maxAbs / step) * step;
-    return [-bound, bound];
-  }, [dispersionData]);
+  const xs = dispersionData.map(d => Math.abs(d.x));
+  const maxAbs = xs.length ? Math.max(...xs) : 1;
+  const step = 5;
+  const bound = Math.ceil(maxAbs / step) * step;
+  return [-bound, bound];
+}, [dispersionData]);
   const dispYDomain = useMemo(() => domainOf(dispersionData.map(d => d.y), 5), [dispersionData]);
 
   const dispersionCard = (
@@ -231,7 +231,7 @@ export default function DashboardCards(props: Props) {
       const avgCarry = average(xs);
       if (!Number.isNaN(avgCarry)) rows.push({ club, carry: avgCarry });
     }
-    const order = new Map((clubs ?? []).map((c, i) => [c, i]));
+    const order = new Map(clubs.map((c, i) => [c, i]));
     rows.sort((a, b) => (order.get(b.club) ?? -999) - (order.get(a.club) ?? -999));
     return rows;
   }, [filteredOutliers, clubs]);
@@ -271,6 +271,7 @@ export default function DashboardCards(props: Props) {
         })),
     [filteredOutliers]
   );
+  
 
   const effXMin = 50;
   const effXMax = useMemo(() => {
@@ -278,12 +279,21 @@ export default function DashboardCards(props: Props) {
     return xs.length ? Math.max(Math.ceil(Math.max(...xs) + 2), effXMin) : effXMin + 20;
   }, [efficiencyData]);
 
+;
+
+  
+
   const smashMean = useMemo(() => {
     const pairs = efficiencyData;
     if (!pairs.length) return 1.45;
     const ratios = pairs.map(p => p.y / p.x);
     return ratios.reduce((a, b) => a + b, 0) / ratios.length;
   }, [efficiencyData]);
+
+  const trendData = useMemo(() => ([
+    { x: effXMin, y: smashMean * effXMin },
+    { x: effXMax, y: smashMean * effXMax }
+  ]), [smashMean, effXMin, effXMax]);
 
   const smash = useMemo(() => {
     const pairs = efficiencyData;
@@ -296,6 +306,8 @@ export default function DashboardCards(props: Props) {
     return { sf, points: [ { x: x0, y: sf * x0 }, { x: x1, y: sf * x1 } ] };
   }, [efficiencyData, effXMin, effXMax]);
 
+
+  
   const effCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
       <Card title="Efficiency (Ball vs Club speed)" theme={T} right={`Smash ≈ ${smash.sf.toFixed(3)}`}>
@@ -346,12 +358,14 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
+
+  
   /* ---------- Club Averages (spreadsheet) ---------- */
   const tableCard = (
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
-          <div id="print-club-averages" style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "auto" }}>
             <table className="min-w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
@@ -391,6 +405,7 @@ export default function DashboardCards(props: Props) {
       </Card>
     </div>
   );
+
 
   const cardMap: Record<string, JSX.Element> = {
     kpis: kpiCard,

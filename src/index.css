@@ -16,36 +16,101 @@ html, body, #root {
 
 body {
   margin: 0;
-  line-height: 1.45;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+    Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a { text-decoration: none; }
-
-/* ---- Utilities ---- */
-.table-scroll {
-  overflow-x: auto;
+/* Links inherit color; hover underline handled inline in components */
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-/* Ensure the sidebar never overflows on small screens */
-.sidebar-fix select,
-.sidebar-fix input,
-.sidebar-fix .field,
-.sidebar-fix .control,
-.sidebar-fix .w-full {
-  max-width: 100%;
+/* Buttons inherit font */
+button, input, select, textarea {
+  font: inherit;
+}
+
+/* ---- Utility helpers ---- */
+.hide-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.25) transparent;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.hide-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: rgba(0,0,0,0.25);
+}
+.hide-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Selection color — a soft brand tint (works in both light & dark) */
+::selection {
+  background: rgba(7, 102, 82, 0.25); /* ~theme.brand at 25% */
+}
+
+/* ---- Prose area (journal editor) ---- */
+.prose-area {
+  line-height: 1.5;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.prose-area:focus {
+  outline: 2px solid transparent; /* rely on border + bg change */
+}
+
+.prose-area h1,
+.prose-area h2,
+.prose-area h3,
+.prose-area h4 {
+  margin: 0.6em 0 0.4em;
+  line-height: 1.25;
+}
+
+.prose-area h1 { font-size: 1.4rem; }
+.prose-area h2 { font-size: 1.25rem; }
+.prose-area h3 { font-size: 1.125rem; }
+.prose-area h4 { font-size: 1rem; }
+
+.prose-area p { margin: 0.5em 0; }
+.prose-area ul,
+.prose-area ol { margin: 0.5em 0 0.5em 1.25em; }
+
+.prose-area blockquote {
+  margin: 0.8em 0;
+  padding: 0.6em 0.8em;
+  border-left: 3px solid rgba(0,0,0,0.2);
+  opacity: 0.9;
+}
+
+.prose-area code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.06);
+}
+
+/* Tables in editor */
+.prose-area table {
   width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+}
+.prose-area th, .prose-area td {
+  padding: 6px 8px;
+  border: 1px solid rgba(0,0,0,0.18);
 }
 
-/* If a row uses flex without wrapping, allow wrap in the sidebar */
-.sidebar-fix .flex {
-  flex-wrap: wrap;
-}
-
-/* Prevent date inputs from overflowing the sidebar */
-.filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
-
+/* ---- Print tweaks (for Print club averages) ---- */
 @media print {
   body {
     color: #000;
@@ -76,19 +141,6 @@ a { text-decoration: none; }
   flex-wrap: wrap;
 }
 
-/* Print-only Club Averages table */
-@media print {
-  /* hide everything by default */
-  body * { visibility: hidden; }
 
-  /* show the club-averages table only */
-  #print-club-averages, #print-club-averages * {
-    visibility: visible;
-  }
-
-  /* ensure it uses the page area cleanly */
-  #print-club-averages {
-    position: absolute;
-    left: 0; top: 0; width: 100%;
-  }
-}
+/* Prevent date inputs from overflowing the sidebar */
+.filters-panel input[type="date"], .filters-panel input[type="text"], .filters-panel select { width: 100%; min-width: 0; }
