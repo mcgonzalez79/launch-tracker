@@ -329,9 +329,9 @@ export default function App() {
   /* ---------- UI ---------- */
   return (
     <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
-      {/* Top bar */}
-      <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+           {/* Top bar */}
+      <header className="border-b" style={{ borderColor: T.border, background: T.panel, height: "150px" }}>
+        <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               className="md:hidden rounded-md px-2 py-1 border text-sm"
@@ -371,6 +371,7 @@ export default function App() {
           </div>
         </div>
       </header>
+
 
       <div className="max-w-6xl mx-auto px-4 py-4">
         <div className="flex gap-4">
