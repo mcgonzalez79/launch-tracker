@@ -90,8 +90,8 @@ export default function App() {
   const [excludeOutliers, setExcludeOutliers] = useState<boolean>(false);
   const [dateFrom, setDateFrom] = useState<string>(""); // yyyy-mm-dd
   const [dateTo, setDateTo] = useState<string>("");     // yyyy-mm-dd
-  const [carryMin, setCarryMin] = useState<number | undefined>(undefined);
-  const [carryMax, setCarryMax] = useState<number | undefined>(undefined);
+  const [carryMin, setCarryMin] = useState<string>("");
+  const [carryMax, setCarryMax] = useState<string>("");
 
   // Journal content
   const [journalHTML, setJournalHTML] = useState<string>(() => {
@@ -150,8 +150,15 @@ export default function App() {
     if (sessionFilter !== "All Sessions") arr = arr.filter(s => sessionLabelOf(s) === sessionFilter);
     if (selectedClubs.length) arr = arr.filter(s => selectedClubs.includes(s.Club));
     arr = arr.filter(inDateRange);
-    if (carryMin !== undefined) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! >= carryMin);
-    if (carryMax !== undefined) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! <= carryMax);
+    if (carryMin !== "") {
+      const v = Number(carryMin);
+      if (Number.isFinite(v)) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! >= v);
+    }
+    if (carryMax !== "") {
+      const v = Number(carryMax);
+      if (Number.isFinite(v)) arr = arr.filter(s => !isNum(s.CarryDistance_yds) || s.CarryDistance_yds! <= v);
+    }
+
     return arr;
   }, [shots, sessionFilter, selectedClubs, dateFrom, dateTo, carryMin, carryMax]);
 
@@ -247,7 +254,7 @@ export default function App() {
   }
 
   async function onLoadSample() {
-    const url = `${import.meta.env.BASE_URL}sampledata.csv`;
+    const url = new URL('sampledata.csv', document.baseURI).toString();
     const resp = await fetch(url);
     if (!resp.ok) { toast({ type: "error", text: "Failed to load sample data" }); return; }
     const blob = await resp.blob();
@@ -276,9 +283,7 @@ export default function App() {
   }
 
   function onPrintClubAverages() {
-    const el = document.querySelector("div key") as any;
     const table = document.querySelector("table.min-w-full.text-sm");
-    // safer: look up by title container id if present
     const t = document.getElementById("club-averages-table") || table;
     if (!t) return;
     const w = window.open("", "_blank", "width=1200,height=800");
@@ -339,7 +344,7 @@ export default function App() {
               style={{
                 width: 120,
                 height: 32,
-                backgroundImage: `url(${import.meta.env.BASE_URL}logo_horiz_color_120w.png)`,
+                backgroundImage: `url(${new URL('logo_horiz_color_120w.png', document.baseURI).toString()})`,
                 backgroundRepeat: "no-repeat",
                 backgroundSize: "contain",
                 backgroundPosition: "left center",
@@ -377,19 +382,19 @@ export default function App() {
               sessions={sessions}
               clubs={clubs}
               selectedClubs={selectedClubs}
-              setSelectedClubs={setSelectedClubs}
+              setSelectedClubs={(v) => setSelectedClubs(v)}
               sessionFilter={sessionFilter}
-              setSessionFilter={setSessionFilter}
+              setSessionFilter={(v) => setSessionFilter(v)}
               excludeOutliers={excludeOutliers}
-              setExcludeOutliers={setExcludeOutliers}
+              setExcludeOutliers={(v) => setExcludeOutliers(v)}
               dateFrom={dateFrom}
-              setDateFrom={setDateFrom}
+              setDateFrom={(v) => setDateFrom(v)}
               dateTo={dateTo}
-              setDateTo={setDateTo}
+              setDateTo={(v) => setDateTo(v)}
               carryMin={carryMin}
-              setCarryMin={setCarryMin}
+              setCarryMin={(v) => setCarryMin(v)}
               carryMax={carryMax}
-              setCarryMax={setCarryMax}
+              setCarryMax={(v) => setCarryMax(v)}
               carryBounds={carryBounds}
               onImportFile={onImportFile}
               onLoadSample={onLoadSample}
