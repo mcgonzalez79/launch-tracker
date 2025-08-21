@@ -34,7 +34,7 @@ type Props = {
   shots: Shot[];
 
   tableRows: ClubRow[];
-  clubs: string[];
+  clubs: string[]; // may be temporarily undefined from parent – guard below
 };
 
 /* =========================
@@ -64,9 +64,11 @@ export default function DashboardCards(props: Props) {
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
   ];
+
+  // SAFETY: guard clubs with ?? [] so we never call forEach on undefined
   const clubColor = useMemo(() => {
     const m = new Map<string, string>();
-    clubs.forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
+    (clubs ?? []).forEach((c, i) => m.set(c, CLUB_PALETTE[i % CLUB_PALETTE.length]));
     return m;
   }, [clubs]);
 
@@ -108,7 +110,6 @@ export default function DashboardCards(props: Props) {
   const shapeCard = (
     <div key="shape" draggable onDragStart={onDragStart("shape")} onDragOver={onDragOver("shape")} onDrop={onDrop("shape")}>
       <Card title="Shot Shape Distribution" theme={T}>
-        {/* ...existing contents unchanged... */}
         <div className="text-sm" style={{ color: T.textDim }}>Coming soon</div>
       </Card>
     </div>
@@ -118,7 +119,6 @@ export default function DashboardCards(props: Props) {
   const dispersionCard = (
     <div key="dispersion" draggable onDragStart={onDragStart("dispersion")} onDragOver={onDragOver("dispersion")} onDrop={onDrop("dispersion")}>
       <Card title="Dispersion" theme={T}>
-        {/* ...existing contents unchanged... */}
         <div className="text-sm" style={{ color: T.textDim }}>Coming soon</div>
       </Card>
     </div>
@@ -127,11 +127,11 @@ export default function DashboardCards(props: Props) {
   /* ---------- Gapping (Avg Carry per Club) ---------- */
   const gapCard = (
     <div key="gap" draggable onDragStart={onDragStart("gap")} onDragOver={onDragOver("gap")} onDrop={onDrop("gap")}>
-      <Card title="Gapping (Avg Carry per Club)" theme={T}>
+    <Card title="Gapping (Avg Carry per Club)" theme={T}>
         <div style={{ width: "100%", height: 320 }}>
           <ResponsiveContainer>
             <BarChart
-              data={clubs.map((c) => {
+              data={(clubs ?? []).map((c) => {
                 const arr = filteredOutliers.filter(s => s.Club === c);
                 const avgCarry = average(arr.map(s => s.CarryDistance_yds ?? NaN));
                 const avgRoll = average(arr.map(s => (s.TotalDistance_yds ?? NaN) - (s.CarryDistance_yds ?? NaN)));
@@ -146,7 +146,7 @@ export default function DashboardCards(props: Props) {
               <Tooltip />
               <Legend />
               <Bar dataKey="carry" name="Avg Carry" fill={T.brand} />
-              <Bar dataKey="roll" name="Avg Roll" fill={T.brand} fillOpacity={0.45} />
+              <Bar dataKey="roll"  name="Avg Roll"  fill={T.brand} fillOpacity={0.45} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -154,11 +154,10 @@ export default function DashboardCards(props: Props) {
     </div>
   );
 
-  /* ---------- Efficiency (Smash trend) ---------- */
+  /* ---------- Efficiency (placeholder while trend is refined) ---------- */
   const efficiencyCard = (
     <div key="eff" draggable onDragStart={onDragStart("eff")} onDragOver={onDragOver("eff")} onDrop={onDrop("eff")}>
       <Card title="Efficiency (Club vs Ball Speed, Smash trend)" theme={T}>
-        {/* ...existing contents unchanged... */}
         <div className="text-sm" style={{ color: T.textDim }}>Coming soon</div>
       </Card>
     </div>
@@ -179,7 +178,7 @@ export default function DashboardCards(props: Props) {
                   <th className="text-right py-2 px-2">Avg Total</th>
                   <th className="text-right py-2 px-2">Avg Smash</th>
                   <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right p2 px-2">Avg CS</th>
+                  <th className="text-right py-2 px-2">Avg CS</th>
                   <th className="text-right py-2 px-2">Avg BS</th>
                   <th className="text-right py-2 px-2">Avg LA</th>
                   <th className="text-right py-2 px-2">Avg F2P</th>
@@ -220,14 +219,8 @@ export default function DashboardCards(props: Props) {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {props.hasData ? cardOrder.map(k => cardMap[k]) : (
-        <Card title="No Data" theme={T}>
-          <div className="text-sm" style={{ color: T.textDim }}>
-            Import some shots to see charts.
-          </div>
-        </Card>
-      )}
+    <div className="grid gap-4">
+      {cardOrder.map((key) => cardMap[key] ?? null)}
     </div>
   );
 }
