@@ -264,6 +264,10 @@ export default function Insights({
     sw: [55,80,95,115,124],
     lw: [40,60,80,105,113],
   };
+  const optimalSmash: Record<string, number> = {
+    driver: 1.49, "3w": 1.48, "5w": 1.47, hybrid: 1.46, "3i": 1.45, "4i": 1.43,
+    "5i": 1.41, "6i": 1.38, "7i": 1.33, "8i": 1.32, "9i": 1.28, pw: 1.23,
+  };
 
   function benchKey(clubRaw: string): string | null {
     const norm = (clubRaw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -307,24 +311,34 @@ export default function Insights({
     const club = benchClubs[0];
     const shots = filteredOutliers.filter(s => (s.Club || "Unknown") === club);
     if (!shots.length) return null;
+    
     const totals = shots.map(s => s.TotalDistance_yds).filter(isNum) as number[];
     const carries = shots.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+    const smashes = shots.map(s => s.SmashFactor).filter(isNum) as number[];
+
     const avgTotal = (totals.length ? avg(totals) : (carries.length ? avg(carries) : null));
-    if (avgTotal == null) return null;
+    const avgSmash = avg(smashes);
+    
     const key = benchKey(club);
-    const row = key ? benchChart[key] : undefined;
-    const cls = row ? classifyBenchmark(row, avgTotal) : { label: "—", idx: -1 };
-    let range = "";
-    if (row && cls.idx >= 0) {
-      if (cls.idx < 4) range = `${row[cls.idx]}–${row[cls.idx+1]} yds`;
-      else range = `≥ ${row[4]} yds`;
+    const distRow = key ? benchChart[key] : undefined;
+    const distCls = (distRow && avgTotal != null) ? classifyBenchmark(distRow, avgTotal) : { label: "—", idx: -1 };
+    let distRange = "";
+    if (distRow && distCls.idx >= 0) {
+      if (distCls.idx < 4) distRange = `${distRow[distCls.idx]}–${distRow[distCls.idx+1]} yds`;
+      else distRange = `≥ ${distRow[4]} yds`;
     }
+
+    const optimal = key ? optimalSmash[key] : undefined;
+    const pctOptimal = (avgSmash != null && optimal != null) ? (avgSmash / optimal) * 100 : null;
+
     return {
       club,
       avgTotal,
+      avgSmash,
+      pctOptimal,
       n: totals.length || carries.length,
-      benchLabel: cls.label,
-      benchRange: range,
+      benchLabel: distCls.label,
+      benchRange: distRange,
     };
   }, [benchClubs, filteredOutliers]);
 
@@ -338,9 +352,11 @@ export default function Insights({
     >
       <Card title="Benchmarks" right={benchClubs.length === 1 ? benchClubs[0] : ""} theme={T}>
         {benchData ? (
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCell theme={T} label="Avg Total" value={`${benchData.avgTotal.toFixed(1)} yds`} sub={`n=${benchData.n}`} />
-            <KpiCell theme={T} label="Benchmark" value={benchData.benchLabel} sub={benchData.benchRange || undefined} />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCell theme={T} label="Avg Total" value={benchData.avgTotal != null ? `${benchData.avgTotal.toFixed(1)} yds` : "—"} sub={`n=${benchData.n}`} />
+            <KpiCell theme={T} label="Distance Tier" value={benchData.benchLabel} sub={benchData.benchRange || undefined} />
+            <KpiCell theme={T} label="Avg Smash" value={benchData.avgSmash != null ? benchData.avgSmash.toFixed(3) : "—"} />
+            <KpiCell theme={T} label="% of Optimal Smash" value={benchData.pctOptimal != null ? `${benchData.pctOptimal.toFixed(1)}%` : "—"} sub={optimalSmash[benchKey(benchData.club) || ""] ? `Tour avg: ${optimalSmash[benchKey(benchData.club) || ""]}` : ""} />
           </div>
         ) : (
           <div className="text-sm" style={{ color: T.textDim }}>Select a single club to see benchmark targets.</div>
@@ -497,14 +513,19 @@ export default function Insights({
   );
 
   /* ---------- PROGRESS (carry over sessions for selected club; FILTERED) ---------- */
-  const progressRows = useMemo(() => {
+  const progressClub = useMemo(() => {
     const clubs = Array.from(new Set(filteredNoClubOutliers.map(s => s.Club)));
-    if (clubs.length !== 1) return [] as { t: string; carry: number }[];
+    return clubs.length === 1 ? clubs[0] : null;
+  }, [filteredNoClubOutliers]);
+
+  const progressRows = useMemo(() => {
+    if (!progressClub) return [];
     const rows = filteredNoClubOutliers
-      .filter(s => isNum(s.CarryDistance_yds) && s.Timestamp)
+      .filter(s => isNum(s.CarryDistance_yds) && s.Timestamp && s.Club === progressClub)
       .sort((a,b)=> new Date(a.Timestamp!).getTime() - new Date(b.Timestamp!).getTime());
     return rows.map(s => ({ t: s.Timestamp!, carry: s.CarryDistance_yds as number }));
-  }, [filteredNoClubOutliers]);
+  }, [filteredNoClubOutliers, progressClub]);
+  
   const progressTrend = useMemo(() => {
     const n = progressRows.length;
     if (n < 2) return [] as { t: string; trend: number }[];
@@ -528,21 +549,22 @@ export default function Insights({
     return progressRows.map((r, i) => ({ ...r, trend: progressTrend[i]?.trend ?? null }));
   }, [progressRows, progressTrend]);
 
+  const formatDateTick = (tick: string) => new Date(tick).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
   const progress = (
     <div key="progress" draggable onDragStart={onDragStart("progress")} onDragOver={onDragOver("progress")} onDrop={onDrop("progress")}>
-      <Card title="Club Progress (Carry)" theme={T}>
+      <Card title="Club Progress (Carry)" theme={T} right={progressClub || ""}>
         {progressRows.length ? (
           <div className="h-48">
             <ResponsiveContainer>
               <LineChart data={progressChartData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
-                <XAxis dataKey="t" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="t" tick={{ fontSize: 12 }} tickFormatter={formatDateTick} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="carry" name="Carry (yds)" dot={false} />
-                              <Line type="linear" dataKey="trend" name="Trend" dot={false} stroke={T.textDim} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke={T.brand} dot={false} />
+                <Line type="linear" dataKey="trend" name="Trend" dot={false} stroke={T.textDim} strokeDasharray="5 5" />
               </LineChart>
             </ResponsiveContainer>
           </div>
