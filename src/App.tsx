@@ -368,7 +368,7 @@ export default function App() {
               onClick={() => setFiltersOpen(true)}
               title="Filters"
             >Filters</button>
-            <img src="./public/logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
+            <img src="/logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
           </div>
           <div className="flex items-end gap-2">
             <div className="hidden md:flex items-center gap-2">
