@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LIGHT, DARK, Theme } from "./theme";
 import FiltersPanel from "./Filters";
@@ -359,9 +358,9 @@ export default function App() {
   return (
     <div style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
       {/* Header with tabs + theme */}
-      <header className="border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+      <header className="border-b" style={{ borderColor: T.border, background: T.panel, height: '120px' }}>
+        <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
+          <div className="flex items-end gap-2">
             {/* Mobile: open filters drawer */}
             <button
               className="md:hidden rounded-md px-2 py-1 border text-sm"
@@ -369,9 +368,9 @@ export default function App() {
               onClick={() => setFiltersOpen(true)}
               title="Filters"
             >Filters</button>
-            <div className="text-lg font-semibold">Launch Tracker</div>
+            <img src="/logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-end gap-2">
             <div className="hidden md:flex items-center gap-2">
               <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
               <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
@@ -577,7 +576,7 @@ function Footer({ T }: { T: Theme }) {
     <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
         <div className="text-xs" style={{ color: T.textDim }}>
-          © {year} Launch Tracker
+          © {year} SwingTrackr
         </div>
         <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
           <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
