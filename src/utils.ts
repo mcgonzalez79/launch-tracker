@@ -159,7 +159,7 @@ export const toCSV = (rows: Record<string, any>[]) => {
 export const exportCSV = (rows: Record<string, any>[]) => {
   const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a");
-  a.href = url; a.download = "launch-tracker_filtered.csv"; a.click(); URL.revokeObjectURL(url);
+  a.href = url; a.download = "swingtrackr_filtered.csv"; a.click(); URL.revokeObjectURL(url);
 };
 
 /* XLSX helpers exposed where needed */
