@@ -71,18 +71,25 @@ button, input, select, textarea {
 .prose-area h2,
 .prose-area h3,
 .prose-area h4 {
-  margin: 0.6em 0 0.4em;
-  line-height: 1.25;
+  margin: 1em 0 0.5em;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
-.prose-area h1 { font-size: 1.4rem; }
-.prose-area h2 { font-size: 1.25rem; }
-.prose-area h3 { font-size: 1.125rem; }
-.prose-area h4 { font-size: 1rem; }
+.prose-area h1 { font-size: 1.8rem; }
+.prose-area h2 { font-size: 1.5rem; }
+.prose-area h3 { font-size: 1.25rem; }
+.prose-area h4 { font-size: 1.1rem; }
 
 .prose-area p { margin: 0.5em 0; }
+.prose-area ul { list-style: disc; }
+.prose-area ol { list-style: decimal; }
 .prose-area ul,
-.prose-area ol { margin: 0.5em 0 0.5em 1.25em; }
+.prose-area ol {
+  margin: 0.75em 0 0.75em 1.5em;
+  padding-left: 0.5em;
+}
+
 
 .prose-area blockquote {
   margin: 0.8em 0;
@@ -111,20 +118,30 @@ button, input, select, textarea {
 }
 
 /* ---- Print tweaks (for Print club averages) ---- */
-@media print {
-  body {
-    color: #000;
-    background: #fff;
-  }
-
-  /* Avoid background colors and borders when printing */
-  .no-print-border {
-    border: none !important;
-  }
-  .no-print-bg {
-    background: transparent !important;
+@media screen {
+  .print-only {
+    display: none !important;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-only, .print-only * {
+    visibility: visible;
+  }
+  .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .screen-only {
+    display: none !important;
+  }
+}
+
 
 /* Sidebar width safety so large selects/inputs don't overflow */
 .sidebar-fix select,
