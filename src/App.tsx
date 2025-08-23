@@ -361,13 +361,6 @@ export default function App() {
       <header className="border-b" style={{ borderColor: T.border, background: T.panel, height: '120px' }}>
         <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
           <div className="flex items-end gap-2">
-            {/* Mobile: open filters drawer */}
-            <button
-              className="md:hidden rounded-md px-2 py-1 border text-sm"
-              style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-              onClick={() => setFiltersOpen(true)}
-              title="Filters"
-            >Filters</button>
             <img src="logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
           </div>
           <div className="flex items-end gap-2">
