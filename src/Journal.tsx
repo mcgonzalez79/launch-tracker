@@ -85,7 +85,7 @@ export default function JournalView({
         </div>
       </header>
 
-      <div className="px-4 pb-4">
+      <div className="p-4">
         <div
           ref={localRef}
           role="textbox"
