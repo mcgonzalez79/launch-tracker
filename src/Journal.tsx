@@ -41,6 +41,13 @@ export default function JournalView({
     }
   };
 
+  const clearContent = () => {
+    if (localRef.current) {
+      localRef.current.innerHTML = "";
+      onInputHTML("");
+    }
+  };
+
   const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     // paste as plain text -> minimal formatting
     e.preventDefault();
@@ -71,8 +78,8 @@ export default function JournalView({
           <ToolbarDivider T={T} />
           <ToolbarButton
             label="Clear"
-            title="Clear formatting"
-            onClick={() => exec("removeFormat")}
+            title="Clear all content"
+            onClick={clearContent}
             T={T}
           />
         </div>
