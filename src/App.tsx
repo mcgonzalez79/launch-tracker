@@ -8,7 +8,8 @@ import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
-  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV
+  normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV,
+  quantile
 } from "./utils";
 
 /* =========================
@@ -225,7 +226,10 @@ export default function App() {
   /* =========================
      Actions
   ========================= */
-  function onPrintClubAverages() { window.print(); }
+  function onPrintClubAverages() {
+    if (tableRows.length) window.print();
+    else toast({ type: "info", text: "No club data to print." });
+  }
   function onDeleteSession() {
     if (!shots.length || sessionFilter === "ALL") return;
     if (!window.confirm(`Delete all shots in session "${sessionFilter}"? This cannot be undone.`)) return;
@@ -264,7 +268,35 @@ export default function App() {
 
   const filteredOutliers = useMemo(() => {
     if (!excludeOutliers) return filteredBase;
-    return filteredBase; // plug in IQR trimming per club in a later pass
+    
+    const byClub = new Map<string, Shot[]>();
+    for (const s of filteredBase) {
+      const k = s.Club || "Unknown";
+      if (!byClub.has(k)) byClub.set(k, []);
+      byClub.get(k)!.push(s);
+    }
+    
+    const result: Shot[] = [];
+    for (const shotsOfClub of byClub.values()) {
+      const carries = shotsOfClub.map(s => s.CarryDistance_yds).filter(isNum) as number[];
+      if (carries.length < 5) {
+        result.push(...shotsOfClub);
+        continue;
+      }
+      const q1 = quantile(carries, 0.25);
+      const q3 = quantile(carries, 0.75);
+      const iqr = q3 - q1;
+      const lowerBound = q1 - 1.5 * iqr;
+      const upperBound = q3 + 1.5 * iqr;
+
+      const kept = shotsOfClub.filter(s => {
+        if (!isNum(s.CarryDistance_yds)) return true; // keep shots without carry data
+        return s.CarryDistance_yds >= lowerBound && s.CarryDistance_yds <= upperBound;
+      });
+      result.push(...kept);
+    }
+    return result;
+
   }, [filteredBase, excludeOutliers]);
 
   /* =========================
@@ -331,10 +363,15 @@ export default function App() {
      Journal
   ========================= */
   const journalRef = useRef<HTMLDivElement>(null);
-  const [journalHTML, setJournalHTML] = useState<string>(() => {
-    try { return localStorage.getItem("launch-tracker:journal") || ""; } catch { return ""; }
+  const [journals, setJournals] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
   });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journal", journalHTML); } catch {} }, [journalHTML]);
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
+
+  const onJournalInput = (html: string) => {
+    setJournals(prev => ({ ...prev, [sessionFilter]: html }));
+  };
+  const currentJournalHTML = journals[sessionFilter] || "";
   const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
 
   /* =========================
@@ -356,51 +393,92 @@ export default function App() {
   const T = theme;
 
   return (
-    <div style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
-      {/* Header with tabs + theme */}
-      <header className="border-b" style={{ borderColor: T.border, background: T.panel, height: '120px' }}>
-        <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
-          <div className="flex items-end gap-2">
-            <img src="logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-              <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-              <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-            </div>
-            <button
-              className="px-2 py-1 rounded-md border text-xs"
-              style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-              onClick={() => setTheme(theme === LIGHT ? DARK : LIGHT)}
-              title="Toggle theme"
-            >
-              {theme === LIGHT ? <IconMoon/> : <IconSun/>}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Mobile tabs row */}
-      <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
-        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
-          <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-          <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-          <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-          <div className="flex-1" />
-          <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
-        </div>
+    <>
+      <div className="print-only">
+        <PrintableClubAverages rows={tableRows} />
       </div>
 
-      {/* Mobile Filters Drawer */}
-      {filtersOpen ? (
-        <div className="md:hidden fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setFiltersOpen(false)}>
-          <div className="absolute left-0 top-0 bottom-0 w-[90%] max-w-sm overflow-y-auto" style={{ background: T.panel, color: T.text }} onClick={(e) => e.stopPropagation()}>
-            <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: T.border }}>
-              <div className="text-sm">Filters</div>
-              <button className="text-xs underline" style={{ color: T.brand }} onClick={() => setFiltersOpen(false)}>Close</button>
+      <div className="screen-only" style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
+        {/* Header with tabs + theme */}
+        <header className="border-b" style={{ borderColor: T.border, background: theme.mode === 'light' ? '#dbe8e1' : T.panel, height: '120px' }}>
+          <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
+            <div className="flex items-end gap-2">
+              <img src="logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
             </div>
-            <div className="p-3">
+            <div className="flex items-end gap-2">
+              <div className="hidden md:flex items-center gap-2">
+                <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+                <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+                <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+              </div>
+              <button
+                className="px-2 py-1 rounded-md border text-xs"
+                style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+                onClick={() => setTheme(theme === LIGHT ? DARK : LIGHT)}
+                title="Toggle theme"
+              >
+                {theme === LIGHT ? <IconMoon/> : <IconSun/>}
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile tabs row */}
+        <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
+          <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
+            <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
+            <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
+            <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+            <div className="flex-1" />
+            <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
+          </div>
+        </div>
+
+        {/* Mobile Filters Drawer */}
+        {filtersOpen ? (
+          <div className="md:hidden fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setFiltersOpen(false)}>
+            <div className="absolute left-0 top-0 bottom-0 w-[90%] max-w-sm overflow-y-auto" style={{ background: T.panel, color: T.text }} onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: T.border }}>
+                <div className="text-sm">Filters</div>
+                <button className="text-xs underline" style={{ color: T.brand }} onClick={() => setFiltersOpen(false)}>Close</button>
+              </div>
+              <div className="p-3">
+                <FiltersPanel
+                  theme={T}
+                  shots={shots}
+                  sessions={sessions}
+                  clubs={clubs}
+                  selectedClubs={selectedClubs}
+                  setSelectedClubs={setSelectedClubs}
+                  sessionFilter={sessionFilter}
+                  setSessionFilter={setSessionFilter}
+                  excludeOutliers={excludeOutliers}
+                  setExcludeOutliers={setExcludeOutliers}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  setDateFrom={setDateFrom}
+                  setDateTo={setDateTo}
+                  carryMin={carryMin}
+                  carryMax={carryMax}
+                  setCarryMin={setCarryMin}
+                  setCarryMax={setCarryMax}
+                  carryBounds={carryBounds}
+                  onImportFile={onImportFile}
+                  onLoadSample={onLoadSample}
+                  onExportCSV={exportShotsCSV}
+                  onPrintClubAverages={onPrintClubAverages}
+                  onDeleteSession={onDeleteSession}
+                  onDeleteAll={onDeleteAll}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
+            {/* Left rail (desktop) */}
+            <div ref={filtersRef} className="hidden md:block filters-panel">
               <FiltersPanel
                 theme={T}
                 shots={shots}
@@ -429,136 +507,143 @@ export default function App() {
                 onDeleteAll={onDeleteAll}
               />
             </div>
+
+            {/* Right content */}
+            <div>
+              {tab === "dashboard" && (
+                <DashboardCards
+                  theme={T}
+                  cardOrder={cardOrder}
+                  setCardOrder={setCardOrder}
+                  onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
+                  onDragOver={(_key) => (e) => e.preventDefault()}
+                  onDrop={(targetKey) => (e) => {
+                    e.preventDefault();
+                    const sourceKey = e.dataTransfer.getData("text/plain");
+                    if (!sourceKey || sourceKey === targetKey) return;
+                    setCardOrder(prev => {
+                      const cur = [...prev];
+                      const si = cur.indexOf(sourceKey);
+                      const ti = cur.indexOf(targetKey);
+                      if (si < 0 || ti < 0) return cur;
+                      cur.splice(si, 1);
+                      cur.splice(ti, 0, sourceKey);
+                      return cur;
+                    });
+                  }}
+                  hasData={hasData}
+                  kpis={kpis as any}
+                  filteredOutliers={filteredOutliers}
+                  filtered={filteredBase}
+                  shots={shots}
+                  tableRows={tableRows as any}
+                  clubs={clubs}
+                />
+              )}
+              {tab === "insights" && (
+                <InsightsView
+                  theme={T}
+                  tableRows={tableRows as any}
+                  filteredOutliers={filteredOutliers}
+                  filteredNoClubOutliers={filteredOutliers}
+                  filteredNoClubRaw={filteredBase}
+                  allClubs={clubs}
+                  allShots={shots}
+                  insightsOrder={insightsOrder}
+                  onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
+                  onDragOver={(_key) => (e) => e.preventDefault()}
+                  onDrop={(targetKey) => (e) => {
+                    e.preventDefault();
+                    const sourceKey = e.dataTransfer.getData("text/plain");
+                    if (!sourceKey || sourceKey === targetKey) return;
+                    setInsightsOrder(prev => {
+                      const cur = [...prev];
+                      const si = cur.indexOf(sourceKey);
+                      const ti = cur.indexOf(targetKey);
+                      if (si < 0 || ti < 0) return cur;
+                      cur.splice(si, 1);
+                      cur.splice(ti, 0, sourceKey);
+                      return cur;
+                    });
+                  }}
+                />
+              )}
+              {tab === "journal" && (
+                <JournalView
+                  theme={T}
+                  editorRef={journalRef}
+                  value={currentJournalHTML}
+                  onInputHTML={onJournalInput}
+                  sessionLabel={sessionLabel}
+                  defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
+                />
+              )}
+            </div>
           </div>
         </div>
-      ) : null}
 
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
-          {/* Left rail (desktop) */}
-          <div ref={filtersRef} className="hidden md:block filters-panel">
-            <FiltersPanel
-              theme={T}
-              shots={shots}
-              sessions={sessions}
-              clubs={clubs}
-              selectedClubs={selectedClubs}
-              setSelectedClubs={setSelectedClubs}
-              sessionFilter={sessionFilter}
-              setSessionFilter={setSessionFilter}
-              excludeOutliers={excludeOutliers}
-              setExcludeOutliers={setExcludeOutliers}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              setDateFrom={setDateFrom}
-              setDateTo={setDateTo}
-              carryMin={carryMin}
-              carryMax={carryMax}
-              setCarryMin={setCarryMin}
-              setCarryMax={setCarryMax}
-              carryBounds={carryBounds}
-              onImportFile={onImportFile}
-              onLoadSample={onLoadSample}
-              onExportCSV={exportShotsCSV}
-              onPrintClubAverages={onPrintClubAverages}
-              onDeleteSession={onDeleteSession}
-              onDeleteAll={onDeleteAll}
-            />
-          </div>
+        <Footer T={T} />
 
-          {/* Right content */}
-          <div>
-            {tab === "dashboard" && (
-              <DashboardCards
-                theme={T}
-                cardOrder={cardOrder}
-                setCardOrder={setCardOrder}
-                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
-                onDragOver={(_key) => (e) => e.preventDefault()}
-                onDrop={(targetKey) => (e) => {
-                  e.preventDefault();
-                  const sourceKey = e.dataTransfer.getData("text/plain");
-                  if (!sourceKey || sourceKey === targetKey) return;
-                  setCardOrder(prev => {
-                    const cur = [...prev];
-                    const si = cur.indexOf(sourceKey);
-                    const ti = cur.indexOf(targetKey);
-                    if (si < 0 || ti < 0) return cur;
-                    cur.splice(si, 1);
-                    cur.splice(ti, 0, sourceKey);
-                    return cur;
-                  });
-                }}
-                hasData={hasData}
-                kpis={kpis as any}
-                filteredOutliers={filteredOutliers}
-                filtered={filteredBase}
-                shots={shots}
-                tableRows={tableRows as any}
-                clubs={clubs}
-              />
-            )}
-            {tab === "insights" && (
-              <InsightsView
-                theme={T}
-                tableRows={tableRows as any}
-                filteredOutliers={filteredOutliers}
-                filteredNoClubOutliers={filteredOutliers}
-                filteredNoClubRaw={filteredBase}
-                allClubs={clubs}
-                allShots={shots}
-                insightsOrder={insightsOrder}
-                onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
-                onDragOver={(_key) => (e) => e.preventDefault()}
-                onDrop={(targetKey) => (e) => {
-                  e.preventDefault();
-                  const sourceKey = e.dataTransfer.getData("text/plain");
-                  if (!sourceKey || sourceKey === targetKey) return;
-                  setInsightsOrder(prev => {
-                    const cur = [...prev];
-                    const si = cur.indexOf(sourceKey);
-                    const ti = cur.indexOf(targetKey);
-                    if (si < 0 || ti < 0) return cur;
-                    cur.splice(si, 1);
-                    cur.splice(ti, 0, sourceKey);
-                    return cur;
-                  });
-                }}
-              />
-            )}
-            {tab === "journal" && (
-              <JournalView
-                theme={T}
-                editorRef={journalRef}
-                value={journalHTML}
-                onInputHTML={setJournalHTML}
-                sessionLabel={sessionLabel}
-                defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
-              />
-            )}
-          </div>
+        {/* Toasts */}
+        <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+          {msgs.map((m) => (
+            <button
+              key={m.id}
+              className="px-3 py-2 rounded-md border text-sm shadow-sm text-left"
+              style={{ background: T.panel, borderColor: T.border, color: T.text }}
+              onClick={() => removeToast(m.id)}
+            >
+              {m.text}
+            </button>
+          ))}
         </div>
       </div>
-
-      <Footer T={T} />
-
-      {/* Toasts */}
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
-        {msgs.map((m) => (
-          <button
-            key={m.id}
-            className="px-3 py-2 rounded-md border text-sm shadow-sm text-left"
-            style={{ background: T.panel, borderColor: T.border, color: T.text }}
-            onClick={() => removeToast(m.id)}
-          >
-            {m.text}
-          </button>
-        ))}
-      </div>
-    </div>
+    </>
   );
 }
 
+/* =========================
+   Printable Table
+========================= */
+function PrintableClubAverages({ rows }: { rows: ClubRow[] }) {
+  return (
+    <div className="p-4">
+      <h1 className="text-xl font-bold mb-4">SwingTrackr - Club Averages</h1>
+      <table className="min-w-full text-sm border-collapse border border-gray-400">
+        <thead>
+          <tr className="bg-gray-100">
+            <th className="text-left py-2 px-2 border border-gray-300">Club</th>
+            <th className="text-right py-2 px-2 border border-gray-300">#</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg Carry</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg Total</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg Smash</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg Spin</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg CS</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg BS</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg LA</th>
+            <th className="text-right py-2 px-2 border border-gray-300">Avg F2P</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r: any) => (
+            <tr key={r.club} className="odd:bg-white even:bg-gray-50">
+              <td className="py-1 px-2 border border-gray-300">{r.club}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{r.count}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgCarry ?? 0).toFixed(1)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgTotal ?? 0).toFixed(1)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgSmash ?? 0).toFixed(3)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgSpin ?? 0).toFixed(0)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgCS ?? 0).toFixed(1)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgBS ?? 0).toFixed(1)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgLA ?? 0).toFixed(1)}</td>
+              <td className="text-right py-1 px-2 border border-gray-300">{Number(r.avgF2P ?? 0).toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 /* =========================
    Footer
