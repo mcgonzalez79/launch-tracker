@@ -16,7 +16,19 @@ export type ClubRow = {
   club: string; count: number; avgCarry: number; avgTotal: number; avgSmash: number; avgSpin: number; avgCS: number; avgBS: number; avgLA: number; avgF2P: number;
 };
 export type Msg = { id: number; text: string; type?: "info" | "success" | "warn" | "error" };
-export type ViewKey = "dashboard" | "insights" | "journal";
+export type ViewKey = "dashboard" | "insights" | "journal" | "scorecard";
+
+export type HoleData = { par?: string; fairway?: string; putts?: string; hazard?: string; yardage?: string; stroke?: string; };
+export type ScorecardData = {
+  header: {
+    date?: string; time?: string; players?: string; weather?: string; location?: string; club?: string; round?: string; course?: string; tees?: string; yardage?: string; slope?: string; rating?: string;
+  };
+  holes: Record<number, HoleData>; // holes 1-18
+  summary: {
+    finalScore?: string; eagles?: string; birdies?: string; par?: string; tees?: string; bogeys?: string; double?: string; putts?: string;
+  };
+};
+
 
 /* Stats + helpers */
 export const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/(arr.length||1);
