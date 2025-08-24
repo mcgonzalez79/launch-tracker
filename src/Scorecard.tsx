@@ -1,0 +1,134 @@
+import React from "react";
+import type { Theme } from "./theme";
+import type { ScorecardData } from "./utils";
+
+type Props = {
+  theme: Theme;
+  data: ScorecardData;
+  onUpdate: (data: ScorecardData) => void;
+};
+
+const Td = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <td className={`p-0 ${className}`}>{children}</td>
+);
+const Th = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <th className={`p-1 text-xs text-center font-normal border ${className}`}>{children}</th>
+);
+const Input = ({ value, onChange, placeholder = "" }: { value?: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; }) => (
+  <input type="text" value={value || ""} onChange={onChange} placeholder={placeholder} className="w-full h-full p-1 bg-transparent text-center text-sm outline-none focus:bg-white focus:bg-opacity-10" />
+);
+
+export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
+  const handleHeader = (field: keyof ScorecardData['header'], value: string) => {
+    onUpdate({ ...data, header: { ...data.header, [field]: value } });
+  };
+  const handleHole = (hole: number, field: keyof ScorecardData['holes'][number], value: string) => {
+    onUpdate({ ...data, holes: { ...data.holes, [hole]: { ...data.holes[hole], [field]: value } } });
+  };
+  const handleSummary = (field: keyof ScorecardData['summary'], value: string) => {
+    onUpdate({ ...data, summary: { ...data.summary, [field]: value } });
+  };
+
+  const headerFields1 = [
+    { label: "Date", key: "date" }, { label: "Players", key: "players" }, { label: "Location", key: "location" },
+    { label: "Round", key: "round" }, { label: "Tees", key: "tees" }, { label: "Slope", key: "slope" },
+  ] as const;
+  const headerFields2 = [
+    { label: "Time", key: "time" }, { label: "weather", key: "weather" }, { label: "Club", key: "club" },
+    { label: "Course", key: "course" }, { label: "Yardage", key: "yardage" }, { label: "Rating", key: "rating" },
+  ] as const;
+
+  const holeRows = ["Par", "Fairway", "Putts", "Hazard", "Yardage", "Stroke"] as const;
+
+  return (
+    <div className="p-4 rounded-xl border" style={{ background: T.panel, borderColor: T.border }}>
+      <h2 className="text-lg font-semibold mb-3">Golf Log / Scorecard</h2>
+
+      {/* Header Info */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 mb-4 text-sm">
+        <div className="md:col-span-2 grid grid-cols-[80px_1fr] items-center gap-2">
+          {headerFields1.map(f => (
+            <React.Fragment key={f.key}>
+              <label className="text-right" style={{ color: T.textDim }}>{f.label}</label>
+              <input type="text" value={data.header[f.key] || ""} onChange={(e) => handleHeader(f.key, e.target.value)} className="w-full rounded px-2 py-1 border" style={{ background: T.bg, color: T.text, borderColor: T.border }} />
+            </React.Fragment>
+          ))}
+        </div>
+        <div className="md:col-span-2 grid grid-cols-[80px_1fr] items-center gap-2">
+          {headerFields2.map(f => (
+            <React.Fragment key={f.key}>
+              <label className="text-right" style={{ color: T.textDim }}>{f.label}</label>
+              <input type="text" value={data.header[f.key] || ""} onChange={(e) => handleHeader(f.key, e.target.value)} className="w-full rounded px-2 py-1 border" style={{ background: T.bg, color: T.text, borderColor: T.border }} />
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Holes Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs mb-4" style={{ borderColor: T.border }}>
+          <thead>
+            <tr style={{ background: T.panelAlt }}>
+              <Th className="w-20">Holes</Th>
+              {[...Array(9)].map((_, i) => <Th key={i}>{i + 1}</Th>)}
+              <Th>Total</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {holeRows.map(row => (
+              <tr key={row}>
+                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{row}</td>
+                {[...Array(9)].map((_, i) => (
+                  <Td key={i}><Input value={data.holes[i+1]?.[row.toLowerCase() as keyof HoleData]} onChange={(e) => handleHole(i + 1, row.toLowerCase() as keyof HoleData, e.target.value)} /></Td>
+                ))}
+                <Td><Input placeholder="—" /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <table className="w-full border-collapse text-xs mb-4" style={{ borderColor: T.border }}>
+          <thead>
+            <tr style={{ background: T.panelAlt }}>
+              <Th className="w-20">Holes</Th>
+              {[...Array(9)].map((_, i) => <Th key={i}>{i + 10}</Th>)}
+              <Th>Total</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {holeRows.map(row => (
+              <tr key={row}>
+                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{row}</td>
+                {[...Array(9)].map((_, i) => (
+                  <Td key={i}><Input value={data.holes[i+10]?.[row.toLowerCase() as keyof HoleData]} onChange={(e) => handleHole(i + 10, row.toLowerCase() as keyof HoleData, e.target.value)} /></Td>
+                ))}
+                <Td><Input placeholder="—" /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Summary */}
+      <table className="w-full border-collapse text-xs" style={{ borderColor: T.border }}>
+        <thead>
+          <tr style={{ background: T.panelAlt }}>
+            {["Final Score", "Eagles", "Birdies", "Par", "Tees", "Bogeys", "Double", "Putts"].map(h => <Th key={h}>{h}</Th>)}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <Td><Input value={data.summary.finalScore} onChange={e => handleSummary("finalScore", e.target.value)} /></Td>
+            <Td><Input value={data.summary.eagles} onChange={e => handleSummary("eagles", e.target.value)} /></Td>
+            <Td><Input value={data.summary.birdies} onChange={e => handleSummary("birdies", e.target.value)} /></Td>
+            <Td><Input value={data.summary.par} onChange={e => handleSummary("par", e.target.value)} /></Td>
+            <Td><Input value={data.summary.tees} onChange={e => handleSummary("tees", e.target.value)} /></Td>
+            <Td><Input value={data.summary.bogeys} onChange={e => handleSummary("bogeys", e.target.value)} /></Td>
+            <Td><Input value={data.summary.double} onChange={e => handleSummary("double", e.target.value)} /></Td>
+            <Td><Input value={data.summary.putts} onChange={e => handleSummary("putts", e.target.value)} /></Td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
