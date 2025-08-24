@@ -6,6 +6,10 @@ type Props = {
   theme: Theme;
   data: ScorecardData;
   onUpdate: (data: ScorecardData) => void;
+  savedRoundNames: string[];
+  onSave: () => void;
+  onLoad: (name: string) => void;
+  onNew: () => void;
 };
 
 const Td = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
@@ -21,7 +25,7 @@ const TotalCell = () => (
   <div className="w-full h-full p-1 text-center text-sm">—</div>
 );
 
-export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
+export default function ScorecardView({ theme: T, data, onUpdate, savedRoundNames, onSave, onLoad, onNew }: Props) {
   const handleHeader = (field: keyof ScorecardData['header'], value: string) => {
     onUpdate({ ...data, header: { ...data.header, [field]: value } });
   };
@@ -31,6 +35,10 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
   const handleSummary = (field: keyof ScorecardData['summary'], value: string) => {
     onUpdate({ ...data, summary: { ...data.summary, [field]: value } });
   };
+  const handleNotes = (value: string) => {
+    onUpdate({ ...data, notes: value });
+  };
+
 
   const headerFields1 = [
     { label: "Date", key: "date" }, { label: "Players", key: "players" }, { label: "Location", key: "location" },
@@ -49,6 +57,21 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
 
   return (
     <div className="p-4 rounded-xl border" style={{ background: T.panel, borderColor: T.border }}>
+      {/* Controls */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={onNew} className="rounded-md px-3 py-1.5 border text-sm" style={{ background: T.panelAlt, borderColor: T.border }}>New Round</button>
+        <button onClick={onSave} className="rounded-md px-3 py-1.5 border text-sm" style={{ background: T.brand, borderColor: T.brand, color: T.white }}>Save Round</button>
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) onLoad(e.target.value) }}
+          className="ml-auto rounded-md px-2 py-1.5 border"
+          style={{ background: T.bg, color: T.text, borderColor: T.border }}
+        >
+          <option value="">— Load a saved round —</option>
+          {savedRoundNames.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
+      </div>
+
       <h2 className="text-lg font-semibold mb-3">Golf Log / Scorecard</h2>
 
       {/* Header Info */}
@@ -136,6 +159,18 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
           </tr>
         </tbody>
       </table>
+
+      {/* Notes */}
+      <div className="mt-4">
+        <label className="block text-sm font-medium mb-1" style={{ color: T.textDim }}>Round Notes</label>
+        <textarea
+          value={data.notes || ""}
+          onChange={(e) => handleNotes(e.target.value)}
+          rows={4}
+          className="w-full rounded p-2 border text-sm"
+          style={{ background: T.bg, color: T.text, borderColor: T.border }}
+        />
+      </div>
     </div>
   );
 }
