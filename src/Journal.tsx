@@ -42,9 +42,11 @@ export default function JournalView({
   };
 
   const clearContent = () => {
-    if (localRef.current) {
-      localRef.current.innerHTML = "";
-      onInputHTML("");
+    if (window.confirm("Are you sure you want to clear the journal for this session? This cannot be undone.")) {
+      if (localRef.current) {
+        localRef.current.innerHTML = "";
+        onInputHTML("");
+      }
     }
   };
 
@@ -101,6 +103,7 @@ export default function JournalView({
             background: T.mode === "light" ? T.panel : T.panel,
             color: T.text,
             border: `1px solid ${T.border}`,
+            resize: 'vertical',
           }}
         />
         {/* Subtle tip */}
