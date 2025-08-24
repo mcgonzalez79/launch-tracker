@@ -1,6 +1,6 @@
 import React from "react";
 import type { Theme } from "./theme";
-import type { ScorecardData } from "./utils";
+import type { ScorecardData, HoleData } from "./utils";
 
 type Props = {
   theme: Theme;
@@ -9,7 +9,7 @@ type Props = {
 };
 
 const Td = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <td className={`p-0 ${className}`}>{children}</td>
+  <td className={`p-0 border ${className}`}>{children}</td>
 );
 const Th = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <th className={`p-1 text-xs text-center font-normal border ${className}`}>{children}</th>
@@ -17,12 +17,15 @@ const Th = ({ children, className = "" }: { children: React.ReactNode; className
 const Input = ({ value, onChange, placeholder = "" }: { value?: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; }) => (
   <input type="text" value={value || ""} onChange={onChange} placeholder={placeholder} className="w-full h-full p-1 bg-transparent text-center text-sm outline-none focus:bg-white focus:bg-opacity-10" />
 );
+const TotalCell = () => (
+  <div className="w-full h-full p-1 text-center text-sm">—</div>
+);
 
 export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
   const handleHeader = (field: keyof ScorecardData['header'], value: string) => {
     onUpdate({ ...data, header: { ...data.header, [field]: value } });
   };
-  const handleHole = (hole: number, field: keyof ScorecardData['holes'][number], value: string) => {
+  const handleHole = (hole: number, field: keyof HoleData, value: string) => {
     onUpdate({ ...data, holes: { ...data.holes, [hole]: { ...data.holes[hole], [field]: value } } });
   };
   const handleSummary = (field: keyof ScorecardData['summary'], value: string) => {
@@ -38,7 +41,11 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
     { label: "Course", key: "course" }, { label: "Yardage", key: "yardage" }, { label: "Rating", key: "rating" },
   ] as const;
 
-  const holeRows = ["Par", "Fairway", "Putts", "Hazard", "Yardage", "Stroke"] as const;
+  const holeFields = [
+    { label: "Par", key: "par" }, { label: "Fairway", key: "fairway" }, { label: "Putts", key: "putts" },
+    { label: "Hazard", key: "hazard" }, { label: "Yardage", key: "yardage" }, { label: "Stroke", key: "stroke" },
+  ] as const;
+
 
   return (
     <div className="p-4 rounded-xl border" style={{ background: T.panel, borderColor: T.border }}>
@@ -75,13 +82,13 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
             </tr>
           </thead>
           <tbody>
-            {holeRows.map(row => (
-              <tr key={row}>
-                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{row}</td>
+            {holeFields.map(field => (
+              <tr key={field.key}>
+                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{field.label}</td>
                 {[...Array(9)].map((_, i) => (
-                  <Td key={i}><Input value={data.holes[i+1]?.[row.toLowerCase() as keyof HoleData]} onChange={(e) => handleHole(i + 1, row.toLowerCase() as keyof HoleData, e.target.value)} /></Td>
+                  <Td key={i}><Input value={data.holes[i+1]?.[field.key]} onChange={(e) => handleHole(i + 1, field.key, e.target.value)} /></Td>
                 ))}
-                <Td><Input placeholder="—" /></Td>
+                <Td><TotalCell /></Td>
               </tr>
             ))}
           </tbody>
@@ -96,13 +103,13 @@ export default function ScorecardView({ theme: T, data, onUpdate }: Props) {
             </tr>
           </thead>
           <tbody>
-            {holeRows.map(row => (
-              <tr key={row}>
-                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{row}</td>
+            {holeFields.map(field => (
+              <tr key={field.key}>
+                <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{field.label}</td>
                 {[...Array(9)].map((_, i) => (
-                  <Td key={i}><Input value={data.holes[i+10]?.[row.toLowerCase() as keyof HoleData]} onChange={(e) => handleHole(i + 10, row.toLowerCase() as keyof HoleData, e.target.value)} /></Td>
+                  <Td key={i}><Input value={data.holes[i+10]?.[field.key]} onChange={(e) => handleHole(i + 10, field.key, e.target.value)} /></Td>
                 ))}
-                <Td><Input placeholder="—" /></Td>
+                <Td><TotalCell /></Td>
               </tr>
             ))}
           </tbody>
