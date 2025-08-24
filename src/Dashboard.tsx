@@ -193,7 +193,7 @@ export default function DashboardCards(props: Props) {
                   stroke={T.tick}
                   label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }}
                 />
-                <ReferenceLine x={0} stroke={T.grid} strokeDasharray="4 4" />
+                <ReferenceLine x={0} stroke={T.textDim} />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
