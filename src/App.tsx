@@ -437,8 +437,8 @@ export default function App() {
               <div className="hidden md:flex items-center gap-2">
                 <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
                 <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-                <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
                 <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
+                <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
               </div>
               <button
                 className="px-2 py-1 rounded-md border text-xs"
@@ -457,8 +457,8 @@ export default function App() {
           <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
             <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
             <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-            <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
             <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
+            <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
             <div className="flex-1" />
             <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
           </div>
