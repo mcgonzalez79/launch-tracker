@@ -27,6 +27,7 @@ export type ScorecardData = {
   summary: {
     finalScore?: string; eagles?: string; birdies?: string; par?: string; tees?: string; bogeys?: string; double?: string; putts?: string;
   };
+  notes?: string;
 };
 
 
