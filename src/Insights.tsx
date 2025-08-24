@@ -561,7 +561,7 @@ export default function Insights({
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="t" tick={{ fontSize: 12 }} tickFormatter={formatDateTick} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip contentStyle={{ background: T.panelAlt, color: T.text, border: `1px solid ${T.border}`, borderRadius: '6px' }} />
                 <Legend />
                 <Line type="monotone" dataKey="carry" name="Carry (yds)" stroke={T.brand} dot={false} />
                 <Line type="linear" dataKey="trend" name="Trend" dot={false} stroke={T.textDim} strokeDasharray="5 5" />
