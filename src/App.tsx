@@ -44,7 +44,7 @@ const applyDerived = (s: Shot): Shot => {
   return s2;
 };
 
-const EMPTY_SCORECARD: ScorecardData = { header: {}, holes: {}, summary: {} };
+const EMPTY_SCORECARD: ScorecardData = { header: {}, holes: {}, summary: {}, notes: "" };
 
 /* =========================
    App
@@ -370,18 +370,37 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
-
-  const [scorecards, setScorecards] = useState<Record<string, ScorecardData>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:scorecards") || "{}"); } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:scorecards", JSON.stringify(scorecards)); } catch {} }, [scorecards]);
-
-  const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
-  const onScorecardUpdate = (data: ScorecardData) => { setScorecards(prev => ({ ...prev, [sessionFilter]: data })); };
   
+  const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
   const currentJournalHTML = journals[sessionFilter] || "";
-  const currentScorecard = scorecards[sessionFilter] || EMPTY_SCORECARD;
   const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
+
+  const [savedScorecards, setSavedScorecards] = useState<Record<string, ScorecardData>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:saved-scorecards") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:saved-scorecards", JSON.stringify(savedScorecards)); } catch {} }, [savedScorecards]);
+  
+  const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
+  
+  const handleSaveScorecard = () => {
+    const { course, date } = activeScorecard.header;
+    if (!course?.trim() || !date?.trim()) {
+      toast({ type: "warn", text: "Please enter a Course and Date before saving." });
+      return;
+    }
+    const name = `${course} - ${date}`;
+    setSavedScorecards(prev => ({ ...prev, [name]: activeScorecard }));
+    toast({ type: "success", text: `Round "${name}" saved.` });
+  };
+  const handleLoadScorecard = (name: string) => {
+    const data = savedScorecards[name];
+    if (data) {
+      setActiveScorecard(data);
+      toast({ type: "info", text: `Loaded round "${name}".` });
+    }
+  };
+  const handleNewScorecard = () => { setActiveScorecard(EMPTY_SCORECARD); };
+
 
   /* =========================
      Layout / Filters drawer
@@ -592,8 +611,12 @@ export default function App() {
               {tab === "scorecard" && (
                 <ScorecardView
                   theme={T}
-                  data={currentScorecard}
-                  onUpdate={onScorecardUpdate}
+                  data={activeScorecard}
+                  onUpdate={setActiveScorecard}
+                  savedRoundNames={Object.keys(savedScorecards).sort()}
+                  onSave={handleSaveScorecard}
+                  onLoad={handleLoadScorecard}
+                  onNew={handleNewScorecard}
                 />
               )}
             </div>
