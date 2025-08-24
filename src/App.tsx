@@ -4,12 +4,13 @@ import FiltersPanel from "./Filters";
 import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
+import ScorecardView from "./Scorecard";
 import { TopTab, IconSun, IconMoon } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
   normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV,
-  quantile
+  quantile, ScorecardData
 } from "./utils";
 
 /* =========================
@@ -42,6 +43,8 @@ const applyDerived = (s: Shot): Shot => {
   if (F2P !== undefined) s2.FaceToPath_deg = F2P;
   return s2;
 };
+
+const EMPTY_SCORECARD: ScorecardData = { header: {}, holes: {}, summary: {} };
 
 /* =========================
    App
@@ -360,7 +363,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
   /* =========================
-     Journal
+     Journal & Scorecard State
   ========================= */
   const journalRef = useRef<HTMLDivElement>(null);
   const [journals, setJournals] = useState<Record<string, string>>(() => {
@@ -368,10 +371,16 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
 
-  const onJournalInput = (html: string) => {
-    setJournals(prev => ({ ...prev, [sessionFilter]: html }));
-  };
+  const [scorecards, setScorecards] = useState<Record<string, ScorecardData>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:scorecards") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:scorecards", JSON.stringify(scorecards)); } catch {} }, [scorecards]);
+
+  const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
+  const onScorecardUpdate = (data: ScorecardData) => { setScorecards(prev => ({ ...prev, [sessionFilter]: data })); };
+  
   const currentJournalHTML = journals[sessionFilter] || "";
+  const currentScorecard = scorecards[sessionFilter] || EMPTY_SCORECARD;
   const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
 
   /* =========================
@@ -410,6 +419,7 @@ export default function App() {
                 <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
                 <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
                 <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+                <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
               </div>
               <button
                 className="px-2 py-1 rounded-md border text-xs"
@@ -429,6 +439,7 @@ export default function App() {
             <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
             <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
             <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
+            <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
             <div className="flex-1" />
             <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
           </div>
@@ -576,6 +587,13 @@ export default function App() {
                   onInputHTML={onJournalInput}
                   sessionLabel={sessionLabel}
                   defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
+                />
+              )}
+              {tab === "scorecard" && (
+                <ScorecardView
+                  theme={T}
+                  data={currentScorecard}
+                  onUpdate={onScorecardUpdate}
                 />
               )}
             </div>
