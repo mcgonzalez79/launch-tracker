@@ -134,6 +134,8 @@ export default function FiltersPanel(props: Props) {
             className="w-full rounded-md px-3 py-2 border text-sm"
             style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
             onClick={onLoadSample}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.panel; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
           >
             Load Sample
           </button>
@@ -141,6 +143,8 @@ export default function FiltersPanel(props: Props) {
             className="w-full rounded-md px-3 py-2 border text-sm"
             style={{ background: T.brand, borderColor: T.brand, color: T.white }}
             onClick={onImportClick}
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.brandHover; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.brand; }}
           >
             Import File
           </button>
@@ -238,6 +242,8 @@ export default function FiltersPanel(props: Props) {
                     }}
                     onClick={() => toggleClub(c)}
                     title={c}
+                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = selected ? T.brandHover : T.panel; }}
+                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = selected ? T.brandMuted : T.panelAlt; }}
                   >
                     {c}
                   </button>
@@ -297,6 +303,8 @@ export default function FiltersPanel(props: Props) {
           className="w-full rounded-md px-3 py-2 border text-sm mb-2"
           style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
           onClick={onPrintClubAverages}
+          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.panel; }}
+          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
         >
           Print Club Averages
         </button>
@@ -306,6 +314,8 @@ export default function FiltersPanel(props: Props) {
           className="w-full rounded-md px-3 py-2 border text-sm mb-2"
           style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
           onClick={onExportCSV}
+          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.panel; }}
+          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
         >
           Export CSV
         </button>
@@ -316,7 +326,7 @@ export default function FiltersPanel(props: Props) {
             className="rounded-md px-3 py-2 border text-sm"
             style={{
               background: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.08)",
-              borderColor: "rgba(200,0,0,0.35)",
+              borderColor: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.35)",
               color: T.text,
             }}
             onClick={onDeleteSession}
@@ -328,7 +338,7 @@ export default function FiltersPanel(props: Props) {
             className="rounded-md px-3 py-2 border text-sm"
             style={{
               background: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.12)",
-              borderColor: "rgba(200,0,0,0.45)",
+              borderColor: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.45)",
               color: T.text,
             }}
             onClick={onDeleteAll}
