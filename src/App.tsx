@@ -5,7 +5,7 @@ import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
-import { TopTab, IconSun, IconMoon } from "./components/UI";
+import { TopTab, IconSun, IconMoon, IconInstagram } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
@@ -444,7 +444,7 @@ export default function App() {
         <PrintableClubAverages rows={tableRows} />
       </div>
 
-      <div className="screen-only" style={{ background: T.bg, color: T.text, minHeight: "100vh" }}>
+      <div className="screen-only" style={{ background: T.bg, color: T.text, minHeight: "100vh", display: 'flex', flexDirection: 'column' }}>
         {/* Header with tabs + theme */}
         <header className="border-b" style={{ borderColor: T.border, background: theme.mode === 'light' ? '#dbe8e1' : T.panel, height: '120px' }}>
           <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
@@ -523,7 +523,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="max-w-6xl mx-auto px-4 py-3">
+        <main className="w-full max-w-6xl mx-auto px-4 py-3" style={{ flex: '1 0 auto' }}>
           <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-4">
             {/* Left rail (desktop) */}
             <div ref={filtersRef} className="hidden md:block filters-panel">
@@ -641,7 +641,7 @@ export default function App() {
               )}
             </div>
           </div>
-        </div>
+        </main>
 
         <Footer T={T} />
 
@@ -717,11 +717,12 @@ function Footer({ T }: { T: Theme }) {
         <div className="text-xs" style={{ color: T.textDim }}>
           © {year} SwingTrackr
         </div>
-        <nav className="flex items-center gap-3 text-xs" style={{ color: T.textDim }}>
-          <a href="https://github.com/mcgonzalez79/launch-tracker" target="_blank" rel="noreferrer" className="underline">Repo</a>
-          <span>·</span>
-          <span>v1.0.0+</span>
-        </nav>
+        <div className="flex items-center gap-2 text-xs" style={{ color: T.textDim }}>
+          <span>Matt Gonzalez</span>
+          <a href="https://www.instagram.com/mattgonzalez79/" target="_blank" rel="noopener noreferrer" title="Instagram" className="hover:text-fuchsia-500 transition-colors">
+            <IconInstagram />
+          </a>
+        </div>
       </div>
     </footer>
   );
