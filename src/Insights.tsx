@@ -68,7 +68,12 @@ function KpiCell({
   label, value, sub, theme: T
 }: { label: string; value: string; sub?: string; theme: Theme; }) {
   return (
-    <div className="rounded-xl p-4 border" style={{ background: T.panelAlt, borderColor: T.border }}>
+    <div
+      className="rounded-xl p-4 border"
+      style={{ background: T.panelAlt, borderColor: T.border }}
+      onMouseOver={(e) => { if (T.mode === 'light') e.currentTarget.style.backgroundColor = '#dbe8e1'; }}
+      onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
+    >
       <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
       <div className="text-2xl font-semibold" style={{ color: T.text }}>{value}</div>
       {sub ? <div className="text-xs mt-1" style={{ color: T.textDim }}>{sub}</div> : null}
