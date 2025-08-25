@@ -315,7 +315,7 @@ export default function FiltersPanel(props: Props) {
           <button
             className="rounded-md px-3 py-2 border text-sm"
             style={{
-              background: "rgba(200,0,0,0.08)",
+              background: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.08)",
               borderColor: "rgba(200,0,0,0.35)",
               color: T.text,
             }}
@@ -327,7 +327,7 @@ export default function FiltersPanel(props: Props) {
           <button
             className="rounded-md px-3 py-2 border text-sm"
             style={{
-              background: "rgba(200,0,0,0.12)",
+              background: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.12)",
               borderColor: "rgba(200,0,0,0.45)",
               color: T.text,
             }}
