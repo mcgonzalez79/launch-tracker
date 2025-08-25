@@ -202,7 +202,6 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
                     if (name === "x") return [`${val?.toFixed?.(1)} yds`, `Lateral${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -252,11 +251,7 @@ export default function DashboardCards(props: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  itemStyle={{ color: T.text }}
-                  formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]}
-                />
+                <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
                 <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
@@ -346,7 +341,6 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload as any;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -377,7 +371,7 @@ export default function DashboardCards(props: Props) {
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
-            <table className="w-full text-sm">
+            <table className="min-w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
                   <th className="text-left py-2 pr-3">Club</th>
