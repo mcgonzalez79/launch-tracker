@@ -31,6 +31,17 @@ export function IconInstagram() {
   )
 }
 
+export function IconMenu() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M4 6l16 0" />
+      <path d="M4 12l16 0" />
+      <path d="M4 18l16 0" />
+    </svg>
+  );
+}
+
 /* =========================
    Card
 ========================= */
@@ -67,7 +78,7 @@ export function Card({
           {right ? <div className="text-xs" style={{ color: T.textDim }}>{right}</div> : null}
         </header>
       )}
-      <div className={pad ? "p-4" : ""}>{children}</div>
+      <div className={`${pad ? "p-4" : ""} min-w-0`}>{children}</div>
       {footer ? (
         <div
           className="px-4 py-2 rounded-b-xl text-xs"
