@@ -86,7 +86,12 @@ export default function DashboardCards(props: Props) {
   }, [filteredOutliers]);
 
   const KpiCell = ({ label, value, unit }: { label: string; value: string; unit?: string }) => (
-    <div className="p-3 rounded-lg border" style={{ background: T.panelAlt, borderColor: T.border }}>
+    <div
+      className="p-3 rounded-lg border"
+      style={{ background: T.panelAlt, borderColor: T.border }}
+      onMouseOver={(e) => { if (T.mode === 'light') e.currentTarget.style.backgroundColor = '#dbe8e1'; }}
+      onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
+    >
       <div className="text-xs" style={{ color: T.textDim }}>{label}</div>
       <div className="text-lg font-semibold" style={{ color: T.text }}>
         {value}{unit ? <span className="text-xs font-normal" style={{ color: T.textDim }}> {unit}</span> : null}
