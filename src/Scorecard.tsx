@@ -23,9 +23,6 @@ const Th = ({ children, className = "" }: { children: React.ReactNode; className
 const Input = ({ value, onChange, placeholder = "" }: { value?: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; }) => (
   <input type="text" value={value || ""} onChange={onChange} placeholder={placeholder} className="w-full h-full p-1 bg-transparent text-center text-sm outline-none focus:bg-white focus:bg-opacity-10" />
 );
-const TotalCell = () => (
-  <div className="w-full h-full p-1 text-center text-sm">—</div>
-);
 
 export default function ScorecardView({ theme: T, data, onUpdate, savedRoundNames, onSave, onLoad, onNew, onDelete, activeScorecardName }: Props) {
   const handleHeader = (field: keyof ScorecardData['header'], value: string) => {
@@ -55,6 +52,18 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
     { label: "Par", key: "par" }, { label: "Fairway", key: "fairway" }, { label: "Putts", key: "putts" },
     { label: "Hazard", key: "hazard" }, { label: "Yardage", key: "yardage" }, { label: "Stroke", key: "stroke" },
   ] as const;
+
+  const calculateRowTotal = (field: keyof HoleData, startHole: number, endHole: number) => {
+    let total = 0;
+    for (let i = startHole; i <= endHole; i++) {
+      const value = data.holes[i]?.[field];
+      const num = Number(value);
+      if (value && !isNaN(num)) {
+        total += num;
+      }
+    }
+    return total;
+  };
 
 
   return (
@@ -130,7 +139,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
                   {[...Array(9)].map((_, i) => (
                     <Td key={i}><Input value={data.holes[i+1]?.[field.key]} onChange={(e) => handleHole(i + 1, field.key, e.target.value)} /></Td>
                   ))}
-                  <Td><TotalCell /></Td>
+                  <Td><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 1, 9) || '—'}</div></Td>
                 </tr>
               ))}
             </tbody>
@@ -151,7 +160,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
                   {[...Array(9)].map((_, i) => (
                     <Td key={i}><Input value={data.holes[i+10]?.[field.key]} onChange={(e) => handleHole(i + 10, field.key, e.target.value)} /></Td>
                   ))}
-                  <Td><TotalCell /></Td>
+                  <Td><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 10, 18) || '—'}</div></Td>
                 </tr>
               ))}
             </tbody>
