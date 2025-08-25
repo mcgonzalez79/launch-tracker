@@ -5,7 +5,7 @@ import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
-import { TopTab, IconSun, IconMoon, IconInstagram } from "./components/UI";
+import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu } from "./components/UI";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
@@ -466,6 +466,14 @@ export default function App() {
               >
                 {theme === LIGHT ? <IconMoon/> : <IconSun/>}
               </button>
+              <button
+                className="md:hidden px-2 py-1 rounded-md border text-xs"
+                style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+                onClick={() => setFiltersOpen(true)}
+                title="Filters"
+              >
+                <IconMenu />
+              </button>
             </div>
           </div>
         </header>
@@ -477,8 +485,6 @@ export default function App() {
             <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
             <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
             <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-            <div className="flex-1" />
-            <button className="px-2 py-1 rounded-md border text-xs" style={{ background: T.panelAlt, borderColor: T.border, color: T.text }} onClick={() => setFiltersOpen(true)}>Filters</button>
           </div>
         </div>
 
@@ -712,8 +718,8 @@ function PrintableClubAverages({ rows }: { rows: ClubRow[] }) {
 function Footer({ T }: { T: Theme }) {
   const year = new Date().getFullYear();
   return (
-    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.mode === 'light' ? '#dbe8e1' : T.bg }}>
-      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
+    <footer style={{ borderColor: T.border, background: T.mode === 'light' ? '#dbe8e1' : T.bg }}>
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2 border-t" style={{borderColor: T.border}}>
         <div className="text-xs" style={{ color: T.textDim }}>
           © {year} SwingTrackr
         </div>
