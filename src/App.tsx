@@ -381,6 +381,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:saved-scorecards", JSON.stringify(savedScorecards)); } catch {} }, [savedScorecards]);
   
   const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
+  const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
   
   const handleSaveScorecard = () => {
     const { course, date } = activeScorecard.header;
@@ -390,16 +391,33 @@ export default function App() {
     }
     const name = `${course} - ${date}`;
     setSavedScorecards(prev => ({ ...prev, [name]: activeScorecard }));
+    setActiveScorecardName(name);
     toast({ type: "success", text: `Round "${name}" saved.` });
   };
   const handleLoadScorecard = (name: string) => {
     const data = savedScorecards[name];
     if (data) {
       setActiveScorecard(data);
+      setActiveScorecardName(name);
       toast({ type: "info", text: `Loaded round "${name}".` });
     }
   };
-  const handleNewScorecard = () => { setActiveScorecard(EMPTY_SCORECARD); };
+  const handleNewScorecard = () => {
+    setActiveScorecard(EMPTY_SCORECARD);
+    setActiveScorecardName(null);
+  };
+  const handleDeleteScorecard = () => {
+    if (!activeScorecardName) return;
+    if (window.confirm(`Are you sure you want to delete the round "${activeScorecardName}"? This cannot be undone.`)) {
+      setSavedScorecards(prev => {
+        const next = { ...prev };
+        delete next[activeScorecardName];
+        return next;
+      });
+      handleNewScorecard();
+      toast({ type: 'info', text: `Deleted round "${activeScorecardName}".`});
+    }
+  };
 
 
   /* =========================
@@ -617,6 +635,8 @@ export default function App() {
                   onSave={handleSaveScorecard}
                   onLoad={handleLoadScorecard}
                   onNew={handleNewScorecard}
+                  onDelete={handleDeleteScorecard}
+                  activeScorecardName={activeScorecardName}
                 />
               )}
             </div>
@@ -692,7 +712,7 @@ function PrintableClubAverages({ rows }: { rows: ClubRow[] }) {
 function Footer({ T }: { T: Theme }) {
   const year = new Date().getFullYear();
   return (
-    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.bg }}>
+    <footer className="mt-6 border-t" style={{ borderColor: T.border, background: T.mode === 'light' ? '#dbe8e1' : T.bg }}>
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
         <div className="text-xs" style={{ color: T.textDim }}>
           © {year} SwingTrackr
