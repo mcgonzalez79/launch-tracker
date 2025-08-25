@@ -76,7 +76,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
             className="rounded-md px-3 py-1.5 border text-sm disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.08)",
-              borderColor: "rgba(200,0,0,0.35)",
+              borderColor: T.mode === 'light' ? '#dbe8e1' : "rgba(200,0,0,0.35)",
               color: T.text,
             }}
           >
