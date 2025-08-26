@@ -23,157 +23,106 @@ export function IconMoon() {
 
 export function IconInstagram() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" strokeLinecap="round"></line>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M7.4 2.1C8.7 2.1 9.9 2.1 11.1 2.1C12.3 2.1 13.5 2.1 14.7 2.1C15.9 2.1 17.1 2.2 18.2 2.5C19.4 2.8 20.4 3.3 21.2 4.2C22.1 5 22.6 6 22.9 7.2C23.2 8.3 23.3 9.5 23.3 10.7C23.3 11.9 23.3 13.1 23.3 14.3C23.3 15.5 23.2 16.7 22.9 17.8C22.6 19 22.1 20 21.2 20.8C20.4 21.7 19.4 22.2 18.2 22.5C17.1 22.8 15.9 22.9 14.7 22.9C13.5 22.9 12.3 22.9 11.1 22.9C9.9 22.9 8.7 22.9 7.4 22.9C6.2 22.9 5 22.8 3.9 22.5C2.8 22.2 1.8 21.7 1 20.8C0.1 20 0 19 0 17.8C0 16.7 0 15.5 0 14.3C0 13.1 0 11.9 0 10.7C0 9.5 0.1 8.3 0.4 7.2C0.7 6 1.2 5 2.1 4.2C2.9 3.3 3.9 2.8 5 2.5C6.2 2.2 7.4 2.1 8.6 2.1H7.4ZM12 5.5C8.4 5.5 5.5 8.4 5.5 12C5.5 15.6 8.4 18.5 12 18.5C15.6 18.5 18.5 15.6 18.5 12C18.5 8.4 15.6 5.5 12 5.5ZM19 7.5C18.3 7.5 17.8 7 17.8 6.2C17.8 5.5 18.3 5 19 5C19.8 5 20.2 5.5 20.2 6.2C20.2 7 19.8 7.5 19 7.5ZM12 7C14.7 7 17 9.3 17 12C17 14.7 14.7 17 12 17C9.3 17 7 14.7 7 12C7 9.3 9.3 7 12 7Z" fill="currentColor"/>
     </svg>
-  )
+  );
 }
 
 export function IconMenu() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-      <path d="M4 6l16 0" />
-      <path d="M4 12l16 0" />
-      <path d="M4 18l16 0" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-/* =========================
-   Card
-========================= */
-export function Card({
-  title,
-  right,
-  children,
-  theme: T,
-  pad = true,
-  footer,
-}: {
-  title?: string;
-  right?: React.ReactNode;        // right-aligned content in header (optional)
-  children?: React.ReactNode;
-  theme: Theme;
-  pad?: boolean;
-  footer?: React.ReactNode;       // optional footer region
-}) {
-  return (
-    <section
-      className="rounded-xl shadow-sm"
-      style={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
-    >
-      {(title || right) && (
-        <header
-          className="px-4 py-2 rounded-t-xl text-sm font-medium flex items-center justify-between gap-2"
-          style={{
-            borderBottom: `1px solid ${T.border}`,
-            background: T.mode === 'light' ? '#dbe8e1' : T.panelAlt,
-            color: T.text
-          }}
-        >
-          <div>{title}</div>
-          {right ? <div className="text-xs" style={{ color: T.textDim }}>{right}</div> : null}
-        </header>
-      )}
-      <div className={`${pad ? "p-4" : ""} min-w-0`}>{children}</div>
-      {footer ? (
-        <div
-          className="px-4 py-2 rounded-b-xl text-xs"
-          style={{ borderTop: `1px solid ${T.border}`, background: T.panelAlt, color: T.textDim }}
-        >
-          {footer}
-        </div>
-      ) : null}
-    </section>
-  );
-}
 
 /* =========================
-   Top Tabs
+   Layout & Components
 ========================= */
-export function TopTab({
-  label,
-  active,
-  onClick,
-  theme: T,
-}: {
+
+// Top tabs for navigation
+export function TopTab({ label, isActive, onClick, T }: {
   label: string;
-  active: boolean;
+  isActive: boolean;
   onClick: () => void;
-  theme: Theme;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1 rounded-md text-sm border transition-colors"
-      style={{
-        background: active ? T.brand : T.panel,
-        color: active ? T.white : T.text,
-        borderColor: active ? T.brand : T.border,
-      }}
-      onMouseOver={(e) => {
-        if (!active) e.currentTarget.style.backgroundColor = T.panelAlt;
-      }}
-      onMouseOut={(e) => {
-        if (!active) e.currentTarget.style.backgroundColor = T.panel;
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-/* =========================
-   Chip (filters)
-========================= */
-export function Chip({
-  label,
-  selected,
-  onClick,
-  theme: T,
-  title,
-}: {
-  label: string;
-  selected?: boolean;
-  onClick?: () => void;
-  theme: Theme;
-  title?: string;
+  T: Theme;
 }) {
   return (
     <button
       type="button"
-      title={title}
-      onClick={onClick}
-      className="px-2 py-1 rounded-md text-xs border transition-colors"
+      className={`px-4 py-2 rounded-t-md text-sm font-medium transition-colors ${isActive ? "" : "hover:bg-opacity-80"}`}
       style={{
-        background: selected ? T.brandMuted : T.panelAlt,
-        color: T.text,
-        borderColor: selected ? T.brand : T.border,
+        background: isActive ? T.brand : T.brandMuted,
+        color: isActive ? T.white : T.text,
+        border: "1px solid transparent",
+        borderBottom: "none",
+        borderTopColor: isActive ? T.brand : T.brandMuted,
+        borderLeftColor: isActive ? T.brand : T.brandMuted,
+        borderRightColor: isActive ? T.brand : T.brandMuted,
       }}
-      onMouseOver={(e) => {
-        if (selected) e.currentTarget.style.backgroundColor = T.brand;
-        else e.currentTarget.style.backgroundColor = T.panel;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = selected ? T.brandMuted : T.panelAlt;
-      }}
+      onClick={onClick}
     >
       {label}
     </button>
   );
 }
 
-/* =========================
-   Buttons
-========================= */
-const focusRing = (T: Theme) => ({
-  boxShadow: `0 0 0 2px ${T.white}, 0 0 0 4px ${T.brandMuted}`,
-});
+// Reusable card container
+type CardProps = {
+  children: React.ReactNode;
+  title: string;
+  theme: Theme;
+  className?: string;
+  right?: React.ReactNode;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+};
+export function Card({ children, title, theme: T, className = "", right, onDragStart, onDragOver, onDrop }: CardProps) {
+  const isSpecialHeader = title === "Filters" || title === "Scorecard";
+  const headerStyle = {
+    borderColor: T.border,
+    ...(isSpecialHeader && { background: "#dbe8e1" }),
+  };
+  return (
+    <div
+      className={`rounded-lg shadow-sm border overflow-hidden ${className}`}
+      style={{ background: T.panel, borderColor: T.border }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-2 border-b"
+        style={headerStyle}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      >
+        <h3 className="text-sm font-medium" style={{ color: T.text }}>
+          {title}
+        </h3>
+        {right && <div>{right}</div>}
+      </div>
+      {/* Body */}
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
 
-export function MutedButton({
+
+// Reusable form section
+export function FormSection({ title, children, theme: T }: { title: string; children: React.ReactNode; theme: Theme; }) {
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-2" style={{ color: T.textDim }}>{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+// Little secondary button
+export function SecondaryButton({
   children,
   onClick,
   theme: T,
@@ -181,11 +130,15 @@ export function MutedButton({
   disabled,
 }: {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick: () => void;
   theme: Theme;
   title?: string;
   disabled?: boolean;
 }) {
+  const focusRing = (T: Theme) => ({
+    outline: "none",
+    boxShadow: `0 0 0 2px ${T.brand}`,
+  });
   return (
     <button
       type="button"
@@ -195,9 +148,9 @@ export function MutedButton({
       className="px-3 py-1 rounded-md border text-sm transition-colors"
       style={{
         background: T.panel,
-        color: disabled ? T.textDim : T.text,
+        color: T.text,
         borderColor: T.border,
-        opacity: disabled ? 0.7 : 1,
+        opacity: disabled ? 0.6 : 1,
         cursor: disabled ? "not-allowed" : "pointer",
       }}
       onMouseOver={(e) => {
@@ -247,7 +200,7 @@ export function PrimaryButton({
       onMouseOut={(e) => {
         e.currentTarget.style.backgroundColor = disabled ? T.brandMuted : T.brand;
       }}
-      onFocus={(e) => Object.assign(e.currentTarget.style, focusRing(T))}
+      onFocus={(e) => (e.currentTarget.style.boxShadow = `0 0 0 2px ${T.brand}`)}
       onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
       {children}
