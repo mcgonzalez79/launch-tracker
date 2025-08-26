@@ -202,6 +202,7 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
                     if (name === "x") return [`${val?.toFixed?.(1)} yds`, `Lateral${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -341,6 +342,7 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload as any;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -371,7 +373,7 @@ export default function DashboardCards(props: Props) {
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
-            <table className="min-w-full text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
                   <th className="text-left py-2 pr-3">Club</th>
