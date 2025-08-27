@@ -428,7 +428,7 @@ export default function DashboardCards(props: Props) {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid w-full gap-4">
       {cardOrder.map((key) => cardMap[key] ?? null)}
     </div>
   );
