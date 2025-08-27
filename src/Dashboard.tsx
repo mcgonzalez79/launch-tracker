@@ -370,7 +370,7 @@ export default function DashboardCards(props: Props) {
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
-          <div style={{ overflowX: "scroll" }}>
+          <div style={{ overflowX: "auto" }}>
             <table className="min-w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
