@@ -371,7 +371,7 @@ export default function DashboardCards(props: Props) {
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflow-X: "auto" }}>
-            <table className="w-max sm:w-full text-sm whitespace-nowrap">
+            <table className="min-w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
                   <th className="text-left py-2 pr-3">Club</th>
@@ -380,7 +380,7 @@ export default function DashboardCards(props: Props) {
                   <th className="text-right py-2 px-2">Avg Total</th>
                   <th className="text-right py-2 px-2">Avg Smash</th>
                   <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right py-2 px-2">Avg CS</th>
+                  <th className="text-right p2 px-2">Avg CS</th>
                   <th className="text-right py-2 px-2">Avg BS</th>
                   <th className="text-right py-2 px-2">Avg LA</th>
                   <th className="text-right py-2 px-2">Avg F2P</th>
