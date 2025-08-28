@@ -1,5 +1,5 @@
 // src/Insights.tsx
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
@@ -97,6 +97,19 @@ export default function Insights({
   onDrop,
   allShots,
 }: Props) {
+
+  // Modal states
+  const [isBenchmarkModalOpen, setBenchmarkModalOpen] = useState(false);
+  const [isSwingModalOpen, setSwingModalOpen] = useState(false);
+  
+  // Swing matrix data
+  const [swingMatrix, setSwingMatrix] = useState<any>(null);
+  useEffect(() => {
+    fetch('/swing_matrix.json')
+      .then(res => res.json())
+      .then(data => setSwingMatrix(data))
+      .catch(err => console.error("Failed to load swing_matrix.json", err));
+  }, []);
 
   /* ---------- DIST (Horizontal stacked bars: Avg Carry + Avg Roll) ---------- */
   type DistRow = {
@@ -355,7 +368,11 @@ export default function Insights({
       onDragOver={onDragOver("bench")}
       onDrop={onDrop("bench")}
     >
-      <Card title="Benchmarks" right={benchClubs.length === 1 ? benchClubs[0] : ""} theme={T}>
+      <Card
+        title="Benchmarks"
+        right={<button onClick={() => setBenchmarkModalOpen(true)} className="text-xs underline" style={{color: T.brand}}>View Table</button>}
+        theme={T}
+      >
         {benchData ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KpiCell theme={T} label="Avg Total" value={benchData.avgTotal != null ? `${benchData.avgTotal.toFixed(1)} yds` : "—"} sub={`n=${benchData.n}`} />
@@ -370,10 +387,7 @@ export default function Insights({
     </div>
   );
 
-/* ---------- SWINGS (single KPI set; respects filters)
-   - If exactly one club is selected: show that club's averages.
-   - If multiple or no clubs are selected: show averages across the visible shots (selected clubs or all).
---------------------------------------------------------------------------- */
+/* ---------- SWINGS (single KPI set; respects filters) ---------- */
   const selectedClubs = useMemo(
     () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
     [filteredOutliers]
@@ -385,7 +399,6 @@ export default function Insights({
       const c = selectedClubs[0];
       return filteredOutliers.filter(s => (s.Club || "Unknown") === c);
     }
-    // Multiple clubs selected OR no explicit club filter: show averages across all visible shots
     return filteredOutliers;
   }, [filteredOutliers, selectedClubs]);
 
@@ -402,6 +415,51 @@ export default function Insights({
       f2p:  avg(f2pVals)  ?? undefined,
     };
   }, [swingShots]);
+  
+  const swingAnalysis = useMemo(() => {
+    if (!swingMatrix || swingAgg.n === 0) return null;
+    
+    const club = selectedClubs.length === 1 ? selectedClubs[0] : 'Unknown';
+    const isDriver = /driver/i.test(club);
+
+    const getAoAState = (val?: number) => {
+      if (val == null) return "Neutral";
+      if (isDriver) {
+        if (val > 1.5) return "Up";
+        if (val < -1.5) return "Down";
+        return "Neutral";
+      }
+      // Irons
+      if (val > -1.5) return "Up";
+      if (val < -5) return "Down";
+      return "Neutral";
+    };
+
+    const getPathState = (val?: number) => {
+      if (val == null) return "Neutral";
+      if (val > 2) return "In-to-out";
+      if (val < -2) return "Out-to-in";
+      return "Neutral";
+    };
+
+    const getFaceState = (val?: number) => {
+      if (val == null) return "Square";
+      if (val > 2) return "Open (right)";
+      if (val < -2) return "Closed (left)";
+      return "Square";
+    };
+
+    const states = {
+      aoa_state: getAoAState(swingAgg.aoa),
+      path_state: getPathState(swingAgg.path),
+      face_state: getFaceState(swingAgg.face),
+    };
+    
+    return swingMatrix.combinations.find(
+      (c: any) => c.aoa_state === states.aoa_state && c.path_state === states.path_state && c.face_state === states.face_state
+    ) || null;
+  }, [swingAgg, swingMatrix, selectedClubs]);
+
 
   const fmt = (n?: number) => (n != null && Number.isFinite(n) ? n.toFixed(1) : "—");
 
@@ -413,7 +471,11 @@ export default function Insights({
       onDragOver={onDragOver("swings")}
       onDrop={onDrop("swings")}
     >
-      <Card title="Swing Metrics" right="AoA • Path • Face • Face→Path" theme={T}>
+      <Card
+        title="Swing Metrics"
+        right={<button onClick={() => setSwingModalOpen(true)} disabled={!swingAnalysis} className="text-xs underline disabled:opacity-50" style={{color: T.brand}}>Get Advice</button>}
+        theme={T}
+      >
         {swingShots.length ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KpiCell theme={T} label="AoA"  value={`${fmt(swingAgg.aoa)}°`}  sub={`n=${swingAgg.n}`} />
@@ -589,8 +651,82 @@ export default function Insights({
   };
 
   return (
-    <div className="grid gap-4">
-      {insightsOrder.map((key) => cardMap[key] ?? null)}
-    </div>
+    <>
+      <div className="grid gap-4">
+        {insightsOrder.map((key) => cardMap[key] ?? null)}
+      </div>
+      {isBenchmarkModalOpen && <BenchmarkModal data={benchChart} levels={benchLevels} theme={T} onClose={() => setBenchmarkModalOpen(false)} />}
+      {isSwingModalOpen && swingAnalysis && <SwingCorrectionsModal analysis={swingAnalysis} theme={T} onClose={() => setSwingModalOpen(false)} />}
+    </>
   );
+}
+
+function BenchmarkModal({data, levels, theme, onClose}: {data: Record<string, number[]>, levels: readonly string[], theme: Theme, onClose: () => void}) {
+  const clubs = Object.keys(data);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background: "rgba(0,0,0,0.5)"}} onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border shadow-lg overflow-hidden" style={{background: theme.panel, borderColor: theme.border}} onClick={e => e.stopPropagation()}>
+        <header className="p-3 flex items-center justify-between" style={{borderBottom: `1px solid ${theme.border}`, background: theme.panelAlt}}>
+          <h3 className="font-semibold">Distance Benchmarks (Total yds)</h3>
+          <button className="text-xs underline" style={{color: theme.brand}} onClick={onClose}>Close</button>
+        </header>
+        <div className="p-4 max-h-[70vh] overflow-y-auto">
+          <table className="w-full text-sm text-center">
+            <thead>
+              <tr style={{color: theme.textDim}}>
+                <th className="text-left py-1 px-2">Club</th>
+                {levels.map(l => <th key={l} className="py-1 px-2">{l}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {clubs.map(club => (
+                <tr key={club} style={{borderTop: `1px solid ${theme.border}`}}>
+                  <td className="text-left py-1 px-2 font-semibold">{club}</td>
+                  {data[club].map((val, i) => <td key={i} className="py-1 px-2">{val}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SwingCorrectionsModal({analysis, theme, onClose}: {analysis: any, theme: Theme, onClose: () => void}) {
+  const clubType = /driver/i.test(analysis.club || "") ? 'driver' : 'irons';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background: "rgba(0,0,0,0.5)"}} onClick={onClose}>
+      <div className="w-full max-w-xl rounded-xl border shadow-lg overflow-hidden" style={{background: theme.panel, borderColor: theme.border}} onClick={e => e.stopPropagation()}>
+        <header className="p-3 flex items-center justify-between" style={{borderBottom: `1px solid ${theme.border}`, background: theme.panelAlt}}>
+          <h3 className="font-semibold">Swing Analysis & Corrections</h3>
+          <button className="text-xs underline" style={{color: theme.brand}} onClick={onClose}>Close</button>
+        </header>
+        <div className="p-4 max-h-[70vh] overflow-y-auto text-sm">
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div><strong style={{color: theme.textDim}}>Typical Shot:</strong> {analysis.typical_shot}</div>
+            <div><strong style={{color: theme.textDim}}>Result:</strong> {analysis.ball_start} start, {analysis.curve} curve</div>
+          </div>
+          <div className="mb-3"><strong style={{color: theme.textDim}}>Tendencies:</strong> {analysis.tendencies}</div>
+
+          {analysis.corrections?.primary?.length > 0 && (
+            <div className="mb-3">
+              <h4 className="font-semibold mb-1">Primary Corrections:</h4>
+              <ul className="list-disc pl-5 space-y-1">
+                {analysis.corrections.primary.map((c: string, i: number) => <li key={i}>{c}</li>)}
+              </ul>
+            </div>
+          )}
+          {analysis.corrections?.[clubType]?.length > 0 && (
+            <div>
+              <h4 className="font-semibold mb-1">{clubType === 'driver' ? "Driver Tips:" : "Iron/Wedge Tips:"}</h4>
+              <ul className="list-disc pl-5 space-y-1">
+                {analysis.corrections[clubType].map((c: string, i: number) => <li key={i}>{c}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
