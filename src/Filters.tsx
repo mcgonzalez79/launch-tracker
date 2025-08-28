@@ -109,7 +109,7 @@ export default function FiltersPanel(props: Props) {
     >
       <header
         className="px-4 py-2 rounded-t-xl"
-        style={{ background: T.panelAlt, borderBottom: `1px solid ${T.border}`, color: T.text }}
+        style={{ background: T.mode === 'light' ? '#dbe8e1' : T.panelAlt, borderBottom: `1px solid ${T.border}`, color: T.text }}
       >
         <div className="text-sm font-medium">Filters</div>
       </header>
