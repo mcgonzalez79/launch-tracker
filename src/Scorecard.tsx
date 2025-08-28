@@ -70,7 +70,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
     <section className="rounded-xl border shadow-sm" style={{ background: T.panel, borderColor: T.border }}>
       <header
         className="px-4 py-2 rounded-t-xl"
-        style={{ background: T.panelAlt, borderBottom: `1px solid ${T.border}` }}
+        style={{ background: T.mode === 'light' ? '#dbe8e1' : T.panelAlt, borderBottom: `1px solid ${T.border}` }}
       >
         <div className="text-sm font-medium">Golf Log / Scorecard</div>
       </header>
