@@ -103,7 +103,7 @@ export default function DashboardCards(props: Props) {
     <div key="kpis" draggable onDragStart={onDragStart("kpis")} onDragOver={onDragOver("kpis")} onDrop={onDrop("kpis")}>
       <Card title="KPIs" theme={T}>
         {hasData ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             <KpiCell label="Carry (avg)" value={kpis.carry.mean.toFixed(1)} unit="yds" />
             <KpiCell label="Ball speed (avg)" value={kpis.ball.mean.toFixed(1)} unit="mph" />
             <KpiCell label="Club speed (avg)" value={kpis.club.mean.toFixed(1)} unit="mph" />
@@ -137,7 +137,7 @@ export default function DashboardCards(props: Props) {
     <div key="shape" draggable onDragStart={onDragStart("shape")} onDragOver={onDragOver("shape")} onDrop={onDrop("shape")}>
       <Card title="Shot Shape (percent of shots)" theme={T}>
         {shapeAngles.length ? (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             <KpiCell label="Hook" value={`${shapePercents.hook}%`} />
             <KpiCell label="Draw" value={`${shapePercents.draw}%`} />
             <KpiCell label="Straight" value={`${shapePercents.straight}%`} />
@@ -202,6 +202,7 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload;
                     if (name === "x") return [`${val?.toFixed?.(1)} yds`, `Lateral${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -251,7 +252,11 @@ export default function DashboardCards(props: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                 <XAxis dataKey="club" tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} />
                 <YAxis tick={{ fill: T.tick, fontSize: 12 }} stroke={T.tick} label={{ value: "Carry (yds)", angle: -90, position: "insideLeft", fill: T.textDim, fontSize: 12 }} />
-                <Tooltip contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }} formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]} />
+                <Tooltip
+                  contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  itemStyle={{ color: T.text }}
+                  formatter={(val: any) => [typeof val === "number" ? val.toFixed(1) : val, "Carry"]}
+                />
                 <Bar dataKey="carry" fill={T.brand} />
               </BarChart>
             </ResponsiveContainer>
@@ -341,6 +346,7 @@ export default function DashboardCards(props: Props) {
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{ background: T.panel, color: T.text, border: `1px solid ${T.border}` }}
+                  itemStyle={{ color: T.text }}
                   formatter={(val: any, name: string, item: any) => {
                     const p = item?.payload as any;
                     if (name === "x") return [`${val?.toFixed?.(1)} mph`, `Club${p?.Club ? ` — ${p.Club}` : ""}`];
@@ -371,7 +377,7 @@ export default function DashboardCards(props: Props) {
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
           <div style={{ overflowX: "auto" }}>
-            <table className="min-w-full text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr style={{ color: T.textDim }}>
                   <th className="text-left py-2 pr-3">Club</th>
@@ -422,9 +428,8 @@ export default function DashboardCards(props: Props) {
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid w-full gap-4">
       {cardOrder.map((key) => cardMap[key] ?? null)}
     </div>
   );
 }
-
