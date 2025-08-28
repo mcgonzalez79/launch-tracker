@@ -14,11 +14,11 @@ type Props = {
   activeScorecardName: string | null;
 };
 
-const Td = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <td className={`p-0 border ${className}`}>{children}</td>
+const Td = ({ children, className = "", T }: { children: React.ReactNode; className?: string; T: Theme }) => (
+  <td className={`p-0 border ${className}`} style={{ borderColor: T.border }}>{children}</td>
 );
-const Th = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <th className={`p-1 text-xs text-center font-normal border ${className}`}>{children}</th>
+const Th = ({ children, className = "", T }: { children: React.ReactNode; className?: string; T: Theme }) => (
+  <th className={`p-1 text-xs text-center font-normal border ${className}`} style={{ borderColor: T.border }}>{children}</th>
 );
 const Input = ({ value, onChange, placeholder = "" }: { value?: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; }) => (
   <input type="text" value={value || ""} onChange={onChange} placeholder={placeholder} className="w-full h-full p-1 bg-transparent text-center text-sm outline-none focus:bg-white focus:bg-opacity-10" />
@@ -127,9 +127,9 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
           <table className="w-full border-collapse text-xs mb-4" style={{ borderColor: T.border }}>
             <thead>
               <tr style={{ background: T.panelAlt }}>
-                <Th className="w-20">Holes</Th>
-                {[...Array(9)].map((_, i) => <Th key={i}>{i + 1}</Th>)}
-                <Th>Total</Th>
+                <Th T={T} className="w-20">Holes</Th>
+                {[...Array(9)].map((_, i) => <Th T={T} key={i}>{i + 1}</Th>)}
+                <Th T={T}>Total</Th>
               </tr>
             </thead>
             <tbody>
@@ -137,9 +137,9 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
                 <tr key={field.key}>
                   <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{field.label}</td>
                   {[...Array(9)].map((_, i) => (
-                    <Td key={i}><Input value={data.holes[i+1]?.[field.key]} onChange={(e) => handleHole(i + 1, field.key, e.target.value)} /></Td>
+                    <Td T={T} key={i}><Input value={data.holes[i+1]?.[field.key]} onChange={(e) => handleHole(i + 1, field.key, e.target.value)} /></Td>
                   ))}
-                  <Td><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 1, 9) || '—'}</div></Td>
+                  <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 1, 9) || '—'}</div></Td>
                 </tr>
               ))}
             </tbody>
@@ -148,9 +148,9 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
           <table className="w-full border-collapse text-xs mb-4" style={{ borderColor: T.border }}>
             <thead>
               <tr style={{ background: T.panelAlt }}>
-                <Th className="w-20">Holes</Th>
-                {[...Array(9)].map((_, i) => <Th key={i}>{i + 10}</Th>)}
-                <Th>Total</Th>
+                <Th T={T} className="w-20">Holes</Th>
+                {[...Array(9)].map((_, i) => <Th T={T} key={i}>{i + 10}</Th>)}
+                <Th T={T}>Total</Th>
               </tr>
             </thead>
             <tbody>
@@ -158,9 +158,9 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
                 <tr key={field.key}>
                   <td className="p-1 border text-center font-medium" style={{ borderColor: T.border }}>{field.label}</td>
                   {[...Array(9)].map((_, i) => (
-                    <Td key={i}><Input value={data.holes[i+10]?.[field.key]} onChange={(e) => handleHole(i + 10, field.key, e.target.value)} /></Td>
+                    <Td T={T} key={i}><Input value={data.holes[i+10]?.[field.key]} onChange={(e) => handleHole(i + 10, field.key, e.target.value)} /></Td>
                   ))}
-                  <Td><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 10, 18) || '—'}</div></Td>
+                  <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{calculateRowTotal(field.key, 10, 18) || '—'}</div></Td>
                 </tr>
               ))}
             </tbody>
@@ -171,19 +171,19 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
         <table className="w-full border-collapse text-xs" style={{ borderColor: T.border }}>
           <thead>
             <tr style={{ background: T.panelAlt }}>
-              {["Final Score", "Eagles", "Birdies", "Par", "Tees", "Bogeys", "Double", "Putts"].map(h => <Th key={h}>{h}</Th>)}
+              {["Final Score", "Eagles", "Birdies", "Par", "Tees", "Bogeys", "Double", "Putts"].map(h => <Th T={T} key={h}>{h}</Th>)}
             </tr>
           </thead>
           <tbody>
             <tr>
-              <Td><Input value={data.summary.finalScore} onChange={e => handleSummary("finalScore", e.target.value)} /></Td>
-              <Td><Input value={data.summary.eagles} onChange={e => handleSummary("eagles", e.target.value)} /></Td>
-              <Td><Input value={data.summary.birdies} onChange={e => handleSummary("birdies", e.target.value)} /></Td>
-              <Td><Input value={data.summary.par} onChange={e => handleSummary("par", e.target.value)} /></Td>
-              <Td><Input value={data.summary.tees} onChange={e => handleSummary("tees", e.target.value)} /></Td>
-              <Td><Input value={data.summary.bogeys} onChange={e => handleSummary("bogeys", e.target.value)} /></Td>
-              <Td><Input value={data.summary.double} onChange={e => handleSummary("double", e.target.value)} /></Td>
-              <Td><Input value={data.summary.putts} onChange={e => handleSummary("putts", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.finalScore} onChange={e => handleSummary("finalScore", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.eagles} onChange={e => handleSummary("eagles", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.birdies} onChange={e => handleSummary("birdies", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.par} onChange={e => handleSummary("par", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.tees} onChange={e => handleSummary("tees", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.bogeys} onChange={e => handleSummary("bogeys", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.double} onChange={e => handleSummary("double", e.target.value)} /></Td>
+              <Td T={T}><Input value={data.summary.putts} onChange={e => handleSummary("putts", e.target.value)} /></Td>
             </tr>
           </tbody>
         </table>
