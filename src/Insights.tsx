@@ -66,7 +66,7 @@ function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
 /* Lightweight KPI tile used across Insights */
 function KpiCell({
   label, value, sub, theme: T
-}: { label: string; value: string; sub?: string; theme: Theme; }) {
+}: { label: string; value: string; sub?: React.ReactNode; theme: Theme; }) {
   return (
     <div
       className="rounded-xl p-4 border"
@@ -101,11 +101,12 @@ export default function Insights({
   // Modal states
   const [isBenchmarkModalOpen, setBenchmarkModalOpen] = useState(false);
   const [isSwingModalOpen, setSwingModalOpen] = useState(false);
+  const [isConsistencyModalOpen, setConsistencyModalOpen] = useState(false);
   
   // Swing matrix data
   const [swingMatrix, setSwingMatrix] = useState<any>(null);
   useEffect(() => {
-    fetch('swing_matrix.json')
+    fetch('/swing_matrix.json')
       .then(res => res.json())
       .then(data => setSwingMatrix(data))
       .catch(err => console.error("Failed to load swing_matrix.json", err));
@@ -387,12 +388,78 @@ export default function Insights({
     </div>
   );
 
-/* ---------- SWINGS (single KPI set; respects filters) ---------- */
-  const selectedClubs = useMemo(
-    () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
-    [filteredOutliers]
+/* ---------- ASSESSMENT (virtual hcap, consistency) ----------- */
+  const consistencyIndex = useMemo(() => {
+    const byClub = groupBy(filteredNoClubRaw.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    const consistencyScores: number[] = [];
+    for (const [, shots] of byClub.entries()) {
+      if (shots.length < 5) continue;
+      const carries = shots.map(s => s.CarryDistance_yds as number);
+      const meanCarry = avg(carries);
+      const stdDevCarry = stddev(carries);
+      if (meanCarry != null && stdDevCarry != null && meanCarry > 0) {
+        const coefficientOfVariation = stdDevCarry / meanCarry;
+        consistencyScores.push(1 - coefficientOfVariation);
+      }
+    }
+    if (!consistencyScores.length) return null;
+    return avg(consistencyScores);
+  }, [filteredNoClubRaw]);
+
+  const virtualHandicap = useMemo(() => {
+    if (!allShots || allShots.length === 0) return null;
+    const byClub = groupBy(allShots.filter(s => isNum(s.CarryDeviationDistance_yds)), s => s.Club || "Unknown");
+    const handicapScores: { hcap: number, weight: number }[] = [];
+    
+    // Simple linear scale: 5 yds std dev = 0 hcap, 25 yds std dev = 25 hcap
+    const mapRange = (val: number, fromLo: number, fromHi: number, toLo: number, toHi: number) => {
+      const p = (val - fromLo) / (fromHi - fromLo);
+      return Math.max(toLo, Math.min(toHi, toLo + p * (toHi - toLo)));
+    };
+
+    for (const [, shots] of byClub.entries()) {
+      if (shots.length < 10) continue;
+      const deviations = shots.map(s => Math.abs(s.CarryDeviationDistance_yds as number));
+      const stdDevLateral = stddev(deviations);
+      if (stdDevLateral != null) {
+        const hcap = mapRange(stdDevLateral, 5, 25, 0, 25);
+        handicapScores.push({ hcap, weight: shots.length });
+      }
+    }
+
+    if (!handicapScores.length) return null;
+    
+    const totalWeight = handicapScores.reduce((sum, s) => sum + s.weight, 0);
+    const weightedSum = handicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
+    return weightedSum / totalWeight;
+  }, [allShots]);
+
+  const assessment = (
+    <div key="assessment" draggable onDragStart={onDragStart("assessment")} onDragOver={onDragOver("assessment")} onDrop={onDrop("assessment")}>
+      <Card title="Assessment" theme={T}>
+        {filteredNoClubRaw.length > 5 ? (
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCell
+              theme={T}
+              label="Consistency Index"
+              value={consistencyIndex != null ? `${(consistencyIndex * 100).toFixed(1)}%` : "—"}
+              sub={<button onClick={() => setConsistencyModalOpen(true)} className="underline">What does this mean?</button>}
+            />
+            <KpiCell
+              theme={T}
+              label="Virtual Handicap"
+              value={virtualHandicap != null ? `≈ ${virtualHandicap.toFixed(1)}` : "—"}
+              sub="Based on lateral dispersion"
+            />
+          </div>
+        ) : (
+           <div className="text-sm" style={{ color: T.textDim }}>Not enough data for an assessment. Keep hitting!</div>
+        )}
+      </Card>
+    </div>
   );
 
+/* ---------- SWINGS (single KPI set; respects filters) ---------- */
   const swingShots = useMemo(() => {
     if (!filteredOutliers.length) return [] as Shot[];
     if (selectedClubs.length === 1) {
@@ -644,6 +711,7 @@ export default function Insights({
     dist,
     high,
     bench,
+    assessment,
     swings,
     records,
     gaps,
@@ -657,6 +725,7 @@ export default function Insights({
       </div>
       {isBenchmarkModalOpen && <BenchmarkModal data={benchChart} levels={benchLevels} theme={T} onClose={() => setBenchmarkModalOpen(false)} />}
       {isSwingModalOpen && swingAnalysis && <SwingCorrectionsModal analysis={swingAnalysis} theme={T} onClose={() => setSwingModalOpen(false)} />}
+      {isConsistencyModalOpen && <ConsistencyModal theme={T} onClose={() => setConsistencyModalOpen(false)} />}
     </>
   );
 }
@@ -725,6 +794,28 @@ function SwingCorrectionsModal({analysis, theme, onClose}: {analysis: any, theme
               </ul>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConsistencyModal({theme, onClose}: {theme: Theme, onClose: () => void}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background: "rgba(0,0,0,0.5)"}} onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border shadow-lg overflow-hidden" style={{background: theme.panel, borderColor: theme.border}} onClick={e => e.stopPropagation()}>
+        <header className="p-3 flex items-center justify-between" style={{borderBottom: `1px solid ${theme.border}`, background: theme.panelAlt}}>
+          <h3 className="font-semibold">Consistency Index</h3>
+          <button className="text-xs underline" style={{color: theme.brand}} onClick={onClose}>Close</button>
+        </header>
+        <div className="p-4 text-sm space-y-2">
+          <p>This score measures the statistical variation of your carry distance for each club, then averages those scores. A higher score means less variation.</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>≥ 85%:</strong> Excellent consistency (tour-like, under stable conditions)</li>
+            <li><strong>75–85%:</strong> Solid; gapping and strategy decisions are reliable</li>
+            <li><strong>65–75%:</strong> Inconsistent; work on strike quality/face control before trusting averages</li>
+            <li><strong>&lt; 65%:</strong> Not reliable yet; collect more shots, simplify goals, add drills</li>
+          </ul>
         </div>
       </div>
     </div>
