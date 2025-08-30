@@ -351,7 +351,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights ordering
-  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "swings", "records", "gaps", "progress"];
+  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "assessment", "swings", "records", "gaps", "progress"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
@@ -477,16 +477,6 @@ export default function App() {
             </div>
           </div>
         </header>
-
-        {/* Mobile tabs row */}
-        <div className="md:hidden border-b" style={{ borderColor: T.border, background: T.panel }}>
-          <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-2">
-            <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
-            <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
-            <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
-            <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
-          </div>
-        </div>
 
         {/* Mobile Filters Drawer */}
         {filtersOpen ? (
