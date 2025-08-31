@@ -460,6 +460,11 @@ export default function Insights({
   );
 
 /* ---------- SWINGS (single KPI set; respects filters) ---------- */
+  const selectedClubs = useMemo(
+    () => Array.from(new Set(filteredOutliers.map(s => s.Club || "Unknown"))),
+    [filteredOutliers]
+  );
+
   const swingShots = useMemo(() => {
     if (!filteredOutliers.length) return [] as Shot[];
     if (selectedClubs.length === 1) {
