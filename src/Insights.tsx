@@ -433,12 +433,32 @@ export default function Insights({
     const weightedSum = handicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
     return weightedSum / totalWeight;
   }, [allShots]);
+  
+  const gapsRows = useMemo(() => {
+    const BASE = allShots ?? filteredNoClubRaw;
+    const withCarry = BASE.filter(s => isNum(s.CarryDistance_yds));
+    const byClub = groupBy(withCarry, s => s.Club || "Unknown");
+    const order = new Map(allClubs.map((c,i)=>[c,i]));
+    const avgs: { club: string; carry: number }[] = [];
+    for (const [club, rows] of byClub.entries()) {
+      const carries = rows.map(s => s.CarryDistance_yds as number);
+      const a = avg(carries);
+      if (a != null) avgs.push({ club, carry: a });
+    }
+    avgs.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
+    const out: { clubs: string; note: string }[] = [];
+    for (let i=1;i<avgs.length;i++) {
+      const d = Math.abs(avgs[i].carry - avgs[i-1].carry);
+      if (d < 8) out.push({ clubs: `${avgs[i-1].club} ↔ ${avgs[i].club}`, note: `Avg carry gap small (${d.toFixed(1)} yds)` });
+    }
+    return out;
+  }, [allShots, filteredNoClubRaw, allClubs]);
 
   const assessment = (
     <div key="assessment" draggable onDragStart={onDragStart("assessment")} onDragOver={onDragOver("assessment")} onDrop={onDrop("assessment")}>
       <Card title="Assessment" theme={T}>
         {filteredNoClubRaw.length > 5 ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KpiCell
               theme={T}
               label="Consistency Index"
@@ -450,6 +470,18 @@ export default function Insights({
               label="Virtual Handicap"
               value={virtualHandicap != null ? `≈ ${virtualHandicap.toFixed(1)}` : "—"}
               sub="Based on lateral dispersion"
+            />
+            <KpiCell
+              theme={T}
+              label="Gapping Warnings"
+              value={gapsRows.length > 0 ? String(gapsRows.length) : "None"}
+              sub={
+                gapsRows.length > 0 ? (
+                  <ul className="text-left list-disc pl-4 text-xs">
+                    {gapsRows.map((g, i) => <li key={i}>{g.note}</li>)}
+                  </ul>
+                ) : "No significant gaps found."
+              }
             />
           </div>
         ) : (
@@ -618,39 +650,6 @@ export default function Insights({
     </div>
   );
 
-  /* ---------- GAPS (simple gapping warnings; ALL data — ignores filters) ---------- */
-  const gapsRows = useMemo(() => {
-    const BASE = allShots ?? filteredNoClubRaw;
-    const withCarry = BASE.filter(s => isNum(s.CarryDistance_yds));
-    const byClub = groupBy(withCarry, s => s.Club || "Unknown");
-    const order = new Map(allClubs.map((c,i)=>[c,i]));
-    const avgs: { club: string; carry: number }[] = [];
-    for (const [club, rows] of byClub.entries()) {
-      const carries = rows.map(s => s.CarryDistance_yds as number);
-      const a = avg(carries);
-      if (a != null) avgs.push({ club, carry: a });
-    }
-    avgs.sort((a,b)=> (order.get(a.club) ?? 999) - (order.get(b.club) ?? 999));
-    const out: { clubs: string; note: string }[] = [];
-    for (let i=1;i<avgs.length;i++) {
-      const d = Math.abs(avgs[i].carry - avgs[i-1].carry);
-      if (d < 8) out.push({ clubs: `${avgs[i-1].club} ↔ ${avgs[i].club}`, note: `Avg carry gap small (${d.toFixed(1)} yds)` });
-    }
-    return out;
-  }, [allShots, filteredNoClubRaw, allClubs]);
-
-  const gaps = (
-    <div key="gaps" draggable onDragStart={onDragStart("gaps")} onDragOver={onDragOver("gaps")} onDrop={onDrop("gaps")}>
-      <Card title="Gapping Warnings" theme={T}>
-        {gapsRows.length ? (
-          <ul className="text-sm list-disc pl-6" style={{ color: T.text }}>
-            {gapsRows.map((g,i)=>(<li key={i}>{g.clubs}: {g.note}</li>))}
-          </ul>
-        ) : <div className="text-sm" style={{ color: T.textDim }}>No warnings.</div>}
-      </Card>
-    </div>
-  );
-
   /* ---------- PROGRESS (carry over sessions for selected club; FILTERED) ---------- */
   const progressClub = useMemo(() => {
     const clubs = Array.from(new Set(filteredNoClubOutliers.map(s => s.Club)));
@@ -719,7 +718,6 @@ export default function Insights({
     assessment,
     swings,
     records,
-    gaps,
     progress
   };
 
