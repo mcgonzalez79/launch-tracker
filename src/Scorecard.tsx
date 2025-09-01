@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { ScorecardData, HoleData } from "./utils";
 
@@ -31,9 +31,6 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
   const handleHole = (hole: number, field: keyof HoleData, value: string) => {
     onUpdate({ ...data, holes: { ...data.holes, [hole]: { ...data.holes[hole], [field]: value } } });
   };
-  const handleSummary = (field: keyof ScorecardData['summary'], value: string) => {
-    onUpdate({ ...data, summary: { ...data.summary, [field]: value } });
-  };
   const handleNotes = (value: string) => {
     onUpdate({ ...data, notes: value });
   };
@@ -64,6 +61,44 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
     }
     return total;
   };
+
+  const summaryValues = useMemo(() => {
+    const holes = data.holes;
+    let eagles = 0, birdies = 0, pars = 0, bogeys = 0, doubles = 0, teesPlayed = 0;
+
+    for (let i = 1; i <= 18; i++) {
+      const hole = holes[i];
+      if (hole && hole.stroke && !isNaN(Number(hole.stroke))) {
+        teesPlayed++;
+        if (hole.par && !isNaN(Number(hole.par))) {
+          const stroke = Number(hole.stroke);
+          const par = Number(hole.par);
+          const diff = stroke - par;
+          if (diff === -2) eagles++;
+          else if (diff === -1) birdies++;
+          else if (diff === 0) pars++;
+          else if (diff === 1) bogeys++;
+          else if (diff === 2) doubles++;
+        }
+      }
+    }
+
+    const front9Strokes = calculateRowTotal('stroke', 1, 9);
+    const back9Strokes = calculateRowTotal('stroke', 10, 18);
+    const finalScore = front9Strokes + back9Strokes;
+
+    const front9Putts = calculateRowTotal('putts', 1, 9);
+    const back9Putts = calculateRowTotal('putts', 10, 18);
+    const totalPutts = front9Putts + back9Putts;
+
+    const str = (n: number) => n > 0 ? String(n) : "";
+
+    return {
+      finalScore: str(finalScore), eagles: str(eagles), birdies: str(birdies),
+      par: str(pars), tees: str(teesPlayed), bogeys: str(bogeys),
+      double: str(doubles), putts: str(totalPutts),
+    };
+  }, [data.holes]);
 
 
   return (
@@ -176,14 +211,14 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
           </thead>
           <tbody>
             <tr>
-              <Td T={T}><Input value={data.summary.finalScore} onChange={e => handleSummary("finalScore", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.eagles} onChange={e => handleSummary("eagles", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.birdies} onChange={e => handleSummary("birdies", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.par} onChange={e => handleSummary("par", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.tees} onChange={e => handleSummary("tees", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.bogeys} onChange={e => handleSummary("bogeys", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.double} onChange={e => handleSummary("double", e.target.value)} /></Td>
-              <Td T={T}><Input value={data.summary.putts} onChange={e => handleSummary("putts", e.target.value)} /></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.finalScore || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.eagles || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.birdies || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.par || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.tees || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.bogeys || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.double || '—'}</div></Td>
+              <Td T={T}><div className="w-full h-full p-1 text-center text-sm">{summaryValues.putts || '—'}</div></Td>
             </tr>
           </tbody>
         </table>
