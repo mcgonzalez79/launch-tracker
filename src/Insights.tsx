@@ -106,7 +106,7 @@ export default function Insights({
   // Swing matrix data
   const [swingMatrix, setSwingMatrix] = useState<any>(null);
   useEffect(() => {
-    fetch('/swing_matrix.json')
+    fetch('swing_matrix.json')
       .then(res => res.json())
       .then(data => setSwingMatrix(data))
       .catch(err => console.error("Failed to load swing_matrix.json", err));
