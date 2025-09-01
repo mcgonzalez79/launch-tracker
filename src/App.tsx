@@ -351,7 +351,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("launch-tracker:card-order", JSON.stringify(cardOrder)); } catch {} }, [cardOrder]);
 
   // Insights ordering
-  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "assessment", "swings", "records", "gaps", "progress"];
+  const INSIGHTS_DEFAULT = ["dist", "high", "bench", "assessment", "swings", "records", "progress"];
   const [insightsOrder, setInsightsOrder] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("launch-tracker:insights-order");
