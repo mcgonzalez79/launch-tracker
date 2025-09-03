@@ -106,7 +106,7 @@ export default function Insights({
   // Swing matrix data
   const [swingMatrix, setSwingMatrix] = useState<any>(null);
   useEffect(() => {
-    fetch('swing_matrix.json')
+    fetch('/swing_matrix.json')
       .then(res => res.json())
       .then(data => setSwingMatrix(data))
       .catch(err => console.error("Failed to load swing_matrix.json", err));
@@ -407,11 +407,9 @@ export default function Insights({
   }, [filteredNoClubRaw]);
 
   const virtualHandicap = useMemo(() => {
-    if (!allShots || allShots.length === 0) return null;
-    const byClub = groupBy(allShots.filter(s => isNum(s.CarryDeviationDistance_yds)), s => s.Club || "Unknown");
-    const handicapScores: { hcap: number, weight: number }[] = [];
-    
-    // Simple linear scale: 5 yds std dev = 0 hcap, 25 yds std dev = 25 hcap
+    // 1. Calculate handicap based on lateral dispersion (respects filters)
+    const byClub = groupBy(filteredNoClubRaw.filter(s => isNum(s.CarryDeviationDistance_yds)), s => s.Club || "Unknown");
+    const latHandicapScores: { hcap: number, weight: number }[] = [];
     const mapRange = (val: number, fromLo: number, fromHi: number, toLo: number, toHi: number) => {
       const p = (val - fromLo) / (fromHi - fromLo);
       return Math.max(toLo, Math.min(toHi, toLo + p * (toHi - toLo)));
@@ -422,17 +420,31 @@ export default function Insights({
       const deviations = shots.map(s => Math.abs(s.CarryDeviationDistance_yds as number));
       const stdDevLateral = stddev(deviations);
       if (stdDevLateral != null) {
-        const hcap = mapRange(stdDevLateral, 5, 25, 0, 25);
-        handicapScores.push({ hcap, weight: shots.length });
+        const hcap = mapRange(stdDevLateral, 5, 25, 0, 25); // 5yd std dev = 0hcap, 25yd = 25hcap
+        latHandicapScores.push({ hcap, weight: shots.length });
       }
     }
 
-    if (!handicapScores.length) return null;
+    let lateralHandicap: number | null = null;
+    if (latHandicapScores.length > 0) {
+      const totalWeight = latHandicapScores.reduce((sum, s) => sum + s.weight, 0);
+      const weightedSum = latHandicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
+      lateralHandicap = weightedSum / totalWeight;
+    }
+
+    // 2. Calculate handicap based on depth consistency (from consistencyIndex)
+    let depthHandicap: number | null = null;
+    if (consistencyIndex != null) {
+      // 95% consistency = 0 hcap, 75% consistency = 25 hcap
+      depthHandicap = mapRange(consistencyIndex, 0.95, 0.75, 0, 25);
+    }
     
-    const totalWeight = handicapScores.reduce((sum, s) => sum + s.weight, 0);
-    const weightedSum = handicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
-    return weightedSum / totalWeight;
-  }, [allShots]);
+    // 3. Blend them
+    if (lateralHandicap !== null && depthHandicap !== null) {
+      return 0.7 * lateralHandicap + 0.3 * depthHandicap;
+    }
+    return lateralHandicap ?? depthHandicap; // Return whichever is available, or null
+  }, [filteredNoClubRaw, consistencyIndex]);
   
   const gapsRows = useMemo(() => {
     const BASE = allShots ?? filteredNoClubRaw;
@@ -469,7 +481,7 @@ export default function Insights({
               theme={T}
               label="Virtual Handicap"
               value={virtualHandicap != null ? `≈ ${virtualHandicap.toFixed(1)}` : "—"}
-              sub="Based on lateral dispersion"
+              sub="Dispersion & consistency score"
             />
             <KpiCell
               theme={T}
