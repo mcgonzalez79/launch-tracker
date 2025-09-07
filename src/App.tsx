@@ -6,6 +6,7 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
 import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu } from "./components/UI";
+import { checkAchievements } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
@@ -73,6 +74,42 @@ export default function App() {
     try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
+  
+  // Achievements
+  const [unlockedAchievements, setUnlockedAchievements] = useState<Set<string>>(() => {
+    try { const saved = localStorage.getItem("swingtrackr:achievements"); return saved ? new Set(JSON.parse(saved)) : new Set(); } catch { return new Set(); }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("swingtrackr:achievements", JSON.stringify(Array.from(unlockedAchievements))); } catch {}
+  }, [unlockedAchievements]);
+
+  // We need a ref to pass the newly imported shots to the achievement checker effect
+  const newShotsRef = useRef<Shot[]>([]);
+
+  // Effect to check for achievements when shots change
+  useEffect(() => {
+    if (newShotsRef.current.length > 0) {
+      const { newlyUnlocked } = checkAchievements({
+        allShots: shots,
+        newShots: newShotsRef.current,
+        unlockedAchievements,
+      });
+      
+      if (newlyUnlocked.length > 0) {
+        newlyUnlocked.forEach((ach, i) => {
+          setTimeout(() => {
+            toast({ type: "success", text: `🏆 Achievement Unlocked: ${ach.name}` });
+          }, i * 500); // Stagger toasts
+        });
+        setUnlockedAchievements(prev => {
+          const next = new Set(prev);
+          newlyUnlocked.forEach(ach => next.add(ach.id));
+          return next;
+        });
+      }
+      newShotsRef.current = []; // Clear the ref after checking
+    }
+  }, [shots, unlockedAchievements]); // Dependency on shots triggers the check
 
   // Sessions & clubs (always derived from current shots)
   const sessions = useMemo(
@@ -92,6 +129,7 @@ export default function App() {
      Import / Export
   ========================= */
   function mergeImportedShots(newShots: Shot[], filename: string) {
+    newShotsRef.current = newShots; // Store new shots for the achievement checker
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
     const existing = new Map(shots.map(s => [keyOf(s), s]));
