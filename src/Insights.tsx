@@ -9,6 +9,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line
 } from "recharts";
+import { groupBy, mean, stddev } from "./utils";
 
 /* =========================
    Props
@@ -37,22 +38,7 @@ type Props = {
 ========================= */
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-function groupBy<T>(rows: T[], keyFn: (x: T) => string) {
-  const m = new Map<string, T[]>();
-  for (const r of rows) {
-    const k = keyFn(r);
-    const arr = m.get(k);
-    if (arr) arr.push(r); else m.set(k, [r]);
-  }
-  return m;
-}
 function avg(nums: number[]) { return nums.length ? nums.reduce((a,b)=>a+b,0) / nums.length : null; }
-function stddev(nums: number[]) {
-  if (nums.length < 2) return null;
-  const m = avg(nums)!;
-  const v = nums.reduce((a,b)=>a + (b-m)**2, 0) / nums.length;
-  return Math.sqrt(v);
-}
 function maxBy<T>(arr: T[], score: (t: T) => number | null | undefined) {
   let best: T | null = null; let bestScore = -Infinity;
   for (const t of arr) {
