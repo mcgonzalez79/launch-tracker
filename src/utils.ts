@@ -42,6 +42,16 @@ export const coalesceSmash = (s:Shot)=> s.SmashFactor ?? (s.ClubSpeed_mph && s.B
 export const coalesceFaceToPath = (s:Shot)=> s.FaceToPath_deg ?? (s.ClubFace_deg!==undefined && s.ClubPath_deg!==undefined ? s.ClubFace_deg - s.ClubPath_deg : undefined);
 export const fmtNum = (v:number|undefined, fixed:number, suffix:string)=> v==null? "-" : `${v.toFixed(fixed)}${suffix}`;
 
+export function groupBy<T>(rows: T[], keyFn: (x: T) => string): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = keyFn(r);
+    const arr = m.get(k);
+    if (arr) arr.push(r); else m.set(k, [r]);
+  }
+  return m;
+}
+
 /* Header normalization + map */
 export const normalizeHeader = (raw:string) => {
   let s=String(raw||"").trim(); s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
