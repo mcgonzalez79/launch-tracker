@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import type { Theme } from "../theme";
+import type { Achievement } from "../achievements";
 
 /* =========================
    Icons
@@ -127,130 +128,30 @@ export function TopTab({
 }
 
 /* =========================
-   Chip (filters)
+   Achievement Notification Modal
 ========================= */
-export function Chip({
-  label,
-  selected,
-  onClick,
-  theme: T,
-  title,
-}: {
-  label: string;
-  selected?: boolean;
-  onClick?: () => void;
-  theme: Theme;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className="px-2 py-1 rounded-md text-xs border transition-colors"
-      style={{
-        background: selected ? T.brandMuted : T.panelAlt,
-        color: T.text,
-        borderColor: selected ? T.brand : T.border,
-      }}
-      onMouseOver={(e) => {
-        if (selected) e.currentTarget.style.backgroundColor = T.brand;
-        else e.currentTarget.style.backgroundColor = T.panel;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = selected ? T.brandMuted : T.panelAlt;
-      }}
-    >
-      {label}
-    </button>
-  );
-}
+export function AchievementNotificationModal({ achievements, onClose, theme: T }: { achievements: Achievement[], onClose: () => void, theme: Theme }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 10000); // Auto-close after 10 seconds
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
-/* =========================
-   Buttons
-========================= */
-const focusRing = (T: Theme) => ({
-  boxShadow: `0 0 0 2px ${T.white}, 0 0 0 4px ${T.brandMuted}`,
-});
-
-export function MutedButton({
-  children,
-  onClick,
-  theme: T,
-  title,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  theme: Theme;
-  title?: string;
-  disabled?: boolean;
-}) {
   return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={disabled ? undefined : onClick}
-      className="px-3 py-1 rounded-md border text-sm transition-colors"
-      style={{
-        background: T.panel,
-        color: disabled ? T.textDim : T.text,
-        borderColor: T.border,
-        opacity: disabled ? 0.7 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-      onMouseOver={(e) => {
-        if (!disabled) e.currentTarget.style.backgroundColor = T.panelAlt;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = T.panel;
-      }}
-      onFocus={(e) => Object.assign(e.currentTarget.style, focusRing(T))}
-      onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function PrimaryButton({
-  children,
-  onClick,
-  theme: T,
-  title,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  theme: Theme;
-  title?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={disabled ? undefined : onClick}
-      className="px-3 py-1 rounded-md border text-sm transition-colors"
-      style={{
-        background: disabled ? T.brandMuted : T.brand,
-        color: T.white,
-        borderColor: disabled ? T.brandMuted : T.brand,
-        opacity: disabled ? 0.8 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-      onMouseOver={(e) => {
-        if (!disabled) e.currentTarget.style.backgroundColor = T.brandHover;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.backgroundColor = disabled ? T.brandMuted : T.brand;
-      }}
-      onFocus={(e) => Object.assign(e.currentTarget.style, focusRing(T))}
-      onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
-    >
-      {children}
-    </button>
+    <div className="fixed bottom-4 right-4 w-full max-w-sm z-50">
+      <div className="rounded-lg border shadow-lg" style={{ background: T.panel, borderColor: T.border, color: T.text }}>
+        <header className="p-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.border}`, background: T.panelAlt }}>
+          <h3 className="font-semibold text-base">🏆 Achievements Unlocked!</h3>
+          <button className="text-xs underline" style={{ color: T.brand }} onClick={onClose}>Close</button>
+        </header>
+        <div className="p-4 max-h-64 overflow-y-auto text-sm space-y-3">
+          {achievements.map(ach => (
+            <div key={ach.id}>
+              <div className="font-semibold">{ach.name}</div>
+              <div className="text-xs" style={{ color: T.textDim }}>{ach.description}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
