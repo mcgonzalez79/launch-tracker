@@ -5,7 +5,7 @@ import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
-import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu } from "./components/UI";
+import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal } from "./components/UI";
 import { ALL_ACHIEVEMENTS, checkAchievements, Achievement } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
@@ -85,6 +85,7 @@ export default function App() {
 
   const newShotsRef = useRef<Shot[]>([]);
   const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
+  const [newlyUnlockedBatch, setNewlyUnlockedBatch] = useState<Achievement[]>([]);
 
   useEffect(() => {
     if (shots.length > lastCheckedCount && newShotsRef.current.length > 0) {
@@ -102,11 +103,7 @@ export default function App() {
             toast({ type: "success", text: `🏆 Achievement Unlocked: ${firstSwings.name}` });
           }
         } else {
-          newlyUnlocked.forEach((ach, i) => {
-            setTimeout(() => {
-              toast({ type: "success", text: `🏆 Achievement Unlocked: ${ach.name}` });
-            }, i * 500);
-          });
+          setNewlyUnlockedBatch(newlyUnlocked);
         }
         
         setUnlockedAchievements(prev => {
@@ -692,6 +689,7 @@ export default function App() {
         <Footer T={T} />
         
         {isAchievementsModalOpen && <AchievementsModal theme={T} unlocked={unlockedAchievements} onClose={() => setAchievementsModalOpen(false)} />}
+        {newlyUnlockedBatch.length > 0 && <AchievementNotificationModal achievements={newlyUnlockedBatch} onClose={() => setNewlyUnlockedBatch([])} theme={T} />}
 
         {/* Toasts */}
         <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
