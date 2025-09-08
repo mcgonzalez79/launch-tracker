@@ -34,6 +34,7 @@ type Props = {
   onPrintClubAverages: () => void;
   onDeleteSession: () => void;
   onDeleteAll: () => void;
+  onShowAchievements: () => void;
 };
 
 export default function FiltersPanel(props: Props) {
@@ -62,6 +63,7 @@ export default function FiltersPanel(props: Props) {
     onPrintClubAverages,
     onDeleteSession,
     onDeleteAll,
+    onShowAchievements,
   } = props;
 
   const hasClubs = clubs && clubs.length > 0;
@@ -297,28 +299,31 @@ export default function FiltersPanel(props: Props) {
             </button>
           </div>
         </div>
-
-        {/* 7) Print club averages (full width) */}
-        <button
-          className="w-full rounded-md px-3 py-2 border text-sm mb-2"
-          style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-          onClick={onPrintClubAverages}
-          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.panel; }}
-          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
-        >
-          Print Club Averages
-        </button>
-
-        {/* 8) Export CSV (full width) */}
-        <button
-          className="w-full rounded-md px-3 py-2 border text-sm mb-2"
-          style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-          onClick={onExportCSV}
-          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.panel; }}
-          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
-        >
-          Export CSV
-        </button>
+        
+        <div className="grid grid-cols-1 gap-2 mb-2">
+          {/* 7) View Achievements, Print, Export */}
+          <button
+            className="w-full rounded-md px-3 py-2 border text-sm"
+            style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+            onClick={onShowAchievements}
+          >
+            View Achievements
+          </button>
+          <button
+            className="w-full rounded-md px-3 py-2 border text-sm"
+            style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+            onClick={onPrintClubAverages}
+          >
+            Print Club Averages
+          </button>
+          <button
+            className="w-full rounded-md px-3 py-2 border text-sm"
+            style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+            onClick={onExportCSV}
+          >
+            Export CSV
+          </button>
+        </div>
 
         {/* 9) Delete row: Session + All */}
         <div className="grid grid-cols-2 gap-2">
