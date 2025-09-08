@@ -6,7 +6,7 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
 import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu } from "./components/UI";
-import { checkAchievements } from "./achievements";
+import { ALL_ACHIEVEMENTS, checkAchievements, Achievement } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
@@ -83,33 +83,42 @@ export default function App() {
     try { localStorage.setItem("swingtrackr:achievements", JSON.stringify(Array.from(unlockedAchievements))); } catch {}
   }, [unlockedAchievements]);
 
-  // We need a ref to pass the newly imported shots to the achievement checker effect
   const newShotsRef = useRef<Shot[]>([]);
+  const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
 
-  // Effect to check for achievements when shots change
   useEffect(() => {
-    if (newShotsRef.current.length > 0) {
+    if (shots.length > lastCheckedCount && newShotsRef.current.length > 0) {
+      const isFirstImport = lastCheckedCount === 0;
       const { newlyUnlocked } = checkAchievements({
         allShots: shots,
         newShots: newShotsRef.current,
         unlockedAchievements,
       });
-      
+
       if (newlyUnlocked.length > 0) {
-        newlyUnlocked.forEach((ach, i) => {
-          setTimeout(() => {
-            toast({ type: "success", text: `🏆 Achievement Unlocked: ${ach.name}` });
-          }, i * 500); // Stagger toasts
-        });
+        if (isFirstImport) {
+          const firstSwings = newlyUnlocked.find(a => a.id === 'first_swings');
+          if (firstSwings) {
+            toast({ type: "success", text: `🏆 Achievement Unlocked: ${firstSwings.name}` });
+          }
+        } else {
+          newlyUnlocked.forEach((ach, i) => {
+            setTimeout(() => {
+              toast({ type: "success", text: `🏆 Achievement Unlocked: ${ach.name}` });
+            }, i * 500);
+          });
+        }
+        
         setUnlockedAchievements(prev => {
           const next = new Set(prev);
           newlyUnlocked.forEach(ach => next.add(ach.id));
           return next;
         });
       }
-      newShotsRef.current = []; // Clear the ref after checking
+      newShotsRef.current = [];
+      setLastCheckedCount(shots.length);
     }
-  }, [shots, unlockedAchievements]); // Dependency on shots triggers the check
+  }, [shots, lastCheckedCount, unlockedAchievements]);
 
   // Sessions & clubs (always derived from current shots)
   const sessions = useMemo(
@@ -129,7 +138,7 @@ export default function App() {
      Import / Export
   ========================= */
   function mergeImportedShots(newShots: Shot[], filename: string) {
-    newShotsRef.current = newShots; // Store new shots for the achievement checker
+    newShotsRef.current = newShots;
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
     const existing = new Map(shots.map(s => [keyOf(s), s]));
@@ -459,8 +468,9 @@ export default function App() {
 
 
   /* =========================
-     Layout / Filters drawer
+     Layout / Modals
   ========================= */
+  const [isAchievementsModalOpen, setAchievementsModalOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
@@ -551,6 +561,7 @@ export default function App() {
                   onPrintClubAverages={onPrintClubAverages}
                   onDeleteSession={onDeleteSession}
                   onDeleteAll={onDeleteAll}
+                  onShowAchievements={() => setAchievementsModalOpen(true)}
                 />
               </div>
             </div>
@@ -587,6 +598,7 @@ export default function App() {
                 onPrintClubAverages={onPrintClubAverages}
                 onDeleteSession={onDeleteSession}
                 onDeleteAll={onDeleteAll}
+                onShowAchievements={() => setAchievementsModalOpen(true)}
               />
             </div>
 
@@ -678,6 +690,8 @@ export default function App() {
         </main>
 
         <Footer T={T} />
+        
+        {isAchievementsModalOpen && <AchievementsModal theme={T} unlocked={unlockedAchievements} onClose={() => setAchievementsModalOpen(false)} />}
 
         {/* Toasts */}
         <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
@@ -736,6 +750,38 @@ function PrintableClubAverages({ rows }: { rows: ClubRow[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* =========================
+   Achievements Modal
+========================= */
+function AchievementsModal({ theme: T, unlocked, onClose }: { theme: Theme; unlocked: Set<string>; onClose: () => void; }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border shadow-lg overflow-hidden" style={{ background: T.panel, borderColor: T.border }} onClick={e => e.stopPropagation()}>
+        <header className="p-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.border}`, background: T.panelAlt }}>
+          <h3 className="font-semibold">Achievements</h3>
+          <button className="text-xs underline" style={{ color: T.brand }} onClick={onClose}>Close</button>
+        </header>
+        <div className="max-h-[70vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2">
+            {ALL_ACHIEVEMENTS.map(ach => {
+              const isUnlocked = unlocked.has(ach.id);
+              return (
+                <div key={ach.id} className="p-4 flex items-start gap-4" style={{ borderBottom: `1px solid ${T.border}`, opacity: isUnlocked ? 1 : 0.4 }}>
+                  <div className="text-2xl pt-0.5">{isUnlocked ? '🏆' : '🔒'}</div>
+                  <div>
+                    <div className="font-semibold" style={{ color: isUnlocked ? T.text : T.textDim }}>{ach.name}</div>
+                    <div className="text-xs" style={{ color: T.textDim }}>{ach.description}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
