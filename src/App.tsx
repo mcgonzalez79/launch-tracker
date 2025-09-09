@@ -89,7 +89,6 @@ export default function App() {
 
   useEffect(() => {
     if (shots.length > lastCheckedCount && newShotsRef.current.length > 0) {
-      const isFirstImport = lastCheckedCount === 0;
       const { newlyUnlocked } = checkAchievements({
         allShots: shots,
         newShots: newShotsRef.current,
@@ -97,14 +96,7 @@ export default function App() {
       });
 
       if (newlyUnlocked.length > 0) {
-        if (isFirstImport) {
-          const firstSwings = newlyUnlocked.find(a => a.id === 'first_swings');
-          if (firstSwings) {
-            toast({ type: "success", text: `🏆 Achievement Unlocked: ${firstSwings.name}` });
-          }
-        } else {
-          setNewlyUnlockedBatch(newlyUnlocked);
-        }
+        setNewlyUnlockedBatch(newlyUnlocked);
         
         setUnlockedAchievements(prev => {
           const next = new Set(prev);
