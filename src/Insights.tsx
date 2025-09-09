@@ -9,7 +9,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line
 } from "recharts";
-import { groupBy, mean, stddev } from "./utils";
+import { groupBy, mean, stddev, calculateConsistencyIndex, calculateVirtualHandicap } from "./utils";
 
 /* =========================
    Props
@@ -375,67 +375,13 @@ export default function Insights({
   );
 
 /* ---------- ASSESSMENT (virtual hcap, consistency) ----------- */
-  const consistencyIndex = useMemo(() => {
-    const byClub = groupBy(filteredNoClubRaw.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
-    const consistencyScores: number[] = [];
-    for (const [, shots] of byClub.entries()) {
-      if (shots.length < 5) continue;
-      const carries = shots.map(s => s.CarryDistance_yds as number);
-      const meanCarry = avg(carries);
-      const stdDevCarry = stddev(carries);
-      if (meanCarry != null && stdDevCarry != null && meanCarry > 0) {
-        const coefficientOfVariation = stdDevCarry / meanCarry;
-        consistencyScores.push(1 - coefficientOfVariation);
-      }
-    }
-    if (!consistencyScores.length) return null;
-    return avg(consistencyScores);
-  }, [filteredNoClubRaw]);
-
-  const virtualHandicap = useMemo(() => {
-    // 1. Calculate handicap based on lateral dispersion (respects filters)
-    const byClub = groupBy(filteredNoClubRaw.filter(s => isNum(s.CarryDeviationDistance_yds)), s => s.Club || "Unknown");
-    const latHandicapScores: { hcap: number, weight: number }[] = [];
-    const mapRange = (val: number, fromLo: number, fromHi: number, toLo: number, toHi: number) => {
-      const p = (val - fromLo) / (fromHi - fromLo);
-      return Math.max(toLo, Math.min(toHi, toLo + p * (toHi - toLo)));
-    };
-
-    for (const [, shots] of byClub.entries()) {
-      if (shots.length < 10) continue;
-      const deviations = shots.map(s => Math.abs(s.CarryDeviationDistance_yds as number));
-      const stdDevLateral = stddev(deviations);
-      if (stdDevLateral != null) {
-        const hcap = mapRange(stdDevLateral, 5, 25, 0, 25); // 5yd std dev = 0hcap, 25yd = 25hcap
-        latHandicapScores.push({ hcap, weight: shots.length });
-      }
-    }
-
-    let lateralHandicap: number | null = null;
-    if (latHandicapScores.length > 0) {
-      const totalWeight = latHandicapScores.reduce((sum, s) => sum + s.weight, 0);
-      const weightedSum = latHandicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
-      lateralHandicap = weightedSum / totalWeight;
-    }
-
-    // 2. Calculate handicap based on depth consistency (from consistencyIndex)
-    let depthHandicap: number | null = null;
-    if (consistencyIndex != null) {
-      // 95% consistency = 0 hcap, 75% consistency = 25 hcap
-      depthHandicap = mapRange(consistencyIndex, 0.95, 0.75, 0, 25);
-    }
-    
-    // 3. Blend them
-    if (lateralHandicap !== null && depthHandicap !== null) {
-      return 0.7 * lateralHandicap + 0.3 * depthHandicap;
-    }
-    return lateralHandicap ?? depthHandicap; // Return whichever is available, or null
-  }, [filteredNoClubRaw, consistencyIndex]);
+  const consistencyIndex = useMemo(() => calculateConsistencyIndex(filteredNoClubRaw), [filteredNoClubRaw]);
+  const virtualHandicap = useMemo(() => calculateVirtualHandicap(filteredNoClubRaw), [filteredNoClubRaw]);
   
   const gapsRows = useMemo(() => {
     const BASE = allShots ?? filteredNoClubRaw;
     const withCarry = BASE.filter(s => isNum(s.CarryDistance_yds));
-    const byClub = groupBy(withCarry, s => s.Club || "Unknown");
+    const byClub = groupBy(withCarry, (s: Shot) => s.Club || "Unknown");
     const order = new Map(allClubs.map((c,i)=>[c,i]));
     const avgs: { club: string; carry: number }[] = [];
     for (const [club, rows] of byClub.entries()) {
