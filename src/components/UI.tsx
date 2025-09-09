@@ -137,8 +137,8 @@ export function AchievementNotificationModal({ achievements, onClose, theme: T }
   }, [onClose]);
 
   return (
-    <div className="fixed bottom-4 right-4 w-full max-w-sm z-50">
-      <div className="rounded-lg border shadow-lg" style={{ background: T.panel, borderColor: T.border, color: T.text }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div className="w-full max-w-sm rounded-lg border shadow-lg overflow-hidden" style={{ background: T.panel, borderColor: T.border, color: T.text }} onClick={e => e.stopPropagation()}>
         <header className="p-3 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.border}`, background: T.panelAlt }}>
           <h3 className="font-semibold text-base">🏆 Achievements Unlocked!</h3>
           <button className="text-xs underline" style={{ color: T.brand }} onClick={onClose}>Close</button>
