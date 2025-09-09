@@ -32,6 +32,7 @@ export type ScorecardData = {
 
 
 /* Stats + helpers */
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 export const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/(arr.length||1);
 export const stddev = (arr: number[]) => { if (arr.length<2) return 0; const m=mean(arr); return Math.sqrt(mean(arr.map(x=>(x-m)**2))); };
 export const quantile = (arr:number[], p:number) => { if(!arr.length) return NaN; const a=[...arr].sort((x,y)=>x-y); const i=(a.length-1)*p; const lo=Math.floor(i), hi=Math.ceil(i); if(lo===hi) return a[lo]; const h=i-lo; return a[lo]*(1-h)+a[hi]*h; };
@@ -183,6 +184,66 @@ export const exportCSV = (rows: Record<string, any>[]) => {
   const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a");
   a.href = url; a.download = "swingtrackr_filtered.csv"; a.click(); URL.revokeObjectURL(url);
+};
+
+/* Assessment calculations */
+export function calculateConsistencyIndex(shots: Shot[]): number | null {
+  const byClub = groupBy(shots.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club || "Unknown");
+  const consistencyScores: number[] = [];
+  for (const [, clubShots] of byClub.entries()) {
+    if (clubShots.length < 5) continue;
+    const carries = clubShots.map(s => s.CarryDistance_yds as number);
+    const meanCarry = mean(carries);
+    const stdDevCarry = stddev(carries);
+    if (meanCarry != null && stdDevCarry != null && meanCarry > 0) {
+      const coefficientOfVariation = stdDevCarry / meanCarry;
+      consistencyScores.push(1 - coefficientOfVariation);
+    }
+  }
+  if (!consistencyScores.length) return null;
+  return mean(consistencyScores);
+};
+
+export function calculateVirtualHandicap(shots: Shot[]): number | null {
+  const consistencyIndex = calculateConsistencyIndex(shots);
+
+  // 1. Calculate handicap based on lateral dispersion
+  const byClub = groupBy(shots.filter(s => isNum(s.CarryDeviationDistance_yds)), (s: Shot) => s.Club || "Unknown");
+  const latHandicapScores: { hcap: number, weight: number }[] = [];
+  const mapRange = (val: number, fromLo: number, fromHi: number, toLo: number, toHi: number) => {
+    const p = (val - fromLo) / (fromHi - fromLo);
+    return Math.max(toLo, Math.min(toHi, toLo + p * (toHi - toLo)));
+  };
+
+  for (const [, clubShots] of byClub.entries()) {
+    if (clubShots.length < 10) continue;
+    const deviations = clubShots.map(s => Math.abs(s.CarryDeviationDistance_yds as number));
+    const stdDevLateral = stddev(deviations);
+    if (stdDevLateral != null) {
+      const hcap = mapRange(stdDevLateral, 5, 25, 0, 25); // 5yd std dev = 0hcap, 25yd = 25hcap
+      latHandicapScores.push({ hcap, weight: clubShots.length });
+    }
+  }
+
+  let lateralHandicap: number | null = null;
+  if (latHandicapScores.length > 0) {
+    const totalWeight = latHandicapScores.reduce((sum, s) => sum + s.weight, 0);
+    const weightedSum = latHandicapScores.reduce((sum, s) => sum + s.hcap * s.weight, 0);
+    lateralHandicap = weightedSum / totalWeight;
+  }
+
+  // 2. Calculate handicap based on depth consistency
+  let depthHandicap: number | null = null;
+  if (consistencyIndex != null) {
+    // 95% consistency = 0 hcap, 75% consistency = 25 hcap
+    depthHandicap = mapRange(consistencyIndex, 0.95, 0.75, 0, 25);
+  }
+  
+  // 3. Blend them
+  if (lateralHandicap !== null && depthHandicap !== null) {
+    return 0.7 * lateralHandicap + 0.3 * depthHandicap;
+  }
+  return lateralHandicap ?? depthHandicap; // Return whichever is available, or null
 };
 
 /* XLSX helpers exposed where needed */
