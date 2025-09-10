@@ -223,7 +223,7 @@ export default function Insights({
   }, [ALL]);
   const mostConsistent = useMemo(() => {
     const MIN = 5;
-    const byClub = groupBy(ALL.filter(s => isNum(s.CarryDistance_yds)), s => s.Club || "Unknown");
+    const byClub = groupBy(ALL.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club || "Unknown");
     let bestClub: string | null = null; let bestSd = Infinity;
     for (const [club, rows] of byClub.entries()) {
       if (rows.length < MIN) continue;
