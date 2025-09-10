@@ -87,27 +87,40 @@ export default function App() {
   const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
   const [newlyUnlockedBatch, setNewlyUnlockedBatch] = useState<Achievement[]>([]);
 
+  const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
+    const isFirstImport = lastCheckedCount === 0 && newestShots.length > 0;
+    const { newlyUnlocked } = checkAchievements({
+      allShots: shots,
+      newShots: newestShots,
+      savedScorecards: allScorecards,
+      unlockedAchievements,
+    });
+    
+    if (newlyUnlocked.length > 0) {
+      if (isFirstImport) {
+        const firstSwings = newlyUnlocked.find(a => a.id === 'first_swings');
+        if (firstSwings) {
+          setNewlyUnlockedBatch([firstSwings]);
+        }
+      } else {
+        setNewlyUnlockedBatch(newlyUnlocked);
+      }
+      
+      setUnlockedAchievements(prev => {
+        const next = new Set(prev);
+        newlyUnlocked.forEach(ach => next.add(ach.id));
+        return next;
+      });
+    }
+  };
+
   useEffect(() => {
     if (shots.length > lastCheckedCount && newShotsRef.current.length > 0) {
-      const { newlyUnlocked } = checkAchievements({
-        allShots: shots,
-        newShots: newShotsRef.current,
-        unlockedAchievements,
-      });
-
-      if (newlyUnlocked.length > 0) {
-        setNewlyUnlockedBatch(newlyUnlocked);
-        
-        setUnlockedAchievements(prev => {
-          const next = new Set(prev);
-          newlyUnlocked.forEach(ach => next.add(ach.id));
-          return next;
-        });
-      }
+      runAchievementChecks(newShotsRef.current, savedScorecards);
       newShotsRef.current = [];
       setLastCheckedCount(shots.length);
     }
-  }, [shots, lastCheckedCount, unlockedAchievements]);
+  }, [shots, lastCheckedCount, unlockedAchievements, savedScorecards]);
 
   // Sessions & clubs (always derived from current shots)
   const sessions = useMemo(
@@ -426,9 +439,11 @@ export default function App() {
       return;
     }
     const name = `${course} - ${date}`;
-    setSavedScorecards(prev => ({ ...prev, [name]: activeScorecard }));
+    const updatedScorecards = { ...savedScorecards, [name]: activeScorecard };
+    setSavedScorecards(updatedScorecards);
     setActiveScorecardName(name);
     toast({ type: "success", text: `Round "${name}" saved.` });
+    runAchievementChecks([], updatedScorecards);
   };
   const handleLoadScorecard = (name: string) => {
     const data = savedScorecards[name];
