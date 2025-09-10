@@ -11,7 +11,7 @@ import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
   normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV,
-  quantile, ScorecardData
+  quantile, ScorecardData, isNum
 } from "./utils";
 
 /* =========================
@@ -31,7 +31,6 @@ function useToasts() {
 /* =========================
    Helpers
 ========================= */
-const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const numOrUndef = (v: any): number | undefined => {
   const x = fpOf(v);
   return typeof x === "number" ? x : undefined;
@@ -86,6 +85,15 @@ export default function App() {
   const newShotsRef = useRef<Shot[]>([]);
   const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
   const [newlyUnlockedBatch, setNewlyUnlockedBatch] = useState<Achievement[]>([]);
+  
+  // Scorecard State
+  const [savedScorecards, setSavedScorecards] = useState<Record<string, ScorecardData>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:saved-scorecards") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:saved-scorecards", JSON.stringify(savedScorecards)); } catch {} }, [savedScorecards]);
+  
+  const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
+  const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
 
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
     const isFirstImport = lastCheckedCount === 0 && newestShots.length > 0;
@@ -113,7 +121,7 @@ export default function App() {
       });
     }
   };
-
+  
   useEffect(() => {
     if (shots.length > lastCheckedCount && newShotsRef.current.length > 0) {
       runAchievementChecks(newShotsRef.current, savedScorecards);
@@ -423,14 +431,6 @@ export default function App() {
   const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
   const currentJournalHTML = journals[sessionFilter] || "";
   const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
-
-  const [savedScorecards, setSavedScorecards] = useState<Record<string, ScorecardData>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:saved-scorecards") || "{}"); } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:saved-scorecards", JSON.stringify(savedScorecards)); } catch {} }, [savedScorecards]);
-  
-  const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
-  const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
   
   const handleSaveScorecard = () => {
     const { course, date } = activeScorecard.header;
