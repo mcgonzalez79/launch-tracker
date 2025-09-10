@@ -1,5 +1,5 @@
-import type { Shot } from "./utils";
-import { mean, stddev, groupBy } from "./utils";
+import type { Shot, ScorecardData } from "./utils";
+import { mean, stddev, groupBy, calculateVirtualHandicap } from "./utils";
 
 export type Achievement = {
   id: string;
@@ -8,9 +8,10 @@ export type Achievement = {
   check: (data: CheckData) => boolean;
 };
 
-type CheckData = {
+export type CheckData = {
   allShots: Shot[];
   newShots: Shot[];
+  savedScorecards: Record<string, ScorecardData>;
   unlockedAchievements: Set<string>;
 };
 
@@ -27,14 +28,14 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
   { id: 'true_dedication', name: 'True Dedication', description: 'Log over 10,000 total shots.', check: ({ allShots }) => allShots.length > 10000 },
   { id: 'elite_practitioner', name: 'Elite Practitioner', description: 'Log over 20,000 total shots.', check: ({ allShots }) => allShots.length > 20000 },
   { id: 'century_club', name: 'Century Club', description: 'Log 100 shots in a single session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || 'Unknown');
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || 'Unknown');
     return Array.from(bySession.values()).some(s => s.length >= 100);
   }},
   { id: 'full_bag_workout', name: 'Full Bag Workout', description: 'Log shots with a Driver, Wood/Hybrid, Iron, and Wedge in one session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || 'Unknown');
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || 'Unknown');
     return Array.from(bySession.values()).some(sessionShots => {
       const clubs = new Set(sessionShots.map(s => s.Club.toLowerCase()));
-      const has = { driver: false, wood: false, iron: false, wedge: false };
+      let has = { driver: false, wood: false, iron: false, wedge: false };
       for (const c of clubs) {
         if (/driver|1w/.test(c)) has.driver = true;
         if (/wood|w|hybrid|h/.test(c) && !/driver|1w/.test(c)) has.wood = true;
@@ -44,8 +45,14 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
       return has.driver && has.wood && has.iron && has.wedge;
     });
   }},
+  { id: 'wedge_rat', name: 'Wedge Rat', description: 'Log over 100 total shots with wedges.', check: ({ allShots }) => {
+    return allShots.filter(s => /wedge|pw|gw|sw|lw|aw/.test(s.Club.toLowerCase())).length > 100;
+  }},
   { id: 'iron_specialist', name: 'Iron Specialist', description: 'Log over 1,000 total shots with irons (3i-9i).', check: ({ allShots }) => {
     return allShots.filter(s => /([3-9](i|iron))/.test(s.Club.toLowerCase())).length > 1000;
+  }},
+  { id: 'iron_sharpens_iron', name: 'Iron Sharpens Iron', description: 'Log over 2,000 total shots with irons (3i-9i).', check: ({ allShots }) => {
+    return allShots.filter(s => /([3-9](i|iron))/.test(s.Club.toLowerCase())).length > 2000;
   }},
   { id: 'wedge_master', name: 'Wedge Master', description: 'Log over 500 total shots with wedges.', check: ({ allShots }) => {
     return allShots.filter(s => /wedge|pw|gw|sw|lw|aw/.test(s.Club.toLowerCase())).length > 500;
@@ -57,7 +64,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return bestShot ? newShots.includes(bestShot) : false;
   }},
   { id: 'club_pr', name: 'Club PR', description: 'Set a new personal record for longest carry distance with a specific club.', check: ({ allShots, newShots }) => {
-    const byClub = groupBy(allShots.filter(s => isNum(s.CarryDistance_yds)), s => s.Club);
+    const byClub = groupBy(allShots.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club);
     for (const shots of byClub.values()) {
       const bestShot = shots.reduce((best, s) => s.CarryDistance_yds! > (best?.CarryDistance_yds || 0) ? s : best, null as Shot | null);
       if (bestShot && newShots.includes(bestShot)) return true;
@@ -66,10 +73,12 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
   }},
   { id: 'speed_demon', name: 'Speed Demon', description: 'Exceed 100 mph club speed for the first time.', check: ({ allShots }) => allShots.some(s => (s.ClubSpeed_mph || 0) > 100) },
   { id: 'ballistic', name: 'Ballistic', description: 'Exceed 150 mph ball speed for the first time.', check: ({ allShots }) => allShots.some(s => (s.BallSpeed_mph || 0) > 150) },
+  { id: 'drive_220', name: 'Drive: 220+ Yards', description: 'Hit a drive over 220 yards (total distance).', check: ({ allShots }) => allShots.some(s => /driver/i.test(s.Club) && (s.TotalDistance_yds || 0) > 220) },
+  { id: 'drive_250', name: 'Drive: 250+ Yards', description: 'Hit a drive over 250 yards (total distance).', check: ({ allShots }) => allShots.some(s => /driver/i.test(s.Club) && (s.TotalDistance_yds || 0) > 250) },
+  { id: 'drive_280', name: 'Drive: 280+ Yards', description: 'Hit a drive over 280 yards (total distance).', check: ({ allShots }) => allShots.some(s => /driver/i.test(s.Club) && (s.TotalDistance_yds || 0) > 280) },
   { id: 'bombs_away', name: 'Bombs Away', description: 'Hit any shot over 300 yards in total distance.', check: ({ allShots }) => allShots.some(s => (s.TotalDistance_yds || 0) > 300) },
 
   // Skill & Consistency
-  { id: 'gamer', name: 'Gamer', description: 'Achieve a smash factor of 1.50 or higher with a driver.', check: ({ allShots }) => allShots.some(s => /driver/i.test(s.Club) && (s.SmashFactor || 0) >= 1.50) },
   { id: 'untouchable', name: 'Untouchable', description: 'Hit a drive with a smash factor of 1.52 or higher.', check: ({ allShots }) => allShots.some(s => /driver/i.test(s.Club) && (s.SmashFactor || 0) >= 1.52) },
   { id: 'spin_doctor', name: 'Spin Doctor', description: 'Log a shot with over 8,000 RPM of backspin.', check: ({ allShots }) => allShots.some(s => (s.Backspin_rpm || 0) > 8000) },
   { id: 'fairway_finder', name: 'Fairway Finder', description: 'Log 5 consecutive shots within 10 yards of the center line.', check: ({ allShots }) => {
@@ -85,9 +94,9 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'dialed_in', name: 'Dialed In', description: 'Achieve a Consistency Index of over 80% for a session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || "Unknown");
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
-      const byClub = groupBy(sessionShots.filter(s => isNum(s.CarryDistance_yds)), s => s.Club);
+      const byClub = groupBy(sessionShots.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club);
       const scores: number[] = [];
       for(const clubShots of byClub.values()) {
         if (clubShots.length < 5) continue;
@@ -101,9 +110,9 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'tour_like', name: 'Tour-Like', description: 'Achieve a Consistency Index of over 85% for a session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || "Unknown");
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
-      const byClub = groupBy(sessionShots.filter(s => isNum(s.CarryDistance_yds)), s => s.Club);
+      const byClub = groupBy(sessionShots.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club);
       const scores: number[] = [];
       for(const clubShots of byClub.values()) {
         if (clubShots.length < 5) continue;
@@ -117,7 +126,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'positive_angles', name: 'Positive Angles', description: 'Achieve a positive average Angle of Attack with your driver in a session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || "Unknown");
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
       const driverAoA = sessionShots.filter(s => /driver/i.test(s.Club) && isNum(s.AttackAngle_deg)).map(s => s.AttackAngle_deg as number);
       if (driverAoA.length >= 5 && mean(driverAoA) > 0) return true;
@@ -125,7 +134,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'compression_king', name: 'Compression King', description: 'Achieve an average Angle of Attack of -5° or lower with an iron in a session.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || "Unknown");
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
       const ironAoA = sessionShots.filter(s => /iron|i/.test(s.Club) && isNum(s.AttackAngle_deg)).map(s => s.AttackAngle_deg as number);
       if (ironAoA.length >= 5 && mean(ironAoA) <= -5) return true;
@@ -157,7 +166,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'on_plane', name: 'On Plane', description: 'Complete a session with an average Club Path between -1° and +1°.', check: ({ allShots }) => {
-    const bySession = groupBy(allShots, s => s.SessionId || "Unknown");
+    const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
       const paths = sessionShots.filter(s => isNum(s.ClubPath_deg)).map(s => s.ClubPath_deg as number);
       if (paths.length >= 10) {
@@ -174,10 +183,13 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return allShots.some(s => /iron|i/.test(s.Club) && (s.LaunchAngle_deg || 0) < 15 && (s.Backspin_rpm || 0) > 4000);
   }},
   { id: 'apex_predator', name: 'Apex Predator', description: 'Hit a shot with an apex of over 50 yards.', check: ({ allShots }) => allShots.some(s => (s.ApexHeight_yds || 0) > 50) },
+  { id: 'hcap_15', name: 'Breaking 15', description: 'Achieve a Virtual Handicap below 15.', check: ({ allShots }) => { const h = calculateVirtualHandicap(allShots); return h !== null && h < 15; } },
+  { id: 'hcap_10', name: 'Single Digit', description: 'Achieve a Virtual Handicap below 10.', check: ({ allShots }) => { const h = calculateVirtualHandicap(allShots); return h !== null && h < 10; } },
+  { id: 'hcap_5', name: 'Breaking 5', description: 'Achieve a Virtual Handicap below 5.', check: ({ allShots }) => { const h = calculateVirtualHandicap(allShots); return h !== null && h < 5; } },
 
   // Dedication & Streaks
   { id: 'back_to_back', name: 'Back to Back', description: 'Complete sessions on two consecutive days.', check: ({ allShots }) => {
-    const dates = Array.from(new Set(allShots.map(s => s.Timestamp?.split('T')[0]))).filter(Boolean).sort();
+    const dates = Array.from(new Set(allShots.map((s: Shot) => s.Timestamp?.split('T')[0]))).filter((d): d is string => !!d).sort();
     if (dates.length < 2) return false;
     for (let i = 1; i < dates.length; i++) {
       const prev = new Date(dates[i-1]!);
@@ -187,20 +199,19 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'weekly_warrior', name: 'Weekly Warrior', description: 'Complete a session in two consecutive weeks.', check: ({ allShots }) => {
-    const weekNumbers = Array.from(new Set(allShots.map(s => {
+    const weekNumbers = Array.from(new Set(allShots.map((s: Shot) => {
       if (!s.Timestamp) return null;
       const d = new Date(s.Timestamp);
       const year = d.getUTCFullYear();
       const firstDayOfYear = new Date(Date.UTC(year, 0, 1));
       const days = Math.floor((d.getTime() - firstDayOfYear.getTime()) / (24 * 60 * 60 * 1000));
       return `${year}-W${Math.ceil(days / 7)}`;
-    }))).filter(Boolean).sort();
+    }))).filter((d): d is string => !!d).sort();
     if (weekNumbers.length < 2) return false;
-    // This is a simplified check; true week-over-week logic is more complex
-    return true; // Simplified for now
+    return true; // Simplified check is sufficient for this purpose
   }},
   { id: 'dedicated', name: 'Dedicated', description: 'Log sessions on 3 different days within a single week.', check: ({ allShots }) => {
-    const sessionsByDay = groupBy(allShots, s => s.Timestamp?.split('T')[0] || "Unknown");
+    const sessionsByDay = groupBy(allShots, (s: Shot) => s.Timestamp?.split('T')[0] || "Unknown");
     const sessionDays = Array.from(sessionsByDay.keys()).filter(d => d !== "Unknown").map(d => new Date(d));
     if (sessionDays.length < 3) return false;
     for (let i = 0; i < sessionDays.length; i++) {
@@ -219,7 +230,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'monthly_milestone', name: 'Monthly Milestone', description: 'Log a session in 3 consecutive months.', check: ({ allShots }) => {
-    const months = Array.from(new Set(allShots.map(s => s.Timestamp?.substring(0, 7)))).filter(Boolean).sort();
+    const months = Array.from(new Set(allShots.map((s: Shot) => s.Timestamp?.substring(0, 7)))).filter((d): d is string => !!d).sort();
     if (months.length < 3) return false;
     for (let i = 2; i < months.length; i++) {
       const d1 = new Date(`${months[i-2]}-01T12:00:00Z`);
@@ -233,7 +244,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     return false;
   }},
   { id: 'workhorse', name: 'Workhorse', description: 'Log over 250 shots in a single week.', check: ({ allShots }) => {
-    const shotsByWeek = groupBy(allShots, s => {
+    const shotsByWeek = groupBy(allShots, (s: Shot) => {
       if (!s.Timestamp) return "Unknown";
       const d = new Date(s.Timestamp);
       const year = d.getUTCFullYear();
@@ -249,8 +260,8 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
 
   // Variety & Exploration
   { id: 'new_tool', name: 'New Tool', description: 'Log the first shot with a new club that you haven\'t recorded before.', check: ({ allShots, newShots }) => {
-    const oldClubs = new Set(allShots.filter(s => !newShots.includes(s)).map(s => s.Club));
-    const newClubs = new Set(newShots.map(s => s.Club));
+    const oldClubs = new Set(allShots.filter(s => !newShots.includes(s)).map((s: Shot) => s.Club));
+    const newClubs = new Set(newShots.map((s: Shot) => s.Club));
     for (const club of newClubs) {
       if (!oldClubs.has(club)) return true;
     }
@@ -262,6 +273,11 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     const keysWithData = Object.keys(firstShot).filter(k => (firstShot as any)[k] !== undefined && (firstShot as any)[k] !== null);
     return keysWithData.length >= 10;
   }},
+  
+  // Scorecard achievements
+  { id: 'scorecard_1', name: 'On the Course', description: 'Record your first scorecard.', check: ({ savedScorecards }) => Object.keys(savedScorecards).length >= 1 },
+  { id: 'scorecard_3', name: 'GHIN Ready', description: 'Record three scorecards.', check: ({ savedScorecards }) => Object.keys(savedScorecards).length >= 3 },
+  { id: 'scorecard_5', name: 'Well Rounded', description: 'Record five scorecards.', check: ({ savedScorecards }) => Object.keys(savedScorecards).length >= 5 },
 ];
 
 /**
