@@ -32,6 +32,7 @@ export type ScorecardData = {
 
 
 /* Stats + helpers */
+export const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 export const mean = (arr: number[]) => arr.reduce((a,b)=>a+b,0)/(arr.length||1);
 export const stddev = (arr: number[]) => { if (arr.length<2) return 0; const m=mean(arr); return Math.sqrt(mean(arr.map(x=>(x-m)**2))); };
 export const quantile = (arr:number[], p:number) => { if(!arr.length) return NaN; const a=[...arr].sort((x,y)=>x-y); const i=(a.length-1)*p; const lo=Math.floor(i), hi=Math.ceil(i); if(lo===hi) return a[lo]; const h=i-lo; return a[lo]*(1-h)+a[hi]*h; };
