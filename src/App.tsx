@@ -74,7 +74,7 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
   
-  // Achievements
+  // Achievements & Scorecards
   const [unlockedAchievements, setUnlockedAchievements] = useState<Set<string>>(() => {
     try { const saved = localStorage.getItem("swingtrackr:achievements"); return saved ? new Set(JSON.parse(saved)) : new Set(); } catch { return new Set(); }
   });
@@ -82,15 +82,14 @@ export default function App() {
     try { localStorage.setItem("swingtrackr:achievements", JSON.stringify(Array.from(unlockedAchievements))); } catch {}
   }, [unlockedAchievements]);
 
-  const newShotsRef = useRef<Shot[]>([]);
-  const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
-  const [newlyUnlockedBatch, setNewlyUnlockedBatch] = useState<Achievement[]>([]);
-  
-  // Scorecard State
   const [savedScorecards, setSavedScorecards] = useState<Record<string, ScorecardData>>(() => {
     try { return JSON.parse(localStorage.getItem("launch-tracker:saved-scorecards") || "{}"); } catch { return {}; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:saved-scorecards", JSON.stringify(savedScorecards)); } catch {} }, [savedScorecards]);
+
+  const newShotsRef = useRef<Shot[]>([]);
+  const [lastCheckedCount, setLastCheckedCount] = useState(() => shots.length);
+  const [newlyUnlockedBatch, setNewlyUnlockedBatch] = useState<Achievement[]>([]);
   
   const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
   const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
@@ -687,6 +686,7 @@ export default function App() {
                   onNew={handleNewScorecard}
                   onDelete={handleDeleteScorecard}
                   activeScorecardName={activeScorecardName}
+                  savedScorecards={savedScorecards}
                 />
               )}
             </div>
