@@ -175,14 +175,16 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
   return (
     <>
       {roundsReport && (
-        <Card title="Rounds Report (Last 5)" theme={T} className="mb-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCell theme={T} label="Avg Score" value={roundsReport.avgScore} />
-            <KpiCell theme={T} label="Fairway Hit %" value={roundsReport.fairwayPct} sub={<button onClick={() => setFairwayModalOpen(true)} className="underline">View benchmarks</button>} />
-            <KpiCell theme={T} label="Avg Putts" value={roundsReport.avgPutts} />
-            <KpiCell theme={T} label="Avg Hazard Strokes" value={roundsReport.avgHazards} />
-          </div>
-        </Card>
+        <div className="mb-4">
+          <Card title="Rounds Report (Last 5)" theme={T}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCell theme={T} label="Avg Score" value={roundsReport.avgScore} />
+              <KpiCell theme={T} label="Fairway Hit %" value={roundsReport.fairwayPct} sub={<button onClick={() => setFairwayModalOpen(true)} className="underline">View benchmarks</button>} />
+              <KpiCell theme={T} label="Avg Putts" value={roundsReport.avgPutts} />
+              <KpiCell theme={T} label="Avg Hazard Strokes" value={roundsReport.avgHazards} />
+            </div>
+          </Card>
+        </div>
       )}
       <section className="rounded-xl border shadow-sm" style={{ background: T.panel, borderColor: T.border }}>
         <header
