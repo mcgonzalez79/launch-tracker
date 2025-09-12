@@ -173,7 +173,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
   }, [savedScorecards]);
 
   return (
-    
+    <>
       {roundsReport && (
         <div className="mb-4">
           <Card title="Rounds Report (Last 5)" theme={T}>
