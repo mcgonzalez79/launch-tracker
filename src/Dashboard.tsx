@@ -139,9 +139,9 @@ export default function DashboardCards(props: Props) {
         {shapeAngles.length ? (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             <KpiCell label="Hook" value={`${shapePercents.hook}%`} />
-            <KpiCell label="Draw" value={`${shapePercents.draw}%`} />
-            <KpiCell label="Straight" value={`${shapePercents.straight}%`} />
             <KpiCell label="Fade" value={`${shapePercents.fade}%`} />
+            <KpiCell label="Straight" value={`${shapePercents.straight}%`} />
+            <KpiCell label="Draw" value={`${shapePercents.draw}%`} />
             <KpiCell label="Slice" value={`${shapePercents.slice}%`} />
           </div>
         ) : (
