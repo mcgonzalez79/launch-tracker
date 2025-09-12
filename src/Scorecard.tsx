@@ -185,7 +185,7 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
             </div>
           </Card>
         </div>
-      
+      )}
       <section className="rounded-xl border shadow-sm" style={{ background: T.panel, borderColor: T.border }}>
         <header
           className="px-4 py-2 rounded-t-xl"
