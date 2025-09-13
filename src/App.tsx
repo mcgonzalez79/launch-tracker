@@ -812,5 +812,3 @@ function Footer({ T }: { T: Theme }) {
     </footer>
   );
 }
-
-}
