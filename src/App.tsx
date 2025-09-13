@@ -76,10 +76,10 @@ export default function App() {
   
   // Achievements & Scorecards
   const [unlockedAchievements, setUnlockedAchievements] = useState<Set<string>>(() => {
-    try { const saved = localStorage.getItem("swingtrackr:achievements"); return saved ? new Set(JSON.parse(saved)) : new Set(); } catch { return new Set(); }
+    try { const saved = localStorage.getItem("launchledger:achievements"); return saved ? new Set(JSON.parse(saved)) : new Set(); } catch { return new Set(); }
   });
   useEffect(() => {
-    try { localStorage.setItem("swingtrackr:achievements", JSON.stringify(Array.from(unlockedAchievements))); } catch {}
+    try { localStorage.setItem("launchledger:achievements", JSON.stringify(Array.from(unlockedAchievements))); } catch {}
   }, [unlockedAchievements]);
 
   const [savedScorecards, setSavedScorecards] = useState<Record<string, ScorecardData>>(() => {
@@ -500,7 +500,7 @@ export default function App() {
         <header className="border-b" style={{ borderColor: T.border, background: theme.mode === 'light' ? '#dbe8e1' : T.panel, height: '120px' }}>
           <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
             <div className="flex items-end gap-2">
-              <img src="logo_horiz_color_120w.png" alt="SwingTrackr Logo" className="h-24 w-auto" />
+              <img src="logo_horiz_color_120w.png" alt="LaunchLedger Logo" className="h-24 w-auto" />
             </div>
             <div className="flex items-end gap-2">
               <div className="hidden md:flex items-center gap-2">
@@ -722,7 +722,7 @@ export default function App() {
 function PrintableClubAverages({ rows }: { rows: ClubRow[] }) {
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">SwingTrackr - Club Averages</h1>
+      <h1 className="text-xl font-bold mb-4">LaunchLedger - Club Averages</h1>
       <table className="min-w-full text-sm border-collapse border border-gray-400">
         <thead>
           <tr className="bg-gray-100">
@@ -800,7 +800,7 @@ function Footer({ T }: { T: Theme }) {
     <footer style={{ borderColor: T.border, background: T.mode === 'light' ? '#dbe8e1' : T.bg }}>
       <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-2 border-t" style={{borderColor: T.border}}>
         <div className="text-xs" style={{ color: T.textDim }}>
-          © {year} SwingTrackr
+          © {year} LaunchLedger
         </div>
         <div className="flex items-center gap-2 text-xs" style={{ color: T.textDim }}>
           <span>Matt Gonzalez</span>
@@ -811,4 +811,6 @@ function Footer({ T }: { T: Theme }) {
       </div>
     </footer>
   );
+}
+
 }
