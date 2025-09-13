@@ -5,7 +5,7 @@ import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
-import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal } from "./components/UI";
+import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal, IconAdjustments } from "./components/UI";
 import { ALL_ACHIEVEMENTS, checkAchievements, Achievement } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
@@ -466,6 +466,7 @@ export default function App() {
      Layout / Modals
   ========================= */
   const [isAchievementsModalOpen, setAchievementsModalOpen] = useState(false);
+  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const [filtersHeight, setFiltersHeight] = useState<number>(340);
   useEffect(() => {
@@ -489,7 +490,7 @@ export default function App() {
 
       <div className="screen-only" style={{ background: T.bg, color: T.text, minHeight: "100vh", display: 'flex', flexDirection: 'column' }}>
         {/* Header with tabs + theme */}
-        <header className="border-b" style={{ borderColor: T.border, background: theme.mode === 'light' ? '#dbe8e1' : T.panel, height: '120px' }}>
+        <header className="border-b relative" style={{ borderColor: T.border, background: theme.mode === 'light' ? '#dbe8e1' : T.panel, height: '120px' }}>
           <div className="max-w-6xl mx-auto px-4 h-full flex items-end justify-between gap-3 pb-2">
             <div className="flex items-end gap-2">
               <img src="logo_horiz_color_120w.png" alt="SwingLedger Logo" className="h-24 w-auto" />
@@ -515,8 +516,26 @@ export default function App() {
                 onClick={() => setFiltersOpen(true)}
                 title="Filters"
               >
+                <IconAdjustments />
+              </button>
+              <button
+                className="md:hidden px-2 py-1 rounded-md border text-xs"
+                style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+                onClick={() => setMobileMenuOpen(prev => !prev)}
+                title="Menu"
+              >
                 <IconMenu />
               </button>
+              {isMobileMenuOpen && (
+                <div className="absolute top-full right-4 mt-2 w-48 rounded-md shadow-lg border" style={{background: T.panel, borderColor: T.border}}>
+                  <div className="py-1">
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'dashboard' ? T.brand : T.text}}>Dashboard</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("insights"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'insights' ? T.brand : T.text}}>Insights</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("scorecard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'scorecard' ? T.brand : T.text}}>Scorecard</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("journal"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'journal' ? T.brand : T.text}}>Journal</a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
