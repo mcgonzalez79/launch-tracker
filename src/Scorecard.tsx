@@ -196,8 +196,20 @@ export default function ScorecardView({ theme: T, data, onUpdate, savedRoundName
         <div className="p-4">
           {/* Controls */}
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button onClick={onNew} className="rounded-md px-3 py-1.5 border text-sm" style={{ background: T.panelAlt, borderColor: T.border }}>New Round</button>
-            <button onClick={onSave} className="rounded-md px-3 py-1.5 border text-sm" style={{ background: T.brand, borderColor: T.brand, color: T.white }}>Save Round</button>
+            <button
+              onClick={onNew}
+              className="rounded-md px-3 py-1.5 border text-sm"
+              style={{ background: T.panelAlt, borderColor: T.border }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = T.panel}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = T.panelAlt}
+            >New Round</button>
+            <button
+              onClick={onSave}
+              className="rounded-md px-3 py-1.5 border text-sm"
+              style={{ background: T.brand, borderColor: T.brand, color: T.white }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = T.brandHover}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = T.brand}
+            >Save Round</button>
             <button
               onClick={onDelete}
               disabled={!activeScorecardName}
@@ -373,7 +385,7 @@ function KpiCell({
     <div
       className="rounded-xl p-4 border"
       style={{ background: T.panelAlt, borderColor: T.border }}
-      onMouseOver={(e) => { if (T.mode === 'light') e.currentTarget.style.backgroundColor = '#dbe8e1'; }}
+      onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#dbe8e1' : T.panel; }}
       onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
     >
       <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
