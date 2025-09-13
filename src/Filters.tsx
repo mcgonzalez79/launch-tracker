@@ -306,6 +306,8 @@ export default function FiltersPanel(props: Props) {
             className="w-full rounded-md px-3 py-2 border text-sm"
             style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
             onClick={onShowAchievements}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = T.panel}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = T.panelAlt}
           >
             View Achievements
           </button>
@@ -313,6 +315,8 @@ export default function FiltersPanel(props: Props) {
             className="w-full rounded-md px-3 py-2 border text-sm"
             style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
             onClick={onPrintClubAverages}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = T.panel}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = T.panelAlt}
           >
             Print Club Averages
           </button>
@@ -320,6 +324,8 @@ export default function FiltersPanel(props: Props) {
             className="w-full rounded-md px-3 py-2 border text-sm"
             style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
             onClick={onExportCSV}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = T.panel}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = T.panelAlt}
           >
             Export CSV
           </button>
@@ -336,6 +342,8 @@ export default function FiltersPanel(props: Props) {
             }}
             onClick={onDeleteSession}
             title="Delete current session"
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#cdd9d4' : 'rgba(200,0,0,0.16)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#dbe8e1' : 'rgba(200,0,0,0.08)'; }}
           >
             Delete Session
           </button>
@@ -348,6 +356,8 @@ export default function FiltersPanel(props: Props) {
             }}
             onClick={onDeleteAll}
             title="Delete all shots"
+            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#cdd9d4' : 'rgba(200,0,0,0.20)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#dbe8e1' : 'rgba(200,0,0,0.12)'; }}
           >
             Delete All
           </button>
