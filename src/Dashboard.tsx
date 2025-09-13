@@ -376,17 +376,26 @@ export default function DashboardCards(props: Props) {
     <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
       <Card title="Club Averages" theme={T}>
         {tableRows.length ? (
-          <div style={{ overflowX: "auto" }}>
-            <table className="w-full text-sm">
+          <div
+            className="overflow-x-auto"
+            style={{
+              maxWidth: "100%",
+              WebkitOverflowScrolling: "touch"
+            }}
+          >
+            <table
+              className="min-w-[680px] sm:min-w-[760px] text-sm"
+              style={{ borderCollapse: "separate", borderSpacing: 0 }}
+            >
               <thead>
                 <tr style={{ color: T.textDim }}>
-                  <th className="text-left py-2 pr-3">Club</th>
+                  <th className="text-left py-2 pr-3 sticky left-0 bg-[inherit]">Club</th>
                   <th className="text-right py-2 px-2">#</th>
                   <th className="text-right py-2 px-2">Avg Carry</th>
                   <th className="text-right py-2 px-2">Avg Total</th>
                   <th className="text-right py-2 px-2">Avg Smash</th>
                   <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right p2 px-2">Avg CS</th>
+                  <th className="text-right py-2 px-2">Avg CS</th>
                   <th className="text-right py-2 px-2">Avg BS</th>
                   <th className="text-right py-2 px-2">Avg LA</th>
                   <th className="text-right py-2 px-2">Avg F2P</th>
@@ -395,7 +404,7 @@ export default function DashboardCards(props: Props) {
               <tbody>
                 {tableRows.map((r) => (
                   <tr key={(r as any).club} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="py-2 pr-3">{(r as any).club}</td>
+                    <td className="py-2 pr-3 sticky left-0 bg-[inherit]">{(r as any).club}</td>
                     <td className="text-right py-2 px-2">{(r as any).count}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgCarry ?? 0).toFixed(1)}</td>
                     <td className="text-right py-2 px-2">{Number((r as any).avgTotal ?? 0).toFixed(1)}</td>
