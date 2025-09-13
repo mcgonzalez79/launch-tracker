@@ -89,7 +89,7 @@ export default function DashboardCards(props: Props) {
     <div
       className="p-3 rounded-lg border"
       style={{ background: T.panelAlt, borderColor: T.border }}
-      onMouseOver={(e) => { if (T.mode === 'light') e.currentTarget.style.backgroundColor = '#dbe8e1'; }}
+      onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#dbe8e1' : T.panel; }}
       onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
     >
       <div className="text-xs" style={{ color: T.textDim }}>{label}</div>
