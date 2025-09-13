@@ -57,7 +57,7 @@ function KpiCell({
     <div
       className="rounded-xl p-4 border"
       style={{ background: T.panelAlt, borderColor: T.border }}
-      onMouseOver={(e) => { if (T.mode === 'light') e.currentTarget.style.backgroundColor = '#dbe8e1'; }}
+      onMouseOver={(e) => { e.currentTarget.style.backgroundColor = T.mode === 'light' ? '#dbe8e1' : T.panel; }}
       onMouseOut={(e) => { e.currentTarget.style.backgroundColor = T.panelAlt; }}
     >
       <div className="text-xs mb-1" style={{ color: T.textDim }}>{label}</div>
@@ -92,7 +92,7 @@ export default function Insights({
   // Swing matrix data
   const [swingMatrix, setSwingMatrix] = useState<any>(null);
   useEffect(() => {
-    fetch('swing_matrix.json')
+    fetch('/swing_matrix.json')
       .then(res => res.json())
       .then(data => setSwingMatrix(data))
       .catch(err => console.error("Failed to load swing_matrix.json", err));
@@ -357,7 +357,7 @@ export default function Insights({
     >
       <Card
         title="Benchmarks"
-        right={<button onClick={() => setBenchmarkModalOpen(true)} className="text-xs underline" style={{color: T.brand}}>View Table</button>}
+        right={<button onClick={() => setBenchmarkModalOpen(true)} className="text-xs underline" style={{color: T.brand}} onMouseOver={e => e.currentTarget.style.color=T.brandHover} onMouseOut={e => e.currentTarget.style.color=T.brand}>View Table</button>}
         theme={T}
       >
         {benchData ? (
@@ -407,7 +407,7 @@ export default function Insights({
               theme={T}
               label="Consistency Index"
               value={consistencyIndex != null ? `${(consistencyIndex * 100).toFixed(1)}%` : "—"}
-              sub={<button onClick={() => setConsistencyModalOpen(true)} className="underline">What does this mean?</button>}
+              sub={<button onClick={() => setConsistencyModalOpen(true)} className="underline" style={{color: T.brand}} onMouseOver={e => e.currentTarget.style.color=T.brandHover} onMouseOut={e => e.currentTarget.style.color=T.brand}>What does this mean?</button>}
             />
             <KpiCell
               theme={T}
@@ -521,7 +521,7 @@ export default function Insights({
     >
       <Card
         title="Swing Metrics"
-        right={<button onClick={() => setSwingModalOpen(true)} disabled={!swingAnalysis} className="text-xs underline disabled:opacity-50" style={{color: T.brand}}>Get Advice</button>}
+        right={<button onClick={() => setSwingModalOpen(true)} disabled={!swingAnalysis} className="text-xs underline disabled:opacity-50" style={{color: T.brand}} onMouseOver={e => e.currentTarget.style.color=T.brandHover} onMouseOut={e => e.currentTarget.style.color=T.brand}>Get Advice</button>}
         theme={T}
       >
         {swingShots.length ? (
