@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { Theme } from "./theme";
 import type { Shot, ClubRow } from "./utils";
 import { Card } from "./components/UI";
@@ -53,6 +53,8 @@ function domainOf(vals: number[], pad = 0) {
    Component
 ========================= */
 export default function DashboardCards(props: Props) {
+  const [isAveragesModalOpen, setAveragesModalOpen] = useState(false);
+
   const {
     theme: T,
     cardOrder,
@@ -372,47 +374,53 @@ export default function DashboardCards(props: Props) {
 
   
   /* ---------- Club Averages (spreadsheet) ---------- */
-  const tableCard = (
-    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")}>
-      <Card title="Club Averages" theme={T}>
-        {tableRows.length ? (
-          <div style={{ overflowX: "auto" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ color: T.textDim }}>
-                  <th className="text-left py-2 pr-3">Club</th>
-                  <th className="text-right py-2 px-2">#</th>
-                  <th className="text-right py-2 px-2">Avg Carry</th>
-                  <th className="text-right py-2 px-2">Avg Total</th>
-                  <th className="text-right py-2 px-2">Avg Smash</th>
-                  <th className="text-right py-2 px-2">Avg Spin</th>
-                  <th className="text-right p2 px-2">Avg CS</th>
-                  <th className="text-right py-2 px-2">Avg BS</th>
-                  <th className="text-right py-2 px-2">Avg LA</th>
-                  <th className="text-right py-2 px-2">Avg F2P</th>
+  const tableContent = (
+    <>
+      {tableRows.length ? (
+        <div style={{ overflowX: "auto" }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: T.textDim }}>
+                <th className="text-left py-2 pr-3">Club</th>
+                <th className="text-right py-2 px-2">#</th>
+                <th className="text-right py-2 px-2">Avg Carry</th>
+                <th className="text-right py-2 px-2">Avg Total</th>
+                <th className="text-right py-2 px-2">Avg Smash</th>
+                <th className="text-right py-2 px-2">Avg Spin</th>
+                <th className="text-right p2 px-2">Avg CS</th>
+                <th className="text-right py-2 px-2">Avg BS</th>
+                <th className="text-right py-2 px-2">Avg LA</th>
+                <th className="text-right py-2 px-2">Avg F2P</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((r) => (
+                <tr key={(r as any).club} style={{ borderTop: `1px solid ${T.border}` }}>
+                  <td className="py-2 pr-3">{(r as any).club}</td>
+                  <td className="text-right py-2 px-2">{(r as any).count}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgCarry ?? 0).toFixed(1)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgTotal ?? 0).toFixed(1)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgSmash ?? 0).toFixed(3)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgSpin ?? 0).toFixed(0)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgCS ?? 0).toFixed(1)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgBS ?? 0).toFixed(1)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgLA ?? 0).toFixed(1)}</td>
+                  <td className="text-right py-2 px-2">{Number((r as any).avgF2P ?? 0).toFixed(1)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((r) => (
-                  <tr key={(r as any).club} style={{ borderTop: `1px solid ${T.border}` }}>
-                    <td className="py-2 pr-3">{(r as any).club}</td>
-                    <td className="text-right py-2 px-2">{(r as any).count}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgCarry ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgTotal ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgSmash ?? 0).toFixed(3)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgSpin ?? 0).toFixed(0)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgCS ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgBS ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgLA ?? 0).toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{Number((r as any).avgF2P ?? 0).toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-sm" style={{ color: T.textDim }}>No club averages available.</div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-sm" style={{ color: T.textDim }}>No club averages available.</div>
+      )}
+    </>
+  );
+
+  const tableCard = (
+    <div key="table" draggable onDragStart={onDragStart("table")} onDragOver={onDragOver("table")} onDrop={onDrop("table")} className="hidden md:block">
+      <Card title="Club Averages" theme={T}>
+        {tableContent}
       </Card>
     </div>
   );
@@ -428,8 +436,31 @@ export default function DashboardCards(props: Props) {
   };
 
   return (
-    <div className="grid w-full gap-4">
-      {cardOrder.map((key) => cardMap[key] ?? null)}
-    </div>
+    <>
+      <div className="grid w-full gap-4">
+        {cardOrder.map((key) => cardMap[key] ?? null).filter(c => c.key !== 'table' || !isAveragesModalOpen)}
+        
+        {/* Mobile-only button for table view */}
+        <div className="block md:hidden">
+            <button
+                onClick={() => setAveragesModalOpen(true)}
+                className="w-full rounded-xl shadow-sm p-4 text-sm font-medium"
+                style={{ background: T.mode === 'light' ? '#dbe8e1' : T.panelAlt, color: T.text, border: `1px solid ${T.border}`}}
+            >
+                View Club Averages
+            </button>
+        </div>
+      </div>
+
+      {isAveragesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setAveragesModalOpen(false)}>
+          <div className="w-full max-w-4xl rounded-xl border shadow-lg overflow-hidden" style={{ background: T.panel, borderColor: T.border }} onClick={e => e.stopPropagation()}>
+            <Card title="Club Averages" theme={T} right={<button className="text-xs underline" style={{color: T.brand}} onClick={() => setAveragesModalOpen(false)}>Close</button>}>
+              {tableContent}
+            </Card>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
