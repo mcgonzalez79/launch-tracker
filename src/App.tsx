@@ -518,24 +518,26 @@ export default function App() {
               >
                 <IconAdjustments />
               </button>
-              <button
-                className="md:hidden px-2 py-1 rounded-md border text-xs"
-                style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
-                onClick={() => setMobileMenuOpen(prev => !prev)}
-                title="Menu"
-              >
-                <IconMenu />
-              </button>
-              {isMobileMenuOpen && (
-                <div className="absolute top-full right-4 mt-2 w-48 rounded-md shadow-lg border" style={{background: T.panel, borderColor: T.border}}>
-                  <div className="py-1">
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'dashboard' ? T.brand : T.text}}>Dashboard</a>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("insights"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'insights' ? T.brand : T.text}}>Insights</a>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("scorecard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'scorecard' ? T.brand : T.text}}>Scorecard</a>
-                    <a href="#" onClick={(e) => { e.preventDefault(); setTab("journal"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'journal' ? T.brand : T.text}}>Journal</a>
+              <div className="relative">
+                <button
+                  className="md:hidden px-2 py-1 rounded-md border text-xs"
+                  style={{ background: T.panelAlt, borderColor: T.border, color: T.text }}
+                  onClick={() => setMobileMenuOpen(prev => !prev)}
+                  title="Menu"
+                >
+                  <IconMenu />
+                </button>
+                {isMobileMenuOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-48 rounded-md shadow-lg border z-50" style={{background: T.panel, borderColor: T.border}}>
+                    <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                      <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'dashboard' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Dashboard</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); setTab("insights"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'insights' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Insights</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); setTab("scorecard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'scorecard' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Scorecard</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); setTab("journal"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'journal' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Journal</a>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </header>
