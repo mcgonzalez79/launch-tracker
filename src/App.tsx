@@ -100,6 +100,13 @@ export default function App() {
   const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
   const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
 
+  // Journal State
+  const journalRef = useRef<HTMLDivElement>(null);
+  const [journals, setJournals] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
+
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
@@ -425,7 +432,7 @@ export default function App() {
     setGoals(prev => prev.filter(g => g.id !== id));
   };
   
-  // Scorecard
+  // Scorecard Handlers
   const handleSaveScorecard = () => {
     const { course, date } = activeScorecard.header;
     if (!course?.trim() || !date?.trim()) {
@@ -464,6 +471,9 @@ export default function App() {
     }
   };
 
+  const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
+  const currentJournalHTML = journals[sessionFilter] || "";
+  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
 
   /* =========================
      Layout / Modals
