@@ -16,7 +16,7 @@ export type ClubRow = {
   club: string; count: number; avgCarry: number; avgTotal: number; avgSmash: number; avgSpin: number; avgCS: number; avgBS: number; avgLA: number; avgF2P: number;
 };
 export type Msg = { id: number; text: string; type?: "info" | "success" | "warn" | "error" };
-export type ViewKey = "dashboard" | "insights" | "journal" | "scorecard";
+export type ViewKey = "dashboard" | "insights" | "journal" | "scorecard" | "goals";
 
 export type HoleData = { par?: string; fairway?: string; putts?: string; hazard?: string; yardage?: string; stroke?: string; };
 export type ScorecardData = {
@@ -28,6 +28,15 @@ export type ScorecardData = {
     finalScore?: string; eagles?: string; birdies?: string; par?: string; tees?: string; bogeys?: string; double?: string; putts?: string;
   };
   notes?: string;
+};
+
+export type Goal = {
+  id: string;
+  title: string;
+  metric: keyof Shot;
+  club: string; // "All Clubs" or a specific club name
+  target: number;
+  startValue: number;
 };
 
 
@@ -183,7 +192,7 @@ export const toCSV = (rows: Record<string, any>[]) => {
 export const exportCSV = (rows: Record<string, any>[]) => {
   const blob = new Blob([toCSV(rows)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob); const a = document.createElement("a");
-  a.href = url; a.download = "swingtrackr_filtered.csv"; a.click(); URL.revokeObjectURL(url);
+  a.href = url; a.download = "swingledger_filtered.csv"; a.click(); URL.revokeObjectURL(url);
 };
 
 /* Assessment calculations */
