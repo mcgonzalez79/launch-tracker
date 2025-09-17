@@ -5,13 +5,14 @@ import DashboardCards from "./Dashboard";
 import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
+import GoalsView from "./Goals";
 import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal, IconAdjustments } from "./components/UI";
 import { ALL_ACHIEVEMENTS, checkAchievements, Achievement } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
   coalesceSmash, coalesceFaceToPath, fpOf, XLSX, orderIndex, ClubRow,
   normalizeHeader, parseWeirdLaunchCSV, weirdRowsToShots, exportCSV,
-  quantile, ScorecardData, isNum
+  quantile, ScorecardData, isNum, Goal
 } from "./utils";
 
 /* =========================
@@ -73,6 +74,11 @@ export default function App() {
     try { const raw = localStorage.getItem("launch-tracker:shots"); return raw ? JSON.parse(raw) : []; } catch { return []; }
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:shots", JSON.stringify(shots)); } catch {} }, [shots]);
+
+  const [goals, setGoals] = useState<Goal[]>(() => {
+    try { const raw = localStorage.getItem("swingledger:goals"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  });
+  useEffect(() => { try { localStorage.setItem("swingledger:goals", JSON.stringify(goals)); } catch {} }, [goals]);
   
   // Achievements & Scorecards
   const [unlockedAchievements, setUnlockedAchievements] = useState<Set<string>>(() => {
@@ -410,19 +416,16 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
-  /* =========================
-     Journal & Scorecard State
-  ========================= */
-  const journalRef = useRef<HTMLDivElement>(null);
-  const [journals, setJournals] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
+  // Goals
+  const handleAddGoal = (goal: Omit<Goal, 'id'>) => {
+    const newGoal = { ...goal, id: `goal_${Date.now()}` };
+    setGoals(prev => [...prev, newGoal]);
+  };
+  const handleDeleteGoal = (id: string) => {
+    setGoals(prev => prev.filter(g => g.id !== id));
+  };
   
-  const onJournalInput = (html: string) => { setJournals(prev => ({ ...prev, [sessionFilter]: html })); };
-  const currentJournalHTML = journals[sessionFilter] || "";
-  const sessionLabel = `Journal — ${sessionFilter === "ALL" ? "All Sessions" : sessionFilter}`;
-  
+  // Scorecard
   const handleSaveScorecard = () => {
     const { course, date } = activeScorecard.header;
     if (!course?.trim() || !date?.trim()) {
@@ -500,6 +503,7 @@ export default function App() {
                 <TopTab label="Dashboard" active={tab === "dashboard"} onClick={() => setTab("dashboard")} theme={T} />
                 <TopTab label="Insights"  active={tab === "insights"}  onClick={() => setTab("insights")}  theme={T} />
                 <TopTab label="Scorecard" active={tab === "scorecard"} onClick={() => setTab("scorecard")} theme={T} />
+                <TopTab label="Goals"     active={tab === "goals"}     onClick={() => setTab("goals")}     theme={T} />
                 <TopTab label="Journal"   active={tab === "journal"}   onClick={() => setTab("journal")}   theme={T} />
               </div>
               <button
@@ -533,6 +537,7 @@ export default function App() {
                       <a href="#" onClick={(e) => { e.preventDefault(); setTab("dashboard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'dashboard' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Dashboard</a>
                       <a href="#" onClick={(e) => { e.preventDefault(); setTab("insights"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'insights' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Insights</a>
                       <a href="#" onClick={(e) => { e.preventDefault(); setTab("scorecard"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'scorecard' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Scorecard</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); setTab("goals"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'goals' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Goals</a>
                       <a href="#" onClick={(e) => { e.preventDefault(); setTab("journal"); setMobileMenuOpen(false); }} className="block px-4 py-2 text-sm" style={{color: tab === 'journal' ? T.brand : T.text}} onMouseOver={e => e.currentTarget.style.backgroundColor=T.panelAlt} onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'} role="menuitem">Journal</a>
                     </div>
                   </div>
@@ -678,16 +683,6 @@ export default function App() {
                   }}
                 />
               )}
-              {tab === "journal" && (
-                <JournalView
-                  theme={T}
-                  editorRef={journalRef}
-                  value={currentJournalHTML}
-                  onInputHTML={onJournalInput}
-                  sessionLabel={sessionLabel}
-                  defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
-                />
-              )}
               {tab === "scorecard" && (
                 <ScorecardView
                   theme={T}
@@ -700,6 +695,26 @@ export default function App() {
                   onDelete={handleDeleteScorecard}
                   activeScorecardName={activeScorecardName}
                   savedScorecards={savedScorecards}
+                />
+              )}
+              {tab === "goals" && (
+                <GoalsView
+                  theme={T}
+                  goals={goals}
+                  shots={shots}
+                  clubs={clubs}
+                  onAddGoal={handleAddGoal}
+                  onDeleteGoal={handleDeleteGoal}
+                />
+              )}
+              {tab === "journal" && (
+                <JournalView
+                  theme={T}
+                  editorRef={journalRef}
+                  value={currentJournalHTML}
+                  onInputHTML={onJournalInput}
+                  sessionLabel={sessionLabel}
+                  defaultHeightPx={Math.max(320, Math.floor(filtersHeight))}
                 />
               )}
             </div>
