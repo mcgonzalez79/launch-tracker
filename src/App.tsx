@@ -100,13 +100,6 @@ export default function App() {
   const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
   const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
 
-  // Journal State
-  const journalRef = useRef<HTMLDivElement>(null);
-  const [journals, setJournals] = useState<Record<string, string>>(() => {
-    try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
-  });
-  useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
-
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
@@ -423,13 +416,20 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:insights-order", JSON.stringify(insightsOrder)); } catch {} }, [insightsOrder]);
 
+  const [goalOrder, setGoalOrder] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem("swingledger:goal-order"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  });
+  useEffect(() => { try { localStorage.setItem("swingledger:goal-order", JSON.stringify(goalOrder)); } catch {} }, [goalOrder]);
+
   // Goals
   const handleAddGoal = (goal: Omit<Goal, 'id'>) => {
     const newGoal = { ...goal, id: `goal_${Date.now()}` };
     setGoals(prev => [...prev, newGoal]);
+    setGoalOrder(prev => [...prev, newGoal.id]);
   };
   const handleDeleteGoal = (id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
+    setGoalOrder(prev => prev.filter(gid => gid !== id));
   };
   
   // Scorecard Handlers
@@ -715,6 +715,24 @@ export default function App() {
                   clubs={clubs}
                   onAddGoal={handleAddGoal}
                   onDeleteGoal={handleDeleteGoal}
+                  goalOrder={goalOrder}
+                  setGoalOrder={setGoalOrder}
+                  onDragStart={(key) => (e) => e.dataTransfer.setData("text/plain", key)}
+                  onDragOver={(_key) => (e) => e.preventDefault()}
+                  onDrop={(targetKey) => (e) => {
+                    e.preventDefault();
+                    const sourceKey = e.dataTransfer.getData("text/plain");
+                    if (!sourceKey || sourceKey === targetKey) return;
+                    setGoalOrder(prev => {
+                      const cur = [...prev];
+                      const si = cur.indexOf(sourceKey);
+                      const ti = cur.indexOf(targetKey);
+                      if (si < 0 || ti < 0) return cur;
+                      cur.splice(si, 1);
+                      cur.splice(ti, 0, sourceKey);
+                      return cur;
+                    });
+                  }}
                 />
               )}
               {tab === "journal" && (
