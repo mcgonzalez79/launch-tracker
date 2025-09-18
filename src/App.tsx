@@ -6,7 +6,7 @@ import InsightsView from "./Insights";
 import JournalView from "./Journal";
 import ScorecardView from "./Scorecard";
 import GoalsView from "./Goals";
-import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal, IconAdjustments } from "./components/UI";
+import { TopTab, IconSun, IconMoon, IconInstagram, IconMenu, AchievementNotificationModal, IconAdjustments, Card } from "./components/UI";
 import { ALL_ACHIEVEMENTS, checkAchievements, Achievement } from "./achievements";
 import {
   Shot, Msg, ViewKey, mean, stddev, isoDate, clamp,
@@ -107,6 +107,21 @@ export default function App() {
   });
   useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
 
+  // First Visit / Demo Mode
+  const [isFirstVisit, setIsFirstVisit] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  useEffect(() => {
+    try {
+      const hasVisited = localStorage.getItem("swingledger:hasVisited");
+      if (!hasVisited) {
+        setIsFirstVisit(true);
+        onLoadSample(true); // Mute the toast on first load
+        setShowWelcomeModal(true);
+        localStorage.setItem("swingledger:hasVisited", "true");
+      }
+    } catch {}
+  }, []);
+
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
@@ -151,11 +166,16 @@ export default function App() {
   /* =========================
      Import / Export
   ========================= */
-  function mergeImportedShots(newShots: Shot[], filename: string) {
+  function mergeImportedShots(newShots: Shot[], filename: string, isSample = false) {
     newShotsRef.current = newShots;
     const keyOf = (s: Shot) =>
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
-    const existing = new Map(shots.map(s => [keyOf(s), s]));
+    
+    // Clear sample data on first real import
+    const currentShots = isFirstVisit ? [] : shots;
+    setIsFirstVisit(false);
+    
+    const existing = new Map(currentShots.map(s => [keyOf(s), s]));
     let added = 0;
     for (const s of newShots) {
       const k = keyOf(s);
@@ -163,9 +183,11 @@ export default function App() {
     }
     const merged = Array.from(existing.values());
     setShots(merged);
-    // Ensure session filter reflects everything after import
+    
     setSessionFilter("ALL");
-    toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
+    if (!isSample) {
+      toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
+    }
   }
 
   function rowsToShots(headerRow: any[], dataRows: any[][], filename: string): Shot[] {
@@ -253,7 +275,7 @@ export default function App() {
     })();
   }
 
-  function onLoadSample() {
+  function onLoadSample(isDemo = false) {
     const sample: Shot[] = [
       { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
         ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
@@ -271,7 +293,7 @@ export default function App() {
         ClubSpeed_mph: 71, BallSpeed_mph: 93, LaunchAngle_deg: 30, Backspin_rpm: 8700,
         CarryDistance_yds: 120, TotalDistance_yds: 126, LaunchDirection_deg: 0.5, ClubPath_deg: 0.0, ClubFace_deg: 0.2 },
     ].map(applyDerived);
-    mergeImportedShots(sample, "Sample Data");
+    mergeImportedShots(sample, "Sample Data", isDemo);
   }
 
   function exportShotsCSV() { exportCSV(shots); }
@@ -594,7 +616,7 @@ export default function App() {
                   setCarryMax={setCarryMax}
                   carryBounds={carryBounds}
                   onImportFile={onImportFile}
-                  onLoadSample={onLoadSample}
+                  onLoadSample={() => onLoadSample()}
                   onExportCSV={exportShotsCSV}
                   onPrintClubAverages={onPrintClubAverages}
                   onDeleteSession={onDeleteSession}
@@ -631,7 +653,7 @@ export default function App() {
                 setCarryMax={setCarryMax}
                 carryBounds={carryBounds}
                 onImportFile={onImportFile}
-                onLoadSample={onLoadSample}
+                onLoadSample={() => onLoadSample()}
                 onExportCSV={exportShotsCSV}
                 onPrintClubAverages={onPrintClubAverages}
                 onDeleteSession={onDeleteSession}
@@ -759,6 +781,7 @@ export default function App() {
         <Footer T={T} />
         
         {isAchievementsModalOpen && <AchievementsModal theme={T} unlocked={unlockedAchievements} onClose={() => setAchievementsModalOpen(false)} />}
+        {showWelcomeModal && <WelcomeModal theme={T} onClose={() => setShowWelcomeModal(false)} />}
         {newlyUnlockedBatch.length > 0 && <AchievementNotificationModal achievements={newlyUnlockedBatch} onClose={() => setNewlyUnlockedBatch([])} theme={T} />}
 
         {/* Toasts */}
@@ -849,6 +872,24 @@ function AchievementsModal({ theme: T, unlocked, onClose }: { theme: Theme; unlo
             })}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WelcomeModal({ theme: T, onClose }: { theme: Theme, onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border shadow-lg overflow-hidden" style={{ background: T.panel, borderColor: T.border }} onClick={e => e.stopPropagation()}>
+        <Card title="🚀 Welcome to SwingLedger!" theme={T}>
+          <div className="text-sm space-y-3">
+            <p>To get you started, we've loaded some sample shot data. Feel free to explore the dashboard, insights, and other features.</p>
+            <p className="font-semibold">Your first file import will automatically clear this sample data and replace it with your own.</p>
+            <div className="flex justify-end pt-2">
+              <button onClick={onClose} className="px-4 py-2 rounded-md border" style={{background: T.brand, color: T.white, borderColor: T.brand}}>Get Started</button>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
