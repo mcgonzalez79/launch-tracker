@@ -123,6 +123,9 @@ export default function App() {
   }, []);
 
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
+    // Do not run checks on the initial sample data load
+    if (isFirstVisit) return;
+
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
       newShots: newestShots,
@@ -172,8 +175,11 @@ export default function App() {
       [s.Timestamp ?? "", s.Club, s.CarryDistance_yds ?? 0, s.BallSpeed_mph ?? 0, s.ClubSpeed_mph ?? 0].join("|");
     
     // Clear sample data on first real import
-    const currentShots = isFirstVisit ? [] : shots;
-    setIsFirstVisit(false);
+    let currentShots = shots;
+    if (isFirstVisit && !isSample) {
+        currentShots = [];
+        setIsFirstVisit(false);
+    }
     
     const existing = new Map(currentShots.map(s => [keyOf(s), s]));
     let added = 0;
