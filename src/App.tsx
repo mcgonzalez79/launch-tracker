@@ -100,6 +100,13 @@ export default function App() {
   const [activeScorecard, setActiveScorecard] = useState<ScorecardData>(EMPTY_SCORECARD);
   const [activeScorecardName, setActiveScorecardName] = useState<string | null>(null);
 
+  // Journal State
+  const journalRef = useRef<HTMLDivElement>(null);
+  const [journals, setJournals] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("launch-tracker:journals") || "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem("launch-tracker:journals", JSON.stringify(journals)); } catch {} }, [journals]);
+
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
