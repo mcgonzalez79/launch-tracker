@@ -133,18 +133,15 @@ function AddGoalModal({ theme: T, clubs, shots, onClose, onAddGoal }: { theme: T
     const metricDef = GOAL_METRICS.find(m => m.key === metricKey && m.agg === agg);
     if (!title || !target || !metricDef) return;
 
-    const relevantShots = shots.filter(s => {
-      const value = s[metricKey];
-      return isNum(value) && (club === 'All Clubs' || s.Club === club);
-    });
-    
-    const values = relevantShots.map(s => metricDef.higherIsBetter ? (s[metricKey] as number) : Math.abs(s[metricKey] as number));
     let startValue = 0;
-    if (values.length > 0) {
-      startValue = metricDef.agg === 'max' ? Math.max(...values) : mean(values);
-    } else if (!metricDef.higherIsBetter) {
-      // For "lower is better" goals with no data, start high
-      startValue = metricDef.key.includes('Deviation') ? 50 : 10;
+    if (!metricDef.higherIsBetter) {
+      // For "lower is better" goals, set a reasonable "unskilled" start value
+      // This allows progress to be shown immediately.
+      if (metricDef.key.includes('Deviation')) {
+        startValue = 50; // Start at 50 yards deviation
+      } else if (metricDef.key.includes('Direction')) {
+        startValue = 20; // Start at 20 degrees deviation
+      }
     }
     
     onAddGoal({
