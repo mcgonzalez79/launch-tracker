@@ -112,7 +112,7 @@ export default function App() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   
   const onLoadSample = (isDemo = false) => {
-    fetch('/sampledata.csv')
+    fetch('sampledata.csv')
       .then(response => response.text())
       .then(csvText => {
         const parsed = parseWeirdLaunchCSV(csvText);
