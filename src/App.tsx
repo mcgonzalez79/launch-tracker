@@ -112,17 +112,21 @@ export default function App() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   
   const onLoadSample = (isDemo = false) => {
-    // To use your own sample data, replace this array with your JSON/object data.
-    const sample: Shot[] = [
-      { SessionId: "2025-07-10", Timestamp: "2025-07-10T14:05:00Z", Club: "Driver", ClubSpeed_mph: 105, BallSpeed_mph: 155, LaunchAngle_deg: 12, Backspin_rpm: 2600, CarryDistance_yds: 265, TotalDistance_yds: 285, CarryDeviationDistance_yds: -15 },
-      { SessionId: "2025-07-10", Timestamp: "2025-07-10T14:07:00Z", Club: "Driver", ClubSpeed_mph: 106, BallSpeed_mph: 157, LaunchAngle_deg: 11.5, Backspin_rpm: 2450, CarryDistance_yds: 270, TotalDistance_yds: 292, CarryDeviationDistance_yds: 5 },
-      { SessionId: "2025-07-10", Timestamp: "2025-07-10T14:12:00Z", Club: "7 Iron", ClubSpeed_mph: 88, BallSpeed_mph: 120, LaunchAngle_deg: 19, Backspin_rpm: 6500, CarryDistance_yds: 165, TotalDistance_yds: 175, CarryDeviationDistance_yds: -8 },
-      { SessionId: "2025-07-10", Timestamp: "2025-07-10T14:13:00Z", Club: "7 Iron", ClubSpeed_mph: 87, BallSpeed_mph: 119, LaunchAngle_deg: 19.5, Backspin_rpm: 6600, CarryDistance_yds: 163, TotalDistance_yds: 172, CarryDeviationDistance_yds: 2 },
-      { SessionId: "2025-07-15", Timestamp: "2025-07-15T15:31:00Z", Club: "Pitching Wedge", ClubSpeed_mph: 75, BallSpeed_mph: 98, LaunchAngle_deg: 28, Backspin_rpm: 8800, CarryDistance_yds: 125, TotalDistance_yds: 130, CarryDeviationDistance_yds: -4 },
-      { SessionId: "2025-07-15", Timestamp: "2025-07-15T15:32:00Z", Club: "Pitching Wedge", ClubSpeed_mph: 76, BallSpeed_mph: 99, LaunchAngle_deg: 27, Backspin_rpm: 8500, CarryDistance_yds: 128, TotalDistance_yds: 134, CarryDeviationDistance_yds: 1 },
-      { SessionId: "2025-07-15", Timestamp: "2025-07-15T15:40:00Z", Club: "5 Iron", ClubSpeed_mph: 92, BallSpeed_mph: 130, LaunchAngle_deg: 15, Backspin_rpm: 5200, CarryDistance_yds: 190, TotalDistance_yds: 205, CarryDeviationDistance_yds: 12 },
-    ].map(applyDerived);
-    mergeImportedShots(sample, "Sample Data", isDemo);
+    fetch('/sampledata.csv')
+      .then(response => response.text())
+      .then(csvText => {
+        const parsed = parseWeirdLaunchCSV(csvText);
+        if (parsed) {
+          const sampleShots = weirdRowsToShots(parsed.header, parsed.dataRows, "Sample Session").map(applyDerived);
+          mergeImportedShots(sampleShots, "Sample Data", isDemo);
+        } else {
+          throw new Error("Failed to parse sample CSV data.");
+        }
+      })
+      .catch(error => {
+        console.error("Error loading sample data:", error);
+        toast({ type: 'error', text: 'Could not load sample data.' });
+      });
   };
 
   useEffect(() => {
@@ -138,14 +142,7 @@ export default function App() {
   }, []);
 
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
-    if (isFirstVisit && newestShots.length > 0) {
-      // On the very first real import, don't check for achievements yet, just clear the flag.
-      // The check will run on the next render via the useEffect.
-      setIsFirstVisit(false);
-      return;
-    }
-    
-    if (isFirstVisit) return; // Don't run on sample data
+    if (isFirstVisit) return;
 
     const { newlyUnlocked } = checkAchievements({
       allShots: shots,
