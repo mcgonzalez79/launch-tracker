@@ -34,7 +34,7 @@ export default function InsightsView({
   onDragOver,
   onDrop
 }: Props) {
-  const [matrixData, setMatrixData] = useState<Record<string, Record<string, string>>>({});
+  const [matrixData, setMatrixData] = useState<Record<string, Record<string, { title: string; advice: string; }>>>({});
   const [isCarryIndexModalOpen, setCarryIndexModalOpen] = useState(false);
   const [isConsistencyModalOpen, setConsistencyModalOpen] = useState(false);
   const [isHandicapModalOpen, setHandicapModalOpen] = useState(false);
