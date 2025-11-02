@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo } from "react";
 import type { Theme } from "./theme";
 import type { Shot } from "./utils";
 
@@ -103,36 +103,6 @@ export default function FiltersPanel(props: Props) {
 
   const selectAllClubs = () => setSelectedClubs(clubs.slice());
   const clearClubs = () => setSelectedClubs([]);
-
-  useEffect(() => {
-    // Load Ko-fi widget script
-    const existingScript = document.getElementById("kofi-widget-script");
-
-    const runKofi = () => {
-      // @ts-ignore
-      if (window.kofiwidget2) {
-        // Clear previous button before drawing new one (for theme changes)
-        const container = document.getElementById('kofi-widget-container');
-        if (container) container.innerHTML = '';
-        
-        // @ts-ignore
-        window.kofiwidget2.init('Support me on Ko-fi', T.brand, 'B0B81LH4WS');
-        // @ts-ignore
-        window.kofiwidget2.draw('kofi-widget-container');
-      }
-    };
-
-    if (!existingScript) {
-      const script = document.createElement('script');
-      script.id = 'kofi-widget-script';
-      script.src = 'https://storage.ko-fi.com/cdn/widget/Widget_2.js';
-      script.async = true;
-      script.onload = runKofi;
-      document.body.appendChild(script);
-    } else {
-      runKofi(); // Script already loaded, just draw
-    }
-  }, [T.brand]); // Re-run if theme changes to update color
 
   return (
     <section
@@ -309,7 +279,7 @@ export default function FiltersPanel(props: Props) {
               type="number"
               inputMode="decimal"
               className="rounded-md px-2 py-1 border"
-              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "5Setting%" }}
+              style={{ background: T.bg, color: T.text, borderColor: T.border, width: "50%" }}
               placeholder={Number.isFinite(carryBounds.max) ? String(carryBounds.max) : "max"}
               value={carryMax}
               onChange={(e) => setCarryMax(e.target.value)}
@@ -392,9 +362,6 @@ export default function FiltersPanel(props: Props) {
             Delete All
           </button>
         </div>
-        
-        {/* Ko-fi Button */}
-        <div id="kofi-widget-container" className="mt-2"></div>
       </div>
     </section>
   );
