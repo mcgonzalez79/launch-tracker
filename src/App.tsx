@@ -110,6 +110,25 @@ export default function App() {
   // First Visit / Demo Mode
   const [isFirstVisit, setIsFirstVisit] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  
+  const onLoadSample = (isDemo = false) => {
+    fetch('sampledata.csv')
+      .then(response => response.text())
+      .then(csvText => {
+        const parsed = parseWeirdLaunchCSV(csvText);
+        if (parsed) {
+          const sampleShots = weirdRowsToShots(parsed.header, parsed.dataRows, "Sample Session").map(applyDerived);
+          mergeImportedShots(sampleShots, "Sample Data", isDemo);
+        } else {
+          throw new Error("Failed to parse sample CSV data.");
+        }
+      })
+      .catch(error => {
+        console.error("Error loading sample data:", error);
+        toast({ type: 'error', text: 'Could not load sample data.' });
+      });
+  };
+
   useEffect(() => {
     try {
       const hasVisited = localStorage.getItem("swingledger:hasVisited");
@@ -123,7 +142,6 @@ export default function App() {
   }, []);
 
   const runAchievementChecks = (newestShots: Shot[], allScorecards: Record<string, ScorecardData>) => {
-    // Do not run checks on the initial sample data load
     if (isFirstVisit) return;
 
     const { newlyUnlocked } = checkAchievements({
@@ -178,7 +196,6 @@ export default function App() {
     let currentShots = shots;
     if (isFirstVisit && !isSample) {
         currentShots = [];
-        setIsFirstVisit(false);
     }
     
     const existing = new Map(currentShots.map(s => [keyOf(s), s]));
@@ -192,6 +209,7 @@ export default function App() {
     
     setSessionFilter("ALL");
     if (!isSample) {
+      setIsFirstVisit(false);
       toast({ type: added > 0 ? "success" : "info", text: added > 0 ? `Imported ${added} new shots from ${filename}` : `No new shots found in ${filename}` });
     }
   }
@@ -279,27 +297,6 @@ export default function App() {
         }
       }
     })();
-  }
-
-  function onLoadSample(isDemo = false) {
-    const sample: Shot[] = [
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:05:00Z", Club: "Driver",
-        ClubSpeed_mph: 102, BallSpeed_mph: 150, LaunchAngle_deg: 13, Backspin_rpm: 2500,
-        CarryDistance_yds: 255, TotalDistance_yds: 280, LaunchDirection_deg: -2, ClubPath_deg: 3.0, ClubFace_deg: 2.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:07:00Z", Club: "Driver",
-        ClubSpeed_mph: 104, BallSpeed_mph: 153, LaunchAngle_deg: 12.5, Backspin_rpm: 2400,
-        CarryDistance_yds: 258, TotalDistance_yds: 284, LaunchDirection_deg: 1, ClubPath_deg: 2.5, ClubFace_deg: 1.0 },
-      { SessionId: "2025-08-10", Timestamp: "2025-08-10T14:12:00Z", Club: "7 Iron",
-        ClubSpeed_mph: 84, BallSpeed_mph: 114, LaunchAngle_deg: 18, Backspin_rpm: 6200,
-        CarryDistance_yds: 158, TotalDistance_yds: 168, LaunchDirection_deg: 0, ClubPath_deg: 1.0, ClubFace_deg: 0.5 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:31:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 70, BallSpeed_mph: 92, LaunchAngle_deg: 29, Backspin_rpm: 8500,
-        CarryDistance_yds: 118, TotalDistance_yds: 124, LaunchDirection_deg: -1, ClubPath_deg: -0.5, ClubFace_deg: -1.0 },
-      { SessionId: "2025-08-15", Timestamp: "2025-08-15T15:34:00Z", Club: "Pitching Wedge",
-        ClubSpeed_mph: 71, BallSpeed_mph: 93, LaunchAngle_deg: 30, Backspin_rpm: 8700,
-        CarryDistance_yds: 120, TotalDistance_yds: 126, LaunchDirection_deg: 0.5, ClubPath_deg: 0.0, ClubFace_deg: 0.2 },
-    ].map(applyDerived);
-    mergeImportedShots(sample, "Sample Data", isDemo);
   }
 
   function exportShotsCSV() { exportCSV(shots); }
