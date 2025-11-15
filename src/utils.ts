@@ -65,7 +65,9 @@ export function groupBy<T>(rows: T[], keyFn: (x: T) => string): Map<string, T[]>
 
 /* Header normalization + map */
 export const normalizeHeader = (raw:string) => {
-  let s=String(raw||"").trim(); s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
+  let s=String(raw||"").trim();
+  s=s.replace(/^"/,"").replace(/"$/,"").trim(); // Strip surrounding quotes
+  s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
   s=s.replace(/\[[^\]]*\]/g,"").replace(/\([^\)]*\)/g,"").replace(/[_\-]+/g," ").replace(/\s+/g," ").trim().replace(/:$/,"");
   s=s.replace(/\bsmash\s*factor\b/,"smash factor");
   return s;
