@@ -1,3 +1,4 @@
+// src/utils.ts
 import * as XLSX from "xlsx";
 import { orderIndex } from "./theme";
 
@@ -98,12 +99,27 @@ export function parseWeirdLaunchCSV(text:string){
   const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0);
   if(!lines.length) return null;
   const split=(line:string)=>line.replace(/\t/g,"").replace(/"/g,"").trim().split(",");
-  const header=split(lines[0]).map(h=>h.trim());
-  const maybeUnits=lines[1]?split(lines[1]):[];
+  
+  // Find the header row (first row with "club" in it)
+  let headerRowIndex = -1;
+  let header: string[] = [];
+  for (let i = 0; i < lines.length && i < 10; i++) { // Only check first 10 lines
+    const potentialHeader = split(lines[i]).map(h => h.trim());
+    if (potentialHeader.some(h => /club/i.test(h))) {
+      header = potentialHeader;
+      headerRowIndex = i;
+      break;
+    }
+  }
+
+  // If no header row found, it's not a valid file
+  if (headerRowIndex === -1) return null;
+
+  const maybeUnits=lines[headerRowIndex + 1] ? split(lines[headerRowIndex + 1]) : [];
   const hasUnits=maybeUnits.some(s=>/\[[^\]]*\]/.test(s));
-  const dataRows=lines.slice(hasUnits?2:1).map(split);
-  const hasClub=header.some(h=>/club/i.test(h));
-  if(!hasClub) return null;
+  const dataRows=lines.slice(headerRowIndex + (hasUnits ? 2 : 1)).map(split);
+  
+  // No need for hasClub check, we already did it
   return { header, dataRows };
 }
 export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessionId:string){
@@ -169,6 +185,7 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
       TotalDistance_yds:id.Total>=0?num(row[id.Total]):undefined,
       TotalDeviationAngle_deg:id.TotalDevAng>=0?num(row[id.TotalDevAng]):undefined,
       TotalDeviationDistance_yds:id.TotalDevDist>=0?num(row[id.TotalDevDist]):undefined,
+Music:
     };
     shots.push(s);
   }
