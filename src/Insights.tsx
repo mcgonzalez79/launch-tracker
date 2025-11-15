@@ -92,7 +92,7 @@ export default function Insights({
   // Swing matrix data
   const [swingMatrix, setSwingMatrix] = useState<any>(null);
   useEffect(() => {
-    fetch('swing_matrix.json')
+    fetch('/swing_matrix.json')
       .then(res => res.json())
       .then(data => setSwingMatrix(data))
       .catch(err => console.error("Failed to load swing_matrix.json", err));
@@ -405,7 +405,7 @@ export default function Insights({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KpiCell
               theme={T}
-              label="Carry Index"
+              label="Consistency Index"
               value={consistencyIndex != null ? `${(consistencyIndex * 100).toFixed(1)}%` : "—"}
               sub={<button onClick={() => setConsistencyModalOpen(true)} className="underline" style={{color: T.brand}} onMouseOver={e => e.currentTarget.style.color=T.brandHover} onMouseOut={e => e.currentTarget.style.color=T.brand}>What does this mean?</button>}
             />
@@ -422,7 +422,7 @@ export default function Insights({
               sub={
                 gapsRows.length > 0 ? (
                   <ul className="text-left list-disc pl-4 text-xs">
-                    {gapsRows.map((g, i) => <li key={i}>{`${g.clubs}: ${g.note}`}</li>)}
+                    {gapsRows.map((g, i) => <li key={i}>{g.note}</li>)}
                   </ul>
                 ) : "No significant gaps found."
               }
@@ -752,7 +752,7 @@ function ConsistencyModal({theme, onClose}: {theme: Theme, onClose: () => void})
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background: "rgba(0,0,0,0.5)"}} onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border shadow-lg overflow-hidden" style={{background: theme.panel, borderColor: theme.border}} onClick={e => e.stopPropagation()}>
         <header className="p-3 flex items-center justify-between" style={{borderBottom: `1px solid ${theme.border}`, background: theme.panelAlt}}>
-          <h3 className="font-semibold">Carry Index</h3>
+          <h3 className="font-semibold">Consistency Index</h3>
           <button className="text-xs underline" style={{color: theme.brand}} onClick={onClose}>Close</button>
         </header>
         <div className="p-4 text-sm space-y-2">

@@ -1,4 +1,3 @@
-// src/utils.ts
 import * as XLSX from "xlsx";
 import { orderIndex } from "./theme";
 
@@ -65,9 +64,7 @@ export function groupBy<T>(rows: T[], keyFn: (x: T) => string): Map<string, T[]>
 
 /* Header normalization + map */
 export const normalizeHeader = (raw:string) => {
-  let s=String(raw||"").trim();
-  s=s.replace(/^"/,"").replace(/"$/,"").trim(); // Strip surrounding quotes
-  s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
+  let s=String(raw||"").trim(); s=s.replace(/([a-z])([A-Z])/g,"$1 $2").toLowerCase();
   s=s.replace(/\[[^\]]*\]/g,"").replace(/\([^\)]*\)/g,"").replace(/[_\-]+/g," ").replace(/\s+/g," ").trim().replace(/:$/,"");
   s=s.replace(/\bsmash\s*factor\b/,"smash factor");
   return s;
@@ -101,27 +98,12 @@ export function parseWeirdLaunchCSV(text:string){
   const lines=text.split(/\r?\n/).filter(l=>l.trim().length>0);
   if(!lines.length) return null;
   const split=(line:string)=>line.replace(/\t/g,"").replace(/"/g,"").trim().split(",");
-  
-  // Find the header row (first row with "club" in it)
-  let headerRowIndex = -1;
-  let header: string[] = [];
-  for (let i = 0; i < lines.length && i < 10; i++) { // Only check first 10 lines
-    const potentialHeader = split(lines[i]).map(h => h.trim());
-    if (potentialHeader.some(h => /club/i.test(h))) {
-      header = potentialHeader;
-      headerRowIndex = i;
-      break;
-    }
-  }
-
-  // If no header row found, it's not a valid file
-  if (headerRowIndex === -1) return null;
-
-  const maybeUnits=lines[headerRowIndex + 1] ? split(lines[headerRowIndex + 1]) : [];
+  const header=split(lines[0]).map(h=>h.trim());
+  const maybeUnits=lines[1]?split(lines[1]):[];
   const hasUnits=maybeUnits.some(s=>/\[[^\]]*\]/.test(s));
-  const dataRows=lines.slice(headerRowIndex + (hasUnits ? 2 : 1)).map(split);
-  
-  // No need for hasClub check, we already did it
+  const dataRows=lines.slice(hasUnits?2:1).map(split);
+  const hasClub=header.some(h=>/club/i.test(h));
+  if(!hasClub) return null;
   return { header, dataRows };
 }
 export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessionId:string){
@@ -159,31 +141,13 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
   for(const row of rows){
     const rawType=id.ClubType>=0?row[id.ClubType]:"";
     const rawName=id.ClubName>=0?row[id.ClubName]:"";
-    
-    // FIX 1: Aggressive club cleaning to resolve "Unknown" clubs due to hidden chars/spaces.
-    // Replace all whitespace/non-printable with a single space, then trim.
-    let club = String(rawType||"").replace(/\s/g, ' ').trim();
-    const nm = String(rawName||"").replace(/\s/g, ' ').trim();
-
-    if(!club && nm) club=nm; 
-    else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
-
-    // Final cleanup of redundant spaces in case of merged club names
-    club = club.replace(/\s+/g, ' ').trim(); 
-
+    let club=(rawType||"").trim(); const nm=(rawName||"").trim();
+    if(!club && nm) club=nm; else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
     if(!club) continue;
-
-    // FIX 2: Ensure SessionId is in ISO format (YYYY-MM-DD) to resolve the "no data showing" issue.
-    const dateRaw = id.Date >= 0 ? String(row[id.Date] ?? "").trim() : "";
-    const timestamp = ts(dateRaw);
-
-    let sessionByDay = timestamp ? timestamp.substring(0, 10) : ""; // Forces YYYY-MM-DD
-    const sessionId = sessionByDay || fallbackSessionId;
-    
     const s:Shot={
-      SessionId: sessionId,
+      SessionId:fallbackSessionId,
       Club:club,
-      Timestamp: timestamp,
+      Timestamp:id.Date>=0?ts(row[id.Date]):undefined,
       ClubSpeed_mph:id.ClubSpeed>=0?num(row[id.ClubSpeed]):undefined,
       AttackAngle_deg:id.AttackAngle>=0?num(row[id.AttackAngle]):undefined,
       ClubPath_deg:id.ClubPath>=0?num(row[id.ClubPath]):undefined,

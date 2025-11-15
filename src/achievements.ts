@@ -93,7 +93,7 @@ export const ALL_ACHIEVEMENTS: Achievement[] = [
     }
     return false;
   }},
-  { id: 'dialed_in', name: 'Dialed In', description: 'Achieve a Carry Index of over 80% for a session.', check: ({ allShots }) => {
+  { id: 'dialed_in', name: 'Dialed In', description: 'Achieve a Consistency Index of over 80% for a session.', check: ({ allShots }) => {
     const bySession = groupBy(allShots, (s: Shot) => s.SessionId || "Unknown");
     for (const sessionShots of bySession.values()) {
       const byClub = groupBy(sessionShots.filter(s => isNum(s.CarryDistance_yds)), (s: Shot) => s.Club);
