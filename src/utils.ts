@@ -159,19 +159,27 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
   for(const row of rows){
     const rawType=id.ClubType>=0?row[id.ClubType]:"";
     const rawName=id.ClubName>=0?row[id.ClubName]:"";
-    let club=(rawType||"").trim(); const nm=(rawName||"").trim();
-    if(!club && nm) club=nm; else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
+    
+    // FIX 1: Aggressive club cleaning to resolve "Unknown" clubs due to hidden chars/spaces.
+    // Replace all whitespace/non-printable with a single space, then trim.
+    let club = String(rawType||"").replace(/\s/g, ' ').trim();
+    const nm = String(rawName||"").replace(/\s/g, ' ').trim();
+
+    if(!club && nm) club=nm; 
+    else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
+
+    // Final cleanup of redundant spaces in case of merged club names
+    club = club.replace(/\s+/g, ' ').trim(); 
+
     if(!club) continue;
 
-    // --- NEW LOGIC ---
-    // Derive SessionId from the date column, just like the Excel parser does.
-    // Use fallbackSessionId (from filename) only if the date column is missing/empty.
+    // FIX 2: Ensure SessionId is in ISO format (YYYY-MM-DD) to resolve the "no data showing" issue.
     const dateRaw = id.Date >= 0 ? String(row[id.Date] ?? "").trim() : "";
     const timestamp = ts(dateRaw);
-    const sessionByDay = (dateRaw.split(" ")[0] || "").trim();
-    const sessionId = sessionByDay || fallbackSessionId;
-    // --- END NEW LOGIC ---
 
+    let sessionByDay = timestamp ? timestamp.substring(0, 10) : ""; // Forces YYYY-MM-DD
+    const sessionId = sessionByDay || fallbackSessionId;
+    
     const s:Shot={
       SessionId: sessionId,
       Club:club,
