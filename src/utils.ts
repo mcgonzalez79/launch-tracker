@@ -160,10 +160,20 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
     let club=(rawType||"").trim(); const nm=(rawName||"").trim();
     if(!club && nm) club=nm; else if(club && nm && !club.toLowerCase().includes(nm.toLowerCase())) club=`${nm} ${club}`.trim();
     if(!club) continue;
+
+    // --- NEW LOGIC ---
+    // Derive SessionId from the date column, just like the Excel parser does.
+    // Use fallbackSessionId (from filename) only if the date column is missing/empty.
+    const dateRaw = id.Date >= 0 ? String(row[id.Date] ?? "").trim() : "";
+    const timestamp = ts(dateRaw);
+    const sessionByDay = (dateRaw.split(" ")[0] || "").trim();
+    const sessionId = sessionByDay || fallbackSessionId;
+    // --- END NEW LOGIC ---
+
     const s:Shot={
-      SessionId:fallbackSessionId,
+      SessionId: sessionId,
       Club:club,
-      Timestamp:id.Date>=0?ts(row[id.Date]):undefined,
+      Timestamp: timestamp,
       ClubSpeed_mph:id.ClubSpeed>=0?num(row[id.ClubSpeed]):undefined,
       AttackAngle_deg:id.AttackAngle>=0?num(row[id.AttackAngle]):undefined,
       ClubPath_deg:id.ClubPath>=0?num(row[id.ClubPath]):undefined,
