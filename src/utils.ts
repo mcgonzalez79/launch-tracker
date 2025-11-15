@@ -185,7 +185,6 @@ export function weirdRowsToShots(header:string[], rows:string[][], fallbackSessi
       TotalDistance_yds:id.Total>=0?num(row[id.Total]):undefined,
       TotalDeviationAngle_deg:id.TotalDevAng>=0?num(row[id.TotalDevAng]):undefined,
       TotalDeviationDistance_yds:id.TotalDevDist>=0?num(row[id.TotalDevDist]):undefined,
-Music:
     };
     shots.push(s);
   }
